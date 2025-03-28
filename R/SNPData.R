@@ -204,7 +204,7 @@ setMethod("clonotype_count_df", signature(x = "SNPData"),
             tidyr::pivot_longer(contains("clonotype"), names_to = "clonotype", values_to = "alt_count")
 
         most_likely_donor <- get_sample_info(x) %>%
-            dplyr::filter(!is_na(clonotype_id) & !is_na(donor_id)) %>%
+            dplyr::filter(!is.na(clonotype_id) & !is.na(donor_id)) %>%
             dplyr::select(clonotype_id, donor_id) %>%
             dplyr::count(donor_id, clonotype_id) %>%
             dplyr::arrange(dplyr::desc(n), .by = clonotype_id) %>%
