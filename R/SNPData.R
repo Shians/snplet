@@ -112,6 +112,7 @@ setMethod("show", signature(object = "SNPData"),
 )
 
 # Coverage method
+setGeneric("coverage", function(x) standardGeneric("coverage"))
 setMethod("coverage", signature(x = "SNPData"),
     function(x) {
         x@alt_count + x@ref_count
