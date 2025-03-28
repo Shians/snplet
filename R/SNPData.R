@@ -82,11 +82,11 @@ setMethod("ref_count", signature(object = "SNPData"), function(object) object@re
 setGeneric("alt_count", function(object) standardGeneric("alt_count"))
 setMethod("alt_count", signature(object = "SNPData"), function(object) object@alt_count)
 
-setGeneric("snp_info", function(object) standardGeneric("snp_info"))
-setMethod("snp_info", signature(object = "SNPData"), function(object) object@snp_info)
+setGeneric("get_snp_info", function(object) standardGeneric("get_snp_info"))
+setMethod("get_snp_info", signature(object = "SNPData"), function(object) object@snp_info)
 
-setGeneric("sample_info", function(object) standardGeneric("sample_info"))
-setMethod("sample_info", signature(object = "SNPData"), function(object) object@sample_info)
+setGeneric("get_sample_info", function(object) standardGeneric("get_sample_info"))
+setMethod("get_sample_info", signature(object = "SNPData"), function(object) object@sample_info)
 
 setMethod("nrow", signature(x = "SNPData"), function(x) nrow(x@ref_count))
 setMethod("ncol", signature(x = "SNPData"), function(x) ncol(x@ref_count))
