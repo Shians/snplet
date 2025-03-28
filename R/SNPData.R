@@ -163,8 +163,8 @@ setMethod("cell_count_df", signature(x = "SNPData"),
 setGeneric("donor_count_df", function(x) standardGeneric("donor_count_df"))
 setMethod("donor_count_df", signature(x = "SNPData"),
     function(x) {
-        ref_count_grouped <- groupedRowSums(ref_count(x), sample_info(x)$donor_id)
-        alt_count_grouped <- groupedRowSums(alt_count(x), sample_info(x)$donor_id)
+        ref_count_grouped <- groupedRowSums(ref_count(x), get_sample_info(x)$donor_id)
+        alt_count_grouped <- groupedRowSums(alt_count(x), get_sample_info(x)$donor_id)
 
         ref_count_df <- ref_count_grouped %>%
             tibble::as_tibble() %>%
@@ -190,8 +190,8 @@ setMethod("donor_count_df", signature(x = "SNPData"),
 setGeneric("clonotype_count_df", function(x) standardGeneric("clonotype_count_df"))
 setMethod("clonotype_count_df", signature(x = "SNPData"),
     function(x) {
-        ref_count_grouped <- groupedRowSums(ref_count(x), sample_info(x)$clonotype_id)
-        alt_count_grouped <- groupedRowSums(alt_count(x), sample_info(x)$clonotype_id)
+        ref_count_grouped <- groupedRowSums(ref_count(x), get_sample_info(x)$clonotype_id)
+        alt_count_grouped <- groupedRowSums(alt_count(x), get_sample_info(x)$clonotype_id)
 
         ref_count_df <- ref_count_grouped %>%
             tibble::as_tibble() %>%
@@ -203,7 +203,7 @@ setMethod("clonotype_count_df", signature(x = "SNPData"),
             dplyr::mutate(snp_id = rownames(alt_count_grouped), .before = 1) %>%
             tidyr::pivot_longer(contains("clonotype"), names_to = "clonotype", values_to = "alt_count")
 
-        most_likely_donor <- sample_info(x) %>%
+        most_likely_donor <- get_sample_info(x) %>%
             dplyr::filter(!is_na(clonotype_id) & !is_na(donor_id)) %>%
             dplyr::select(clonotype_id, donor_id) %>%
             dplyr::count(donor_id, clonotype_id) %>%
