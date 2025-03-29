@@ -168,13 +168,13 @@ setMethod("donor_count_df", signature(x = "SNPData"),
 
         ref_count_df <- ref_count_grouped %>%
             tibble::as_tibble() %>%
-            dplyr::select(-unassigned, -doublet) %>%
+            dplyr::select(-any_of(c("unassigned", "doublet"))) %>%
             dplyr::mutate(snp_id = rownames(ref_count_grouped), .before = 1) %>%
             tidyr::pivot_longer(contains("donor"), names_to = "donor_id", values_to = "ref_count")
 
         alt_count_df <- alt_count_grouped %>%
             tibble::as_tibble() %>%
-            dplyr::select(-unassigned, -doublet) %>%
+            dplyr::select(-any_of(c("unassigned", "doublet"))) %>%
             dplyr::mutate(snp_id = rownames(alt_count_grouped), .before = 1) %>%
             tidyr::pivot_longer(contains("donor"), names_to = "donor_id", values_to = "alt_count")
 
