@@ -24,7 +24,7 @@ groupedRowMeans <- function(x, groups) {
     rownames(out) <- rownames(x)
 
     for (i in unique(groups)) {
-        out[, i] <- Matrix::rowMeans(x[, groups == i], na.rm = TRUE)
+        out[, i] <- Matrix::rowMeans(x[, groups == i, drop = FALSE], na.rm = TRUE)
     }
 
     out
@@ -37,7 +37,7 @@ groupedRowSums <- function(x, groups) {
     rownames(out) <- rownames(x)
 
     for (i in unique(groups)) {
-        out[, i] <- Matrix::rowSums(x[, groups == i], na.rm = TRUE)
+        out[, i] <- Matrix::rowSums(x[, groups == i, drop = FALSE], na.rm = TRUE)
     }
 
     out

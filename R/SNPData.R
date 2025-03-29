@@ -52,8 +52,8 @@ setMethod("[", signature(x = "SNPData", i = "ANY", j = "ANY"),
         if (missing(i)) i <- seq_len(nrow(x@alt_count))
         if (missing(j)) j <- seq_len(ncol(x@alt_count))
 
-        ref_count <- x@ref_count[i, j]
-        alt_count <- x@alt_count[i, j]
+        ref_count <- x@ref_count[i, j, drop = FALSE]
+        alt_count <- x@alt_count[i, j, drop = FALSE]
         snp_info <- x@snp_info[i, ]
         sample_info <- x@sample_info[j, ]
 
