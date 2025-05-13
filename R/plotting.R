@@ -1,3 +1,19 @@
+#' Plot gene annotation track
+#'
+#' This function creates a gene annotation track visualization showing gene positions and names
+#' for a genomic region of interest.
+#'
+#' @param gene_anno A data frame containing gene annotation information with columns 'pos' (position)
+#'        and 'gene_name'
+#' @param x_range A numeric vector of length 2 specifying the genomic range limits to display
+#' @return A ggplot object representing the gene annotation track
+#' @export
+#'
+#' @examples
+#' \dontrun{
+#' gene_anno <- data.frame(pos = c(1000, 2000, 3000), gene_name = c("GENE1", "GENE2", "GENE3"))
+#' plot_gene_anno_track(gene_anno, x_range = c(500, 3500))
+#' }
 plot_gene_anno_track <- function(gene_anno, x_range) {
     ggplot2::ggplot(gene_anno, ggplot2::aes(x = pos, y = 0, label = gene_name)) +
         ggplot2::geom_segment(ggplot2::aes(xend = pos, yend = 0.15)) +
@@ -19,6 +35,23 @@ plot_gene_anno_track <- function(gene_anno, x_range) {
         )
 }
 
+#' Plot minor allele frequency track
+#'
+#' This function creates a visualization of minor allele frequencies (MAF) across
+#' a genomic region, with optional faceting by a grouping variable.
+#'
+#' @param allele_count_df A data frame containing SNP information with columns 'pos' (position),
+#'        'maf' (minor allele frequency), and 'donor_id' for faceting
+#' @param facet A variable to use for faceting the plot
+#' @param x_range A numeric vector of length 2 specifying the genomic range limits to display
+#' @return A ggplot object showing MAF values across the genomic region
+#' @export
+#'
+#' @examples
+#' \dontrun{
+#' allele_df <- get_allele_counts(snp_data)
+#' plot_maf_track(allele_df, facet = donor_id, x_range = c(1000000, 2000000))
+#' }
 plot_maf_track <- function(allele_count_df, facet, x_range) {
     allele_count_df %>%
         ggplot2::ggplot(aes(x = pos, y = maf)) +
@@ -27,7 +60,7 @@ plot_maf_track <- function(allele_count_df, facet, x_range) {
         ggplot2::facet_grid(rows = ggplot2::vars(donor_id)) +
         ggplot2::scale_x_continuous(
             labels = scales::label_number(scale_cut = scales::cut_short_scale(), suffix = "b"),
-            limits = x_limits_clonotype,
+            limits = x_range,
             expand = c(0, 0)
         ) +
         ggplot2::scale_y_continuous(
@@ -50,6 +83,23 @@ plot_maf_track <- function(allele_count_df, facet, x_range) {
         )
 }
 
+#' Plot p-value track for MAF significance
+#'
+#' This function creates a Manhattan-style plot showing the significance (-log10 p-value)
+#' of minor allele frequency differences across a genomic region.
+#'
+#' @param allele_counts_df A data frame containing SNP information with columns 'pos' (position),
+#'        'adj_p_val' (adjusted p-value), and a column for faceting
+#' @param facet A variable to use for faceting the plot, supplied as a bare column name
+#' @param x_range A numeric vector of length 2 specifying the genomic range limits to display
+#' @return A ggplot object showing -log10(adjusted p-value) across the genomic region
+#' @export
+#'
+#' @examples
+#' \dontrun{
+#' snp_stats <- calculate_snp_significance(snp_data)
+#' plot_maf_pval_track(snp_stats, facet = donor_id, x_range = c(1000000, 2000000))
+#' }
 plot_maf_pval_track <- function(allele_counts_df, facet, x_range) {
     allele_counts_df %>%
         ggplot2::ggplot(ggplot2::aes(x = pos, y = -log10(adj_p_val))) +
