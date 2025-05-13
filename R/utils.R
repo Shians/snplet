@@ -42,3 +42,12 @@ groupedRowSums <- function(x, groups) {
 
     out
 }
+
+#' Check if a file exists
+check_file <- function(path) {
+    if (file.exists(path)) {
+        logger::log_info("File found: {path}")
+    } else {
+        stop(glue::glue("Required file not found: {path}"))
+    }
+}
