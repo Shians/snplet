@@ -16,11 +16,20 @@ Depends:
     Matrix
 Imports:
     dplyr,
-    logger,
-    rlang,
-    plyranges,
+    fs,
+    furrr,
+    ggplot2,
+    ggrepel,
     glue,
-    ggplot2
+    logger,
+    plyranges,
+    purrr,
+    readr,
+    rlang,
+    scales,
+    stringr,
+    tibble,
+    tidyr
 License: Apache License (>= 2)
 Encoding: UTF-8
 LazyData: true
