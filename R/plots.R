@@ -52,3 +52,28 @@ plot_snp_cov_distribution <- function(snp_data) {
             title = "Distribution of SNP coverage"
         )
 }
+
+#' Plot distribution of minor allele frequency (MAF)
+#'
+#' This function visualizes the distribution of minor allele frequencies (MAF)
+#' in a given data frame using a density plot.
+#'
+#' @param df A data frame containing a column named 'maf' with MAF values
+#' @return A ggplot object showing the density distribution of MAF
+#' @export
+#'
+#' @examples
+#' df <- data.frame(maf = runif(1000, 0, 0.5))
+#' plot_maf_distribution(df)
+plot_maf_distribution <- function(df) {
+    ggplot2::ggplot(df, ggplot2::aes(x = maf)) +
+        ggplot2::geom_density() +
+        ggplot2::scale_x_continuous(expand = ggplot2::expansion(0, 0)) +
+        ggplot2::scale_y_continuous(expand = ggplot2::expansion(0, 0)) +
+        theme_density() +
+        ggplot2::labs(
+            x = "Minor Allele Frequency (MAF)",
+            y = "Density",
+            title = "Distribution of Minor Allele Frequency"
+        )
+}
