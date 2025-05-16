@@ -63,10 +63,10 @@ import_cellsnp <- function(
     )
 
     # Merge SNPs with gene annotations
-    snp_info <- join_overlap_left(snps_gr, gene_anno_gr) %>%
-        as_tibble() %>%
-        select(snp_id, chrom, pos, ref, alt, gene_name) %>%
-        summarise(
+    snp_info <- plyranges::join_overlap_left(snps_gr, gene_anno_gr) %>%
+        tibble::as_tibble() %>%
+        dplyr::select(snp_id, chrom, pos, ref, alt, gene_name) %>%
+        dplyr::summarise(
             chrom = dplyr::first(chrom),
             pos = dplyr::first(pos),
             ref = dplyr::first(ref),
@@ -74,8 +74,8 @@ import_cellsnp <- function(
             gene_name = paste(unique(gene_name), collapse = ", "),
             .by = snp_id
         ) %>%
-        mutate(
-            gene_name = ifelse(gene_name == "NA", NA_character_, gene_name)
+        dplyr::mutate(
+            gene_name = dplyr::if_else(gene_name == "NA", NA_character_, gene_name)
         )
 
     # Read donor information

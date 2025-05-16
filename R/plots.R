@@ -14,11 +14,11 @@
 #' }
 plot_lib_size_distribution <- function(snp_data) {
     get_sample_info(snp_data) %>%
-        ggplot(aes(x = library_size)) +
-        geom_density() +
-        scale_y_continuous(expand = expansion(0, 0)) +
+        ggplot2::ggplot(ggplot2::aes(x = library_size)) +
+        ggplot2::geom_density() +
+        ggplot2::scale_y_continuous(expand = ggplot2::expansion(0, 0)) +
         theme_density() +
-        labs(
+        ggplot2::labs(
             x = "Library size",
             y = "Density",
             title = "Distribution of library size"
@@ -41,12 +41,12 @@ plot_lib_size_distribution <- function(snp_data) {
 #' }
 plot_snp_cov_distribution <- function(snp_data) {
     get_snp_info(snp_data) %>%
-        ggplot(aes(x = coverage)) +
-        geom_density() +
-        scale_y_continuous(expand = expansion(0, 0)) +
-        scale_x_log10(labels = scales::label_comma()) +
+        ggplot2::ggplot(ggplot2::aes(x = coverage)) +
+        ggplot2::geom_density() +
+        ggplot2::scale_y_continuous(expand = ggplot2::expansion(0, 0)) +
+        ggplot2::scale_x_log10(labels = scales::label_comma()) +
         theme_density() +
-        labs(
+        ggplot2::labs(
             x = "Coverage",
             y = "Density",
             title = "Distribution of SNP coverage"
