@@ -20,6 +20,7 @@ theme_density <- function() {
         panel.background = element_blank(),
         panel.grid.major = element_blank(),
         panel.grid.minor = element_blank(),
+        plot.margin = margin(t = 16, r = 16, b = 16, l = 16, unit = "pt"),
         axis.line = element_line(colour = "black"),
         axis.ticks = element_blank(),
         axis.text.x = element_text(size = 12),
