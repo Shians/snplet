@@ -240,6 +240,18 @@ setMethod("clonotype_count_df", signature(x = "SNPData"),
     }
 )
 
+# Helper function to check that columns in filter expressions exist in the data.frame
+check_filter_expr <- function(df, dots, df_name = "data.frame") {
+    vars <- unique(unlist(lapply(dots, function(q) all.vars(rlang::get_expr(q)))))
+    missing_vars <- setdiff(vars, colnames(df))
+    if (length(missing_vars) > 0) {
+        stop(paste0(
+            "The following columns are not present in ", df_name, ": ",
+            paste(missing_vars, collapse = ", ")
+        ))
+    }
+}
+
 #' Filter SNPData object by SNP information
 #'
 #' @param .data A SNPData object
@@ -260,6 +272,9 @@ setMethod("filter_snps", signature(.data = "SNPData"),
     function(.data, ...) {
         # Capture NSE expressions
         dots <- rlang::enquos(...)
+
+        # Check filter expressions
+        check_filter_expr(.data@snp_info, dots, "snp_info")
 
         # Apply filter to snp_info
         selected_snps <- .data@snp_info %>%
@@ -301,6 +316,9 @@ setMethod("filter_barcodes", signature(.data = "SNPData"),
     function(.data, ...) {
         # Capture NSE expressions
         dots <- rlang::enquos(...)
+
+        # Check filter expressions
+        check_filter_expr(.data@sample_info, dots, "sample_info")
 
         # Apply filter to sample_info
         selected_samples <- .data@sample_info %>%

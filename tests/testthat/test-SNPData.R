@@ -172,3 +172,25 @@ test_that("SNPData validates input dimensions", {
     expect_error(SNPData(test_alt_count, test_ref_count, test_snp_info, wrong_dim_sample_info),
                  "ncol\\(alt_count\\) == nrow\\(sample_info\\)")
 })
+
+test_that("filter_snps and filter_barcodes check for missing columns", {
+    snp_data <- SNPData(test_alt_count, test_ref_count, test_snp_info, test_sample_info)
+
+    # filter_snps: should error if column does not exist
+    expect_error(
+        filter_snps(snp_data, not_a_column > 0),
+        "The following columns are not present in snp_info: not_a_column"
+    )
+
+    # filter_barcodes: should error if column does not exist
+    expect_error(
+        filter_barcodes(snp_data, not_a_column > 0),
+        "The following columns are not present in sample_info: not_a_column"
+    )
+
+    # filter_snps: should not error if column exists
+    expect_s4_class(filter_snps(snp_data, pos > 100), "SNPData")
+
+    # filter_barcodes: should not error if column exists
+    expect_s4_class(filter_barcodes(snp_data, donor_id == 'donor_1'), "SNPData")
+})
