@@ -30,6 +30,18 @@ import_cellsnp <- function(
     barcode_column = "barcode",
     clonotype_column = "raw_clonotype_id"
 ) {
+    # Validate gene_annotation columns
+    required_gene_cols <- c("chrom", "gene_name")
+    missing_cols <- setdiff(required_gene_cols, colnames(gene_annotation))
+    if (length(missing_cols) > 0) {
+        stop(
+            sprintf(
+                "gene_annotation is missing required columns: %s",
+                paste(missing_cols, collapse = ", ")
+            )
+        )
+    }
+
     # Check if required files exist
     dp_file <- fs::path(cellsnp_dir, "cellSNP.tag.DP.mtx")
     ad_file <- fs::path(cellsnp_dir, "cellSNP.tag.AD.mtx")
@@ -59,7 +71,7 @@ import_cellsnp <- function(
     # Create a GRanges object for gene annotations
     gene_anno_gr <- plyranges::as_granges(
         gene_annotation,
-        seqnames = gene_annotation$chr
+        seqnames = gene_annotation$chrom
     )
 
     # Merge SNPs with gene annotations
