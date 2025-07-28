@@ -323,6 +323,10 @@ setMethod("filter_snps", signature(.data = "SNPData"),
         selected_snps <- .data@snp_info %>%
             dplyr::filter(!!!dots)
 
+        if (nrow(selected_snps) == 0) {
+            stop("No SNPs remain after filtering. Please adjust your filter criteria.")
+        }
+
         # Get indices of selected SNPs
         selected_indices <- match(selected_snps$snp_id, rownames(.data@alt_count))
 
@@ -366,6 +370,10 @@ setMethod("filter_barcodes", signature(.data = "SNPData"),
         # Apply filter to sample_info
         selected_samples <- .data@sample_info %>%
             dplyr::filter(!!!dots)
+
+        if (nrow(selected_samples) == 0) {
+            stop("No barcodes remain after filtering. Please adjust your filter criteria.")
+        }
 
         # Get indices of selected samples
         selected_indices <- match(selected_samples$cell_id, colnames(.data@alt_count))
