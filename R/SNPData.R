@@ -240,6 +240,49 @@ setMethod("clonotype_count_df", signature(x = "SNPData"),
     }
 )
 
+setGeneric("barcode_count_df", function(x) standardGeneric("barcode_count_df"))
+setMethod("barcode_count_df", signature(x = "SNPData"),
+    function(x) {
+        logger::log_info("Calculating barcode level counts")
+
+        logger::log_info("Extracting reference counts")
+        ref_count_mat <- ref_count(x)
+        ref_count_df <- ref_count_mat %>%
+            as.matrix() %>%
+            tibble::as_tibble() %>%
+            dplyr::mutate(snp_id = rownames(ref_count_mat), .before = 1) %>%
+            tidyr::pivot_longer(
+                cols = -snp_id,
+                names_to = "cell_id",
+                values_to = "ref_count"
+            )
+
+        logger::log_info("Extracting alternate counts")
+        alt_count_mat <- alt_count(x)
+        alt_count_df <- alt_count_mat %>%
+            as.matrix() %>%
+            tibble::as_tibble() %>%
+            dplyr::mutate(snp_id = rownames(alt_count_mat), .before = 1) %>%
+            tidyr::pivot_longer(
+                cols = -snp_id,
+                names_to = "cell_id",
+                values_to = "alt_count"
+            )
+
+        logger::log_info("Processing reference and alternate counts")
+        out <- dplyr::inner_join(ref_count_df, alt_count_df, by = c("snp_id", "cell_id")) %>%
+            dplyr::mutate(
+                total_count = ref_count + alt_count,
+                ref_ratio = ref_count / total_count,
+                maf = pmin(ref_count, alt_count) / total_count
+            ) %>%
+            dplyr::filter(total_count > 0)
+
+        logger::log_success("Barcode level counts calculated")
+        out
+    }
+)
+
 # Helper function to check that columns in filter expressions exist in the data.frame
 check_filter_expr <- function(df, dots, df_name = "data.frame") {
     vars <- unique(unlist(lapply(dots, function(q) all.vars(rlang::get_expr(q)))))
