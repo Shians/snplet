@@ -4,6 +4,7 @@
 .Ruserdata
 
 .DS_Store
+.github
 
 example_data
 output
