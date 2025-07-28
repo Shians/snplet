@@ -1,3 +1,16 @@
+#' Test for minor allele frequency significance
+#'
+#' Performs a binomial test for each row to assess whether the observed minor allele count
+#' is significantly greater than expected under a null minor allele frequency (MAF).
+#'
+#' @param x A data.frame containing columns 'ref_count', 'alt_count', and 'total_count'
+#' @param p Null hypothesis minor allele frequency (default: 0.10)
+#' @return A data.frame with columns for minor_allele_count, p_val, and adj_p_val (BH adjusted)
+#' @examples
+#' \dontrun{
+#' df <- tibble::tibble(ref_count = c(10, 5), alt_count = c(2, 8), total_count = c(12, 13))
+#' test_maf(df)
+#' }
 test_maf <- function(x, p = 0.10) {
     # validate input
     stopifnot(is(x, "data.frame"))
