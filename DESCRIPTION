@@ -29,7 +29,12 @@ Imports:
     scales,
     stringr,
     tibble,
-    tidyr
+    tidyr,
+    grid,
+    methods,
+    Matrix
+Suggests:
+    testthat
 License: Apache License (>= 2)
 Encoding: UTF-8
 LazyData: true
