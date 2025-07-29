@@ -1,17 +1,25 @@
 setClass("SNPData",
     slots = c(
-        alt_count = "Matrix",
         ref_count = "Matrix",
+        alt_count = "Matrix",
+        oth_count = "Matrix",
         snp_info = "data.frame",
         sample_info = "data.frame"
     )
 )
 
 setMethod("initialize", signature(.Object = "SNPData"),
-    function(.Object, ref_count, alt_count, snp_info, sample_info) {
+    function(.Object, ref_count, alt_count, oth_count = NULL, snp_info, sample_info) {
         # validate dimension compatibility
         stopifnot(nrow(alt_count) == nrow(ref_count))
         stopifnot(ncol(alt_count) == ncol(ref_count))
+        # OTH matrix checks
+        if (!is.null(oth_count)) {
+            stopifnot(nrow(oth_count) == nrow(ref_count))
+            stopifnot(ncol(oth_count) == ncol(ref_count))
+        } else {
+            oth_count <- Matrix::Matrix(0, nrow = nrow(ref_count), ncol = ncol(ref_count), sparse = TRUE)
+        }
 
         stopifnot(ncol(alt_count) == nrow(sample_info))
         stopifnot(nrow(ref_count) == nrow(snp_info))
@@ -28,12 +36,14 @@ setMethod("initialize", signature(.Object = "SNPData"),
 
         colnames(ref_count) <- sample_info$cell_id
         colnames(alt_count) <- sample_info$cell_id
-
+        colnames(oth_count) <- sample_info$cell_id
         rownames(ref_count) <- snp_info$snp_id
         rownames(alt_count) <- snp_info$snp_id
+        rownames(oth_count) <- snp_info$snp_id
 
         .Object@ref_count <- ref_count
         .Object@alt_count <- alt_count
+        .Object@oth_count <- oth_count
         .Object@snp_info <- snp_info
         .Object@sample_info <- sample_info
 
@@ -54,6 +64,7 @@ setMethod("[", signature(x = "SNPData", i = "ANY", j = "ANY"),
 
         ref_count <- x@ref_count[i, j, drop = FALSE]
         alt_count <- x@alt_count[i, j, drop = FALSE]
+        oth_count <- x@oth_count[i, j, drop = FALSE]
         snp_info <- x@snp_info[i, ]
         sample_info <- x@sample_info[j, ]
 
@@ -63,15 +74,15 @@ setMethod("[", signature(x = "SNPData", i = "ANY", j = "ANY"),
         sample_info$library_size <- Matrix::colSums(alt_count + ref_count)
         sample_info$non_zero_snps <- Matrix::colSums(alt_count + ref_count > 0)
 
-        new("SNPData", alt_count = alt_count, ref_count = ref_count, snp_info = snp_info, sample_info = sample_info)
+        new("SNPData", alt_count = alt_count, ref_count = ref_count, oth_count = oth_count, snp_info = snp_info, sample_info = sample_info)
     }
 )
 
 # Constructor
-setGeneric("SNPData", function(alt_count, ref_count, snp_info, sample_info) standardGeneric("SNPData"))
-setMethod("SNPData", signature(alt_count = "Matrix", ref_count = "Matrix", snp_info = "data.frame", sample_info = "data.frame"),
-    function(alt_count, ref_count, snp_info, sample_info) {
-        new("SNPData", alt_count = alt_count, ref_count = ref_count, snp_info = snp_info, sample_info = sample_info)
+setGeneric("SNPData", function(ref_count, alt_count, snp_info, sample_info, oth_count = NULL) standardGeneric("SNPData"))
+setMethod("SNPData", signature(ref_count = "Matrix", alt_count = "Matrix", snp_info = "data.frame", sample_info = "data.frame"),
+    function(ref_count, alt_count, snp_info, sample_info, oth_count = NULL) {
+        new("SNPData", ref_count = ref_count, alt_count = alt_count, oth_count = oth_count, snp_info = snp_info, sample_info = sample_info)
     }
 )
 
@@ -81,6 +92,9 @@ setMethod("ref_count", signature(object = "SNPData"), function(object) object@re
 
 setGeneric("alt_count", function(object) standardGeneric("alt_count"))
 setMethod("alt_count", signature(object = "SNPData"), function(object) object@alt_count)
+
+setGeneric("oth_count", function(object) standardGeneric("oth_count"))
+setMethod("oth_count", signature(object = "SNPData"), function(object) object@oth_count)
 
 setGeneric("get_snp_info", function(object) standardGeneric("get_snp_info"))
 setMethod("get_snp_info", signature(object = "SNPData"), function(object) object@snp_info)
