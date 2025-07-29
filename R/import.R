@@ -4,9 +4,9 @@
 #' and donor information from Vireo to create a SNPData object.
 #'
 #' @param cellsnp_dir Directory containing cellSNP-lite output files
-#' @param vireo_file Path to donors.tsv file from Vireo
 #' @param vdj_file Path to filtered_contig_annotations.csv from cellranger VDJ
 #' @param gene_annotation Data frame with gene annotations for SNPs (must have same number of rows as SNP matrices)
+#' @param vireo_file Path to donors.tsv file from Vireo (optional, default: NA)
 #' @param barcode_column Name of the column in vdj_file that contains cell barcodes
 #' @param clonotype_column Name of the column in vdj_file that contains clonotype information
 #'
@@ -17,16 +17,15 @@
 #' \dontrun{
 #' snp_data <- import_cellsnp(
 #'   cellsnp_dir = "path/to/cellsnp_output",
-#'   vireo_file = "path/to/donors.tsv",
 #'   vdj_file = "path/to/filtered_contig_annotations.csv",
 #'   gene_annotation = gene_anno_df
 #' )
 #' }
 import_cellsnp <- function(
     cellsnp_dir,
-    vireo_file,
     vdj_file,
     gene_annotation,
+    vireo_file = NA,
     barcode_column = "barcode",
     clonotype_column = "raw_clonotype_id"
 ) {
@@ -45,16 +44,22 @@ import_cellsnp <- function(
     # Check if required files exist
     dp_file <- fs::path(cellsnp_dir, "cellSNP.tag.DP.mtx")
     ad_file <- fs::path(cellsnp_dir, "cellSNP.tag.AD.mtx")
+    oth_file <- fs::path(cellsnp_dir, "cellSNP.tag.OTH.mtx")
     base_file <- fs::path(cellsnp_dir, "cellSNP.base.vcf.gz")
 
-    for (file in c(dp_file, ad_file, base_file, vireo_file, vdj_file)) {
+    for (file in c(dp_file, ad_file, oth_file, base_file, vdj_file)) {
         check_file(file)
+    }
+    # Only check vireo_file if not NA
+    if (!is.na(vireo_file)) {
+        check_file(vireo_file)
     }
 
     # Read cellSNP matrices
     coverage <- Matrix::readMM(dp_file)
     alt_count <- Matrix::readMM(ad_file)
-    ref_count <- coverage - alt_count
+    oth_count <- Matrix::readMM(oth_file)
+    ref_count <- coverage - alt_count # Only subtract alt_count
 
     # Read SNP information from VCF file
     snp_vcf_data <- read_vcf_base(base_file)
@@ -63,20 +68,21 @@ import_cellsnp <- function(
     # Create a GRanges object for SNPs
     snps_gr <- plyranges::as_granges(
         snp_vcf_data,
-        seqnames = snp_vcf_data$chrom,
-        start = snp_vcf_data$pos,
-        end = snp_vcf_data$pos,
+        seqnames = chrom,
+        start = pos,
+        end = pos,
     )
 
     # Create a GRanges object for gene annotations
     gene_anno_gr <- plyranges::as_granges(
         gene_annotation,
-        seqnames = gene_annotation$chrom
+        seqnames = chrom
     )
 
     # Merge SNPs with gene annotations
     snp_info <- plyranges::join_overlap_left(snps_gr, gene_anno_gr) %>%
         tibble::as_tibble() %>%
+        dplyr::rename(chrom = seqnames, pos = start) %>%
         dplyr::select(snp_id, chrom, pos, ref, alt, gene_name) %>%
         dplyr::summarise(
             chrom = dplyr::first(chrom),
@@ -90,11 +96,27 @@ import_cellsnp <- function(
             gene_name = dplyr::if_else(gene_name == "NA", NA_character_, gene_name)
         )
 
-    # Read donor information
-    donor_info <- readr::read_tsv(
-        vireo_file,
-        col_types = readr::cols(.default = readr::col_character())
-    )
+    # Read donor information if provided, else create dummy donor info
+    if (!is.na(vireo_file)) {
+        donor_info <- readr::read_tsv(
+            vireo_file,
+            col_types = readr::cols(.default = readr::col_character())
+        )
+    } else {
+        # Read VDJ clonotype information to get barcodes
+        vdj_info_tmp <- readr::read_csv(
+            vdj_file,
+            col_types = readr::cols(.default = readr::col_character())
+        )
+        # Ensure barcode_column exists
+        if (!barcode_column %in% colnames(vdj_info_tmp)) {
+            stop(paste("Column", barcode_column, "not found in VDJ annotation file"))
+        }
+        donor_info <- tibble::tibble(
+            barcode = unique(vdj_info_tmp[[barcode_column]]),
+            donor = "donor0"
+        )
+    }
 
     # Read VDJ clonotype information
     vdj_info <- readr::read_csv(
@@ -115,6 +137,7 @@ import_cellsnp <- function(
     snp_data <- SNPData(
         alt_count = alt_count,
         ref_count = ref_count,
+        oth_count = oth_count,
         snp_info = snp_info,
         sample_info = sample_info
     )
@@ -224,4 +247,67 @@ merge_cell_annotations <- function(donor_info, vdj_info, barcode_column, clonoty
         dplyr::select(cell_id, barcode, donor, clonotype, everything())
 
     return(sample_info)
+}
+
+#' Export SNPData object to cellSNP-compatible files
+#'
+#' Writes the components of a SNPData object to an output folder in a format compatible with import_cellsnp.
+#'
+#' @param snpdata A SNPData object
+#' @param out_dir Output directory to write files
+#' @export
+#'
+#' @examples
+#' export_cellsnp(snp_data, "exported_cellsnp")
+export_cellsnp <- function(snpdata, out_dir) {
+    if (!dir.exists(out_dir)) dir.create(out_dir, recursive = TRUE)
+    logger::log_info("Exporting SNPData to {out_dir}")
+
+    # Write ALT and REF matrices as Matrix Market files
+    ad_file <- file.path(out_dir, "cellSNP.tag.AD.mtx")
+    dp_file <- file.path(out_dir, "cellSNP.tag.DP.mtx")
+    Matrix::writeMM(alt_count(snpdata), ad_file)
+    logger::log_info("ALT count matrix written to: {ad_file}")
+    Matrix::writeMM(ref_count(snpdata) + alt_count(snpdata), dp_file)
+    logger::log_info("DP (total) count matrix written to: {dp_file}")
+
+    # Write SNP info as a VCF-like file (minimal, for import_cellsnp)
+    snp_info <- snpdata@snp_info
+    vcf_file <- file.path(out_dir, "cellSNP.base.vcf")
+    vcf_df <- snp_info %>%
+        dplyr::transmute(
+            chrom = chrom,
+            pos = pos,
+            id = snp_id,
+            ref = ref,
+            alt = alt,
+            qual = ".",
+            filter = ".",
+            info = "."
+        )
+    readr::write_tsv(vcf_df, vcf_file, col_names = FALSE)
+    logger::log_info("SNP info written to: {vcf_file} (gzipping...)")
+    R.utils::gzip(vcf_file, overwrite = TRUE)
+    logger::log_info("Gzipped VCF file written to: {vcf_file}.gz")
+
+    # Write donor info as donors.tsv (if available)
+    sample_info <- snpdata@sample_info
+    donor_file <- file.path(out_dir, "donor_ids.tsv")
+    donor_df <- sample_info %>%
+        dplyr::select(barcode, donor) %>%
+        dplyr::rename(donor_id = donor) %>%
+        dplyr::distinct()
+    readr::write_tsv(donor_df, donor_file)
+    logger::log_info("Donor info written to: {donor_file}")
+
+    # Write VDJ info as filtered_contig_annotations.csv
+    vdj_file <- file.path(out_dir, "filtered_contig_annotations.csv")
+    vdj_df <- sample_info %>%
+        dplyr::select(barcode, clonotype) %>%
+        dplyr::rename(raw_clonotype_id = clonotype) %>%
+        dplyr::distinct()
+    readr::write_csv(vdj_df, vdj_file)
+    logger::log_info("VDJ info written to: {vdj_file}")
+
+    logger::log_success("SNPData exported to {out_dir}")
 }
