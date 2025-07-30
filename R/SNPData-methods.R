@@ -69,7 +69,7 @@ setMethod("donor_count_df", signature(x = "SNPData"),
         logger::log_info("Calculating donor level counts")
 
         logger::log_info("Extracting reference counts")
-        ref_count_grouped <- groupedRowSums(ref_count(x), get_sample_info(x)$donor)
+        ref_count_grouped <- groupedRowSums(ref_count(x), get_barcode_info(x)$donor)
         ref_count_df <- ref_count_grouped %>%
             tibble::as_tibble() %>%
             dplyr::select(-any_of(c("unassigned", "doublet"))) %>%
@@ -77,7 +77,7 @@ setMethod("donor_count_df", signature(x = "SNPData"),
             tidyr::pivot_longer(contains("donor"), names_to = "donor", values_to = "ref_count")
 
         logger::log_info("Extracting alternate counts")
-        alt_count_grouped <- groupedRowSums(alt_count(x), get_sample_info(x)$donor)
+        alt_count_grouped <- groupedRowSums(alt_count(x), get_barcode_info(x)$donor)
         alt_count_df <- alt_count_grouped %>%
             tibble::as_tibble() %>%
             dplyr::select(-any_of(c("unassigned", "doublet"))) %>%
@@ -118,21 +118,21 @@ setMethod("clonotype_count_df", signature(x = "SNPData"),
         logger::log_info("Calculating clonotype level counts")
 
         logger::log_info("Extracting reference counts")
-        ref_count_grouped <- groupedRowSums(ref_count(x), get_sample_info(x)$clonotype)
+        ref_count_grouped <- groupedRowSums(ref_count(x), get_barcode_info(x)$clonotype)
         ref_count_df <- ref_count_grouped %>%
             tibble::as_tibble() %>%
             dplyr::mutate(snp_id = rownames(ref_count_grouped), .before = 1) %>%
             tidyr::pivot_longer(contains("clonotype"), names_to = "clonotype", values_to = "ref_count")
 
         logger::log_info("Extracting alternate counts")
-        alt_count_grouped <- groupedRowSums(alt_count(x), get_sample_info(x)$clonotype)
+        alt_count_grouped <- groupedRowSums(alt_count(x), get_barcode_info(x)$clonotype)
         alt_count_df <- alt_count_grouped %>%
             tibble::as_tibble() %>%
             dplyr::mutate(snp_id = rownames(alt_count_grouped), .before = 1) %>%
             tidyr::pivot_longer(contains("clonotype"), names_to = "clonotype", values_to = "alt_count")
 
         logger::log_info("Processing reference and alternate counts")
-        most_likely_donor <- get_sample_info(x) %>%
+        most_likely_donor <- get_barcode_info(x) %>%
             dplyr::filter(!is.na(clonotype) & !is.na(donor)) %>%
             dplyr::select(clonotype, donor) %>%
             dplyr::count(donor, clonotype) %>%
@@ -164,10 +164,12 @@ setMethod("clonotype_count_df", signature(x = "SNPData"),
 check_filter_expr <- function(df, dots, df_name = "data.frame") {
     vars <- unique(unlist(lapply(dots, function(q) all.vars(rlang::get_expr(q)))))
     missing_vars <- setdiff(vars, colnames(df))
-    if (length(missing_vars) > 0) {
+    # Only error if missing_vars are not found in parent.frame()
+    still_missing <- missing_vars[!vapply(missing_vars, exists, logical(1), envir = parent.frame())]
+    if (length(still_missing) > 0) {
         stop(paste0(
-            "The following columns are not present in ", df_name, ": ",
-            paste(missing_vars, collapse = ", ")
+            "The following columns are not present in ", df_name, " or parent environment: ",
+            paste(still_missing, collapse = ", ")
         ))
     }
 }
@@ -265,3 +267,22 @@ setMethod("filter_barcodes", signature(.data = "SNPData"),
         .data[, selected_indices]
     }
 )
+
+#' @rdname filter_barcodes
+#' @export
+setGeneric("filter_samples", function(.data, ...) standardGeneric("filter_samples"))
+setMethod("filter_samples", signature(.data = "SNPData"),
+    function(.data, ...) filter_barcodes(.data, ...))
+
+#' Get barcode/sample/cell metadata from a SNPData object
+#'
+#' @param x A SNPData object
+#' @return A data.frame or tibble with barcode/sample/cell metadata
+#' @export
+setGeneric("get_barcode_info", function(x) standardGeneric("get_barcode_info"))
+setMethod("get_barcode_info", signature(x = "SNPData"), function(x) x@sample_info)
+
+#' @rdname get_barcode_info
+#' @export
+setGeneric("get_sample_info", function(x) standardGeneric("get_sample_info"))
+setMethod("get_sample_info", signature(x = "SNPData"), function(x) get_barcode_info(x))
