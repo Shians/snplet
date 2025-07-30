@@ -50,23 +50,32 @@ test_that("SNPData count data frame methods work correctly", {
 
     # Test barcode_count_df method
     cell_df <- barcode_count_df(snp_data)
+    # Verify barcode_count_df returns a tibble
     expect_s3_class(cell_df, "tbl_df")
+    # Check that result has expected number of rows (2 SNPs x 2 cells)
     expect_equal(nrow(cell_df), 4)  # 2 SNPs x 2 cells
     expected_barcode_cols <- c("snp_id", "cell_id", "ref_count", "alt_count", "total_count", "ref_ratio", "maf")
+    # Verify all expected columns are present in barcode data frame
     expect_true(all(expected_barcode_cols %in% colnames(cell_df)))
 
     # Test donor_count_df method
     donor_df <- donor_count_df(snp_data)
+    # Verify donor_count_df returns a tibble
     expect_s3_class(donor_df, "tbl_df")
+    # Check that result has expected number of rows (2 SNPs x 1 donor)
     expect_equal(nrow(donor_df), 2)  # 2 SNPs x 1 donor
     expected_donor_cols <- c("snp_id", "donor", "ref_count", "alt_count", "total_count", "ref_ratio", "maf")
+    # Verify all expected columns are present in donor data frame
     expect_true(all(expected_donor_cols %in% colnames(donor_df)))
 
     # Test clonotype_count_df method
     clonotype_df <- clonotype_count_df(snp_data)
+    # Verify clonotype_count_df returns a tibble
     expect_s3_class(clonotype_df, "tbl_df")
+    # Check that result has expected number of rows (2 SNPs x 2 clonotypes)
     expect_equal(nrow(clonotype_df), 4)  # 2 SNPs x 2 clonotypes
     expected_clonotype_cols <- c("snp_id", "clonotype", "ref_count", "alt_count", "total_count", "ref_ratio", "maf", "donor")
+    # Verify all expected columns are present in clonotype data frame
     expect_true(all(expected_clonotype_cols %in% colnames(clonotype_df)))
 })
 
@@ -80,20 +89,24 @@ test_that("filter_snps and filter_barcodes validate column names", {
     )
 
     # Test filter_snps with non-existent column
+    # Verify error when filtering SNPs by non-existent column
     expect_error(
         filter_snps(snp_data, not_a_column > 0),
         "The following columns are not present in snp_info or parent environment: not_a_column"
     )
 
     # Test filter_barcodes with non-existent column
+    # Verify error when filtering barcodes by non-existent column
     expect_error(
         filter_barcodes(snp_data, not_a_column > 0),
         "The following columns are not present in sample_info or parent environment: not_a_column"
     )
 
     # Test filter_snps with valid column
+    # Verify successful filtering when using valid SNP info column
     expect_s4_class(filter_snps(snp_data, pos > 100), "SNPData")
 
     # Test filter_barcodes with valid column
+    # Verify successful filtering when using valid sample info column
     expect_s4_class(filter_barcodes(snp_data, donor == "donor_1"), "SNPData")
 })

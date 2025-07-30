@@ -13,17 +13,22 @@ test_that("get_example_snpdata works correctly", {
     snp_data <- get_example_snpdata()
     
     # Test basic object structure
+    # Verify get_example_snpdata returns a valid SNPData object
     expect_s4_class(snp_data, "SNPData")
+    # Check that example data has SNPs (rows > 0)
     expect_true(nrow(snp_data) > 0)
+    # Check that example data has samples (columns > 0)
     expect_true(ncol(snp_data) > 0)
     
     # Test SNP info structure
     snp_info <- get_snp_info(snp_data)
     expected_snp_cols <- c("snp_id", "chrom", "pos")
+    # Verify essential SNP info columns are present
     expect_true(all(expected_snp_cols %in% colnames(snp_info)))
     
     # Test sample info structure
     sample_info <- get_sample_info(snp_data)
+    # Verify cell_id column is present in sample info
     expect_true("cell_id" %in% colnames(sample_info))
 })
 
@@ -35,21 +40,30 @@ test_that("read_vcf_base works correctly", {
     vcf_data <- read_vcf_base(vcf_file)
     
     # Test return type and structure
+    # Verify read_vcf_base returns a data frame
     expect_s3_class(vcf_data, "data.frame")
     
     # Test required columns
     expected_cols <- c("snp_id", "chrom", "pos", "id", "ref", "alt", "qual", "filter", "info")
+    # Check that all expected VCF columns are present
     expect_true(all(expected_cols %in% colnames(vcf_data)))
+    # Verify snp_id is the first column
     expect_equal(colnames(vcf_data)[1], "snp_id")
     
     # Test SNP ID generation
+    # Check that all SNP IDs follow the expected pattern
     expect_true(all(grepl("^snp_", vcf_data$snp_id)))
+    # Verify first SNP ID is "snp_1"
     expect_equal(vcf_data$snp_id[1], "snp_1")
     
     # Test data types
+    # Verify chromosome column is character type
     expect_type(vcf_data$chrom, "character")
+    # Verify position column is integer type
     expect_type(vcf_data$pos, "integer")
+    # Verify reference allele column is character type
     expect_type(vcf_data$ref, "character")
+    # Verify alternate allele column is character type
     expect_type(vcf_data$alt, "character")
 })
 
@@ -77,21 +91,29 @@ test_that("merge_cell_annotations works correctly", {
     )
     
     # Test return structure
+    # Verify merge_cell_annotations returns a data frame
     expect_s3_class(result, "data.frame")
     required_cols <- c("cell_id", "donor", "clonotype")
+    # Check that all required columns are present after merge
     expect_true(all(required_cols %in% colnames(result)))
     
     # Test merge behavior (left join on donor_info)
+    # Verify only donor_info cells are included (left join behavior)
     expect_equal(sort(result$barcode), c("CELL1", "CELL2", "CELL3"))
+    # Check that result has expected number of rows
     expect_equal(nrow(result), 3)
     
     # Test specific merge results
     cell1_row <- result[result$barcode == "CELL1", ]
+    # Verify CELL1 has correct donor assignment
     expect_equal(cell1_row$donor, "donor1")
+    # Verify CELL1 has correct clonotype assignment from VDJ merge
     expect_equal(cell1_row$clonotype, "clonotype1")
     
     cell3_row <- result[result$barcode == "CELL3", ]
+    # Verify CELL3 has correct donor assignment
     expect_equal(cell3_row$donor, "donor1")
+    # Verify CELL3 has NA clonotype (not present in VDJ data)
     expect_true(is.na(cell3_row$clonotype))  # Not in VDJ data
 })
 
@@ -117,24 +139,33 @@ test_that("import_cellsnp works with example data", {
     )
     
     # Test return object
+    # Verify import_cellsnp returns a valid SNPData object
     expect_s4_class(snp_data, "SNPData")
+    # Check that imported data has SNPs (rows > 0)
     expect_true(nrow(snp_data) > 0)
+    # Check that imported data has samples (columns > 0)
     expect_true(ncol(snp_data) > 0)
     
     # Test matrix dimension consistency
+    # Verify ref_count and alt_count matrices have same dimensions
     expect_equal(dim(ref_count(snp_data)), dim(alt_count(snp_data)))
+    # Verify ref_count and oth_count matrices have same dimensions
     expect_equal(dim(ref_count(snp_data)), dim(oth_count(snp_data)))
     
     # Test metadata structure
     snp_info <- get_snp_info(snp_data)
     sample_info <- get_sample_info(snp_data)
+    # Check that SNP info rows match matrix rows
     expect_equal(nrow(snp_info), nrow(snp_data))
+    # Check that sample info rows match matrix columns
     expect_equal(nrow(sample_info), ncol(snp_data))
     
     # Test required columns
     expected_snp_cols <- c("snp_id", "chrom", "pos", "ref", "alt")
     expected_sample_cols <- c("cell_id", "donor", "clonotype")
+    # Verify all expected SNP info columns are present
     expect_true(all(expected_snp_cols %in% colnames(snp_info)))
+    # Verify all expected sample info columns are present
     expect_true(all(expected_sample_cols %in% colnames(sample_info)))
 })
 
@@ -146,6 +177,7 @@ test_that("import_cellsnp validates gene_annotation input", {
     )
     
     # Test validation error
+    # Verify error when gene_annotation is missing required columns
     expect_error(
         import_cellsnp(
             cellsnp_dir = "dummy",
@@ -176,6 +208,7 @@ test_that("export_cellsnp creates output files", {
     )
     
     for (file in expected_files) {
+        # Verify each expected output file was created
         expect_true(file.exists(file.path(out_dir, file)))
     }
     

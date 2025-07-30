@@ -47,15 +47,21 @@ test_that("SNPData constructor works correctly", {
         snp_info = test_snp_info,
         sample_info = test_sample_info
     )
+    # Verify SNPData object is created successfully
     expect_s4_class(snp_data, "SNPData")
 
     # Test dimension compatibility
+    # Check that dim() method returns correct dimensions
     expect_equal(dim(snp_data), c(2, 2))
+    # Verify nrow() method works correctly
     expect_equal(nrow(snp_data), 2)
+    # Verify ncol() method works correctly
     expect_equal(ncol(snp_data), 2)
 
     # Test rownames and colnames
+    # Check that SNP IDs are used as row names
     expect_equal(rownames(snp_data), c("snp_1", "snp_2"))
+    # Check that cell IDs are used as column names
     expect_equal(colnames(snp_data), c("cell_1", "cell_2"))
 })
 
@@ -69,33 +75,52 @@ test_that("SNPData accessors work correctly", {
 
     # Test ref_count accessor
     ref_count_matrix <- ref_count(snp_data)
+    # Verify ref_count accessor returns correct matrix values
     expect_equal_unnamed(ref_count_matrix, test_ref_count)
+    # Check that ref_count matrix has correct row names
     expect_equal(rownames(ref_count_matrix), c("snp_1", "snp_2"))
+    # Check that ref_count matrix has correct column names
     expect_equal(colnames(ref_count_matrix), c("cell_1", "cell_2"))
 
     # Test alt_count accessor
     alt_count_matrix <- alt_count(snp_data)
+    # Verify alt_count accessor returns correct matrix values
     expect_equal_unnamed(alt_count_matrix, test_alt_count)
+    # Check that alt_count matrix has correct row names
     expect_equal(rownames(alt_count_matrix), c("snp_1", "snp_2"))
+    # Check that alt_count matrix has correct column names
     expect_equal(colnames(alt_count_matrix), c("cell_1", "cell_2"))
 
     # Test get_snp_info accessor
     snp_info <- get_snp_info(snp_data)
+    # Verify SNP IDs are preserved from input
     expect_equal(snp_info$snp_id, test_snp_info$snp_id)
+    # Verify SNP positions are preserved from input
     expect_equal(snp_info$pos, test_snp_info$pos)
+    # Check that coverage column is automatically added
     expect_true("coverage" %in% colnames(snp_info))
+    # Check that non_zero_samples column is automatically added
     expect_true("non_zero_samples" %in% colnames(snp_info))
+    # Verify coverage calculation: rowSums of alt_count + ref_count
     expect_equal(snp_info$coverage, c(16, 20))  # rowSums of alt_count + ref_count
+    # Verify non_zero_samples count: all samples have counts
     expect_equal(snp_info$non_zero_samples, c(2, 2))  # all samples have counts
 
     # Test get_sample_info accessor
     sample_info <- get_sample_info(snp_data)
+    # Verify cell IDs are preserved from input
     expect_equal(sample_info$cell_id, test_sample_info$cell_id)
+    # Verify donor information is preserved from input
     expect_equal(sample_info$donor, test_sample_info$donor)
+    # Verify clonotype information is preserved from input
     expect_equal(sample_info$clonotype, test_sample_info$clonotype)
+    # Check that library_size column is automatically added
     expect_true("library_size" %in% colnames(sample_info))
+    # Check that non_zero_snps column is automatically added
     expect_true("non_zero_snps" %in% colnames(sample_info))
+    # Verify library_size calculation: colSums of alt_count + ref_count
     expect_equal(sample_info$library_size, c(14, 22))  # colSums of alt_count + ref_count
+    # Verify non_zero_snps count: all SNPs have counts
     expect_equal(sample_info$non_zero_snps, c(2, 2))  # all SNPs have counts
 })
 
@@ -109,27 +134,37 @@ test_that("SNPData subsetting works correctly", {
 
     # Test subsetting by index
     subset_data <- snp_data[1, 1]
+    # Verify subsetting by index returns SNPData object
     expect_s4_class(subset_data, "SNPData")
+    # Check that single element subset has correct dimensions
     expect_equal(dim(subset_data), c(1, 1))
 
     # Test subsetting by name
     subset_data <- snp_data["snp_1", "cell_1"]
+    # Verify subsetting by name returns SNPData object
     expect_s4_class(subset_data, "SNPData")
+    # Check that named subset has correct dimensions
     expect_equal(dim(subset_data), c(1, 1))
 
     # Test that drop parameter is ignored
     subset_data <- snp_data[1, 1, drop = TRUE]
+    # Verify drop=TRUE is ignored and still returns SNPData object
     expect_s4_class(subset_data, "SNPData")
+    # Check that drop=TRUE doesn't affect dimensions
     expect_equal(dim(subset_data), c(1, 1))
 
     # Test subsetting to single row
     subset_data <- snp_data[1, ]
+    # Verify single row subset returns SNPData object
     expect_s4_class(subset_data, "SNPData")
+    # Check that single row subset has correct dimensions
     expect_equal(dim(subset_data), c(1, 2))
 
     # Test subsetting to single column
     subset_data <- snp_data[, 1]
+    # Verify single column subset returns SNPData object
     expect_s4_class(subset_data, "SNPData")
+    # Check that single column subset has correct dimensions
     expect_equal(dim(subset_data), c(2, 1))
 })
 
@@ -144,10 +179,12 @@ test_that("SNPData coverage calculations work correctly", {
 
     # Test coverage method
     expected_coverage <- Matrix::Matrix(matrix(c(6, 8, 10, 12), nrow = 2, ncol = 2))
+    # Verify coverage calculation: alt_count + ref_count
     expect_equal_unnamed(coverage(snp_data), expected_coverage)
 
     # Test ref_fraction method
     expected_ref_fraction <- Matrix::Matrix(matrix(c(5/6, 6/8, 7/10, 8/12), nrow = 2, ncol = 2))
+    # Verify ref_fraction calculation: ref_count / (ref_count + alt_count)
     expect_equal_unnamed(ref_fraction(snp_data), expected_ref_fraction)
 
     # Test major_allele_frac method
@@ -156,6 +193,7 @@ test_that("SNPData coverage calculations work correctly", {
           0.5 + abs(7/10 - 0.5), 0.5 + abs(8/12 - 0.5)),
         nrow = 2, ncol = 2
     ))
+    # Verify major_allele_frac calculation: 0.5 + abs(ref_fraction - 0.5)
     expect_equal_unnamed(major_allele_frac(snp_data), expected_major_allele_frac)
 })
 test_that("SNPData handles missing IDs correctly", {
@@ -174,15 +212,20 @@ test_that("SNPData handles missing IDs correctly", {
     )
 
     # Check that IDs were automatically assigned
+    # Verify snp_id column was auto-generated when missing
     expect_true("snp_id" %in% colnames(get_snp_info(snp_data)))
+    # Verify cell_id column was auto-generated when missing
     expect_true("cell_id" %in% colnames(get_sample_info(snp_data)))
+    # Check that auto-generated SNP IDs follow expected pattern
     expect_equal(get_snp_info(snp_data)$snp_id, c("snp_1", "snp_2"))
+    # Check that auto-generated cell IDs follow expected pattern
     expect_equal(get_sample_info(snp_data)$cell_id, c("cell_1", "cell_2"))
 })
 
 test_that("SNPData validates input dimensions", {
     # Test mismatched alt_count vs ref_count dimensions
     wrong_dim_alt_count <- Matrix::Matrix(matrix(c(1, 2, 3), nrow = 3, ncol = 1))
+    # Verify error when alt_count and ref_count have different row counts
     expect_error(
         SNPData(
             ref_count = test_ref_count,
@@ -195,6 +238,7 @@ test_that("SNPData validates input dimensions", {
 
     # Test mismatched snp_info dimensions
     wrong_dim_snp_info <- data.frame(snp_id = c("snp_1", "snp_2", "snp_3"))
+    # Verify error when snp_info rows don't match matrix rows
     expect_error(
         SNPData(
             ref_count = test_ref_count,
@@ -207,6 +251,7 @@ test_that("SNPData validates input dimensions", {
 
     # Test mismatched sample_info dimensions
     wrong_dim_sample_info <- data.frame(cell_id = c("cell_1", "cell_2", "cell_3"))
+    # Verify error when sample_info rows don't match matrix columns
     expect_error(
         SNPData(
             alt_count = test_alt_count,
