@@ -1,25 +1,43 @@
+# ==============================================================================
+# Test Suite: SNPData S4 Class
+# Description: Tests for SNPData class constructor, accessors, and core methods
+# ==============================================================================
+
 library(testthat)
 library(Matrix)
+
+# ------------------------------------------------------------------------------
+# Helper Functions
+# ------------------------------------------------------------------------------
 
 # Helper function to compare objects without names
 expect_equal_unnamed <- function(object, expected, ...) {
     expect_equal(unname(object), unname(expected), ...)
 }
 
-# Create test data
+# ------------------------------------------------------------------------------
+# Test Data Setup
+# ------------------------------------------------------------------------------
+
+# Create test matrices
 test_alt_count <- Matrix::Matrix(matrix(c(1, 2, 3, 4), nrow = 2, ncol = 2))
 test_ref_count <- Matrix::Matrix(matrix(c(5, 6, 7, 8), nrow = 2, ncol = 2))
+
+# Create test metadata
 test_snp_info <- data.frame(
     snp_id = c("snp_1", "snp_2"),
     pos = c(100, 200),
     stringsAsFactors = FALSE
 )
+
 test_sample_info <- data.frame(
     cell_id = c("cell_1", "cell_2"),
     donor = c("donor_1", "donor_1"),
     clonotype = c("clonotype_1", "clonotype_2"),
     stringsAsFactors = FALSE
 )
+
+# ==============================================================================
 
 test_that("SNPData constructor works correctly", {
     # Test basic construction
@@ -116,6 +134,7 @@ test_that("SNPData subsetting works correctly", {
 })
 
 test_that("SNPData coverage calculations work correctly", {
+    # Setup
     snp_data <- SNPData(
         alt_count = test_alt_count,
         ref_count = test_ref_count,
@@ -132,13 +151,13 @@ test_that("SNPData coverage calculations work correctly", {
     expect_equal_unnamed(ref_fraction(snp_data), expected_ref_fraction)
 
     # Test major_allele_frac method
-    expected_major_allele_frac <- Matrix::Matrix(matrix(c(0.5 + abs(5/6 - 0.5), 0.5 + abs(6/8 - 0.5),
-                                                    0.5 + abs(7/10 - 0.5), 0.5 + abs(8/12 - 0.5)),
-                                           nrow = 2, ncol = 2))
+    expected_major_allele_frac <- Matrix::Matrix(matrix(
+        c(0.5 + abs(5/6 - 0.5), 0.5 + abs(6/8 - 0.5),
+          0.5 + abs(7/10 - 0.5), 0.5 + abs(8/12 - 0.5)),
+        nrow = 2, ncol = 2
+    ))
     expect_equal_unnamed(major_allele_frac(snp_data), expected_major_allele_frac)
 })
-
-
 test_that("SNPData handles missing IDs correctly", {
     # Create data without snp_id and cell_id
     test_snp_info_no_id <- data.frame(pos = c(100, 200))
@@ -162,32 +181,39 @@ test_that("SNPData handles missing IDs correctly", {
 })
 
 test_that("SNPData validates input dimensions", {
-    # Test mismatched dimensions
+    # Test mismatched alt_count vs ref_count dimensions
     wrong_dim_alt_count <- Matrix::Matrix(matrix(c(1, 2, 3), nrow = 3, ncol = 1))
-    expect_error(SNPData(
-        ref_count = test_ref_count,
-        alt_count = wrong_dim_alt_count,
-        snp_info = test_snp_info,
-        sample_info = test_sample_info
-    ),
-    "nrow\\(alt_count\\) == nrow\\(ref_count\\)")
+    expect_error(
+        SNPData(
+            ref_count = test_ref_count,
+            alt_count = wrong_dim_alt_count,
+            snp_info = test_snp_info,
+            sample_info = test_sample_info
+        ),
+        "nrow\\(alt_count\\) == nrow\\(ref_count\\)"
+    )
 
+    # Test mismatched snp_info dimensions
     wrong_dim_snp_info <- data.frame(snp_id = c("snp_1", "snp_2", "snp_3"))
-    expect_error(SNPData(
-        ref_count = test_ref_count,
-        alt_count = test_alt_count,
-        snp_info = wrong_dim_snp_info,
-        sample_info = test_sample_info
-    ),
-    "nrow\\(ref_count\\) == nrow\\(snp_info\\)")
+    expect_error(
+        SNPData(
+            ref_count = test_ref_count,
+            alt_count = test_alt_count,
+            snp_info = wrong_dim_snp_info,
+            sample_info = test_sample_info
+        ),
+        "nrow\\(ref_count\\) == nrow\\(snp_info\\)"
+    )
 
+    # Test mismatched sample_info dimensions
     wrong_dim_sample_info <- data.frame(cell_id = c("cell_1", "cell_2", "cell_3"))
-    expect_error(SNPData(
-        alt_count = test_alt_count,
-        ref_count = test_ref_count,
-        snp_info = test_snp_info,
-        sample_info = wrong_dim_sample_info
-    ),
-    "ncol\\(alt_count\\) == nrow\\(sample_info\\)")
+    expect_error(
+        SNPData(
+            alt_count = test_alt_count,
+            ref_count = test_ref_count,
+            snp_info = test_snp_info,
+            sample_info = wrong_dim_sample_info
+        ),
+        "ncol\\(alt_count\\) == nrow\\(sample_info\\)"
+    )
 })
-
