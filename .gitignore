@@ -6,6 +6,8 @@
 .DS_Store
 .github
 
+CLAUDE.md
+
 example_data
 output
 annotation
