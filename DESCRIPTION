@@ -1,7 +1,7 @@
 Package: snplet
 Type: Package
 Title: Package for handling SNP based allele-specific expression analysis
-Version: 0.1.0
+Version: 0.2.0
 Authors@R: c(
     person(
       "Shian", "Su",
@@ -9,8 +9,12 @@ Authors@R: c(
       role = c("aut", "cre")
     )
   )
-Description: Provides a basic data type and functions for handling a REF and ALT SNP count matrix produced by
-    CellSNP, along with metadata containing clonotype and donor ids.
+Description: Enables downstream analysis of allele-specific expression and clonal evolution in 
+    single-cell RNA sequencing data using output from cellSNP-lite, Vireo, and cellranger VDJ.
+    The package integrates SNP genotype calls, donor assignments, and clonotype annotations to
+    assess allelic imbalance and analyze clonal relationships across individual cells. Core
+    functionality includes statistical testing for differential allele usage and aggregation
+    of allele counts across cells sharing clonotypes or donor identities.
 Depends:
     methods,
     Matrix
