@@ -2,7 +2,7 @@ name: Auto-merge devel to main
 
 on:
   workflow_run:
-    workflows: ["test-coverage.yaml"]
+    workflows: ["R-CMD-check.yaml"]
     branches: [devel]
     types:
       - completed
