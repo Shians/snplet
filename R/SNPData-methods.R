@@ -286,3 +286,77 @@ setMethod("get_barcode_info", signature(x = "SNPData"), function(x) x@sample_inf
 #' @export
 setGeneric("get_sample_info", function(x) standardGeneric("get_sample_info"))
 setMethod("get_sample_info", signature(x = "SNPData"), function(x) get_barcode_info(x))
+
+#' Get aggregated SNP count summary by any sample_info column
+#'
+#' Returns a long-format data frame of reference and alternate allele counts per SNP and aggregated by the specified grouping column from sample_info.
+#'
+#' @param x A SNPData object
+#' @param group_by Character string specifying the column name in sample_info to group by
+#' @param test_maf Logical, whether to include a test_maf column (default TRUE)
+#' @return A tibble with columns: snp_id, [group_by], ref_count, alt_count, total_count, ref_ratio, maf, (optionally test_maf)
+#' @export
+#'
+#' @examples
+#' # Aggregate by donor
+#' aggregate_count_df(snp_data, "donor")
+#' 
+#' # Aggregate by clonotype  
+#' aggregate_count_df(snp_data, "clonotype")
+#' 
+#' # Aggregate by any custom column
+#' aggregate_count_df(snp_data, "cell_type")
+setGeneric("aggregate_count_df", function(x, group_by, test_maf = TRUE) standardGeneric("aggregate_count_df"))
+setMethod("aggregate_count_df", signature(x = "SNPData"),
+    function(x, group_by, test_maf = TRUE) {
+        logger::log_info("Calculating {group_by} level counts")
+        
+        # Check that group_by column exists in sample_info
+        if (!group_by %in% colnames(get_sample_info(x))) {
+            stop(glue::glue("Column '{group_by}' not found in sample_info. Available columns: {paste(colnames(get_sample_info(x)), collapse = ', ')}"))
+        }
+        
+        # Get grouping variable
+        groups <- get_sample_info(x)[[group_by]]
+        
+        # Check for missing values in grouping variable
+        if (any(is.na(groups))) {
+            logger::log_warn("Found {sum(is.na(groups))} NA values in '{group_by}' column. These will be excluded from aggregation.")
+            # Filter out samples with NA values
+            keep_samples <- !is.na(groups)
+            x_filtered <- x[, keep_samples]
+            groups <- groups[keep_samples]
+        } else {
+            x_filtered <- x
+        }
+        
+        logger::log_info("Extracting reference counts")
+        ref_count_grouped <- groupedRowSums(ref_count(x_filtered), groups)
+        ref_count_df <- ref_count_grouped %>%
+            tibble::as_tibble() %>%
+            dplyr::mutate(snp_id = rownames(ref_count_grouped), .before = 1) %>%
+            tidyr::pivot_longer(-snp_id, names_to = group_by, values_to = "ref_count")
+
+        logger::log_info("Extracting alternate counts")
+        alt_count_grouped <- groupedRowSums(alt_count(x_filtered), groups)
+        alt_count_df <- alt_count_grouped %>%
+            tibble::as_tibble() %>%
+            dplyr::mutate(snp_id = rownames(alt_count_grouped), .before = 1) %>%
+            tidyr::pivot_longer(-snp_id, names_to = group_by, values_to = "alt_count")
+
+        logger::log_info("Processing reference and alternate counts")
+        out <- dplyr::inner_join(ref_count_df, alt_count_df, by = c("snp_id", group_by)) %>%
+            dplyr::mutate(
+                total_count = ref_count + alt_count,
+                ref_ratio = ref_count / total_count,
+                maf = pmin(ref_count, alt_count) / total_count
+            ) %>%
+            dplyr::filter(total_count > 0)
+        if (isTRUE(test_maf)) {
+            out <- out %>% dplyr::mutate(test_maf = !is.na(maf) & maf > 0)
+        }
+
+        logger::log_success("{stringr::str_to_title(group_by)} level counts calculated")
+        out
+    }
+)
