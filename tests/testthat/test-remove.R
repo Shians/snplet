@@ -23,7 +23,7 @@ test_snp_info <- data.frame(
 )
 
 # Create test sample info with doublets and NA clonotypes
-test_sample_info <- data.frame(
+test_barcode_info <- data.frame(
     cell_id = c("cell_1", "cell_2"),
     donor = c("donor_1", "doublet"),
     clonotype = c("clonotype_1", NA),
@@ -36,7 +36,7 @@ create_test_snpdata <- function() {
         alt_count = test_alt_count,
         ref_count = test_ref_count,
         snp_info = test_snp_info,
-        sample_info = test_sample_info
+        barcode_info = test_barcode_info
     )
 }
 
@@ -56,9 +56,9 @@ test_that("remove_doublets works correctly", {
     expect_equal(ncol(filtered_data), 1)
 
     # Verify remaining cell is not the doublet
-    remaining_sample_info <- get_barcode_info(filtered_data)
-    expect_equal(remaining_sample_info$donor, "donor_1")
-    expect_false("doublet" %in% remaining_sample_info$donor)
+    remaining_barcode_info <- get_barcode_info(filtered_data)
+    expect_equal(remaining_barcode_info$donor, "donor_1")
+    expect_false("doublet" %in% remaining_barcode_info$donor)
 
     # Check that matrices were properly subsetted
     expect_equal(dim(alt_count(filtered_data)), c(3, 1))
@@ -70,7 +70,7 @@ test_that("remove_doublets works correctly", {
 
 test_that("remove_doublets handles missing donor column", {
     # Setup - Create SNPData without donor column
-    sample_info_no_donor <- data.frame(
+    barcode_info_no_donor <- data.frame(
         cell_id = c("cell_1", "cell_2"),
         clonotype = c("clonotype_1", "clonotype_2"),
         stringsAsFactors = FALSE
@@ -80,14 +80,14 @@ test_that("remove_doublets handles missing donor column", {
         alt_count = test_alt_count,
         ref_count = test_ref_count,
         snp_info = test_snp_info,
-        sample_info = sample_info_no_donor
+        barcode_info = barcode_info_no_donor
     )
 
     # Test with missing donor column
     # Verify warning is issued when donor column is missing
     expect_warning(
         result <- remove_doublets(snp_data_no_donor),
-        "No 'donor' column found in sample_info, returning original object"
+        "No 'donor' column found in barcode_info, returning original object"
     )
 
     # Check that original object is returned unchanged
@@ -97,7 +97,7 @@ test_that("remove_doublets handles missing donor column", {
 
 test_that("remove_doublets handles NA values correctly", {
     # Setup - Create data with NA donor values
-    sample_info_with_na <- data.frame(
+    barcode_info_with_na <- data.frame(
         cell_id = c("cell_1", "cell_2", "cell_3"),
         donor = c("donor_1", NA, "donor_2"),
         clonotype = c("clonotype_1", "clonotype_2", "clonotype_3"),
@@ -111,7 +111,7 @@ test_that("remove_doublets handles NA values correctly", {
         alt_count = alt_count_3col,
         ref_count = ref_count_3col,
         snp_info = test_snp_info,
-        sample_info = sample_info_with_na
+        barcode_info = barcode_info_with_na
     )
 
     # Test with drop_na = TRUE (default)
@@ -178,7 +178,7 @@ test_that("remove_na_genes handles missing gene column", {
         alt_count = test_alt_count,
         ref_count = test_ref_count,
         snp_info = snp_info_no_gene,
-        sample_info = test_sample_info
+        barcode_info = test_barcode_info
     )
 
     # Test with missing gene column
@@ -206,7 +206,7 @@ test_that("remove_na_genes handles custom gene column", {
         alt_count = test_alt_count,
         ref_count = test_ref_count,
         snp_info = snp_info_custom,
-        sample_info = test_sample_info
+        barcode_info = test_barcode_info
     )
 
     # Test with custom gene column name
@@ -241,9 +241,9 @@ test_that("remove_na_clonotypes works correctly", {
     expect_equal(ncol(filtered_data), 1)
 
     # Verify remaining cell doesn't have NA clonotype
-    remaining_sample_info <- get_barcode_info(filtered_data)
-    expect_false(any(is.na(remaining_sample_info$clonotype)))
-    expect_equal(remaining_sample_info$clonotype, "clonotype_1")
+    remaining_barcode_info <- get_barcode_info(filtered_data)
+    expect_false(any(is.na(remaining_barcode_info$clonotype)))
+    expect_equal(remaining_barcode_info$clonotype, "clonotype_1")
 
     # Check that matrices were properly subsetted
     expect_equal(dim(alt_count(filtered_data)), c(3, 1))
@@ -255,7 +255,7 @@ test_that("remove_na_clonotypes works correctly", {
 
 test_that("remove_na_clonotypes handles missing clonotype column", {
     # Setup - Create SNPData without clonotype column
-    sample_info_no_clonotype <- data.frame(
+    barcode_info_no_clonotype <- data.frame(
         cell_id = c("cell_1", "cell_2"),
         donor = c("donor_1", "donor_2"),
         stringsAsFactors = FALSE
@@ -265,14 +265,14 @@ test_that("remove_na_clonotypes handles missing clonotype column", {
         alt_count = test_alt_count,
         ref_count = test_ref_count,
         snp_info = test_snp_info,
-        sample_info = sample_info_no_clonotype
+        barcode_info = barcode_info_no_clonotype
     )
 
     # Test with missing clonotype column
     # Verify warning is issued when clonotype column is missing
     expect_warning(
         result <- remove_na_clonotypes(snp_data_no_clonotype),
-        "No 'clonotype' column found in sample_info, returning original object"
+        "No 'clonotype' column found in barcode_info, returning original object"
     )
 
     # Check that original object is returned unchanged
@@ -282,7 +282,7 @@ test_that("remove_na_clonotypes handles missing clonotype column", {
 
 test_that("remove_na_clonotypes handles custom clonotype column", {
     # Setup - Create data with custom clonotype column name
-    sample_info_custom <- data.frame(
+    barcode_info_custom <- data.frame(
         cell_id = c("cell_1", "cell_2"),
         donor = c("donor_1", "donor_2"),
         custom_clonotype = c("clonotype_1", NA),
@@ -293,7 +293,7 @@ test_that("remove_na_clonotypes handles custom clonotype column", {
         alt_count = test_alt_count,
         ref_count = test_ref_count,
         snp_info = test_snp_info,
-        sample_info = sample_info_custom
+        barcode_info = barcode_info_custom
     )
 
     # Test with custom clonotype column name
@@ -301,8 +301,8 @@ test_that("remove_na_clonotypes handles custom clonotype column", {
 
     # Verify filtering worked with custom column
     expect_equal(ncol(filtered_data), 1)
-    remaining_sample_info <- get_barcode_info(filtered_data)
-    expect_false(any(is.na(remaining_sample_info$custom_clonotype)))
+    remaining_barcode_info <- get_barcode_info(filtered_data)
+    expect_false(any(is.na(remaining_barcode_info$custom_clonotype)))
 })
 
 test_that("remove_na_clonotypes validates input", {
@@ -329,7 +329,7 @@ test_that("all remove functions handle edge cases", {
         alt_count = test_alt_count,
         ref_count = test_ref_count,
         snp_info = test_snp_info,
-        sample_info = all_doublets_info
+        barcode_info = all_doublets_info
     )
 
     # Verify all doublets are removed, leaving empty object
@@ -348,7 +348,7 @@ test_that("all remove functions handle edge cases", {
         alt_count = test_alt_count,
         ref_count = test_ref_count,
         snp_info = all_na_genes_info,
-        sample_info = test_sample_info
+        barcode_info = test_barcode_info
     )
 
     # Verify all NA genes are removed, leaving empty object

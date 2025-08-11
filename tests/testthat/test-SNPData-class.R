@@ -30,7 +30,7 @@ test_snp_info <- data.frame(
     stringsAsFactors = FALSE
 )
 
-test_sample_info <- data.frame(
+test_barcode_info <- data.frame(
     cell_id = c("cell_1", "cell_2"),
     donor = c("donor_1", "donor_1"),
     clonotype = c("clonotype_1", "clonotype_2"),
@@ -45,7 +45,7 @@ test_that("SNPData constructor works correctly", {
         ref_count = test_ref_count,
         alt_count = test_alt_count,
         snp_info = test_snp_info,
-        sample_info = test_sample_info
+        barcode_info = test_barcode_info
     )
     # Verify SNPData object is created successfully
     expect_s4_class(snp_data, "SNPData")
@@ -70,7 +70,7 @@ test_that("SNPData accessors work correctly", {
         ref_count = test_ref_count,
         alt_count = test_alt_count,
         snp_info = test_snp_info,
-        sample_info = test_sample_info
+        barcode_info = test_barcode_info
     )
 
     # Test ref_count accessor
@@ -107,21 +107,21 @@ test_that("SNPData accessors work correctly", {
     expect_equal(snp_info$non_zero_samples, c(2, 2))  # all samples have counts
 
     # Test get_barcode_info accessor
-    sample_info <- get_barcode_info(snp_data)
+    barcode_info <- get_barcode_info(snp_data)
     # Verify cell IDs are preserved from input
-    expect_equal(sample_info$cell_id, test_sample_info$cell_id)
+    expect_equal(barcode_info$cell_id, test_barcode_info$cell_id)
     # Verify donor information is preserved from input
-    expect_equal(sample_info$donor, test_sample_info$donor)
+    expect_equal(barcode_info$donor, test_barcode_info$donor)
     # Verify clonotype information is preserved from input
-    expect_equal(sample_info$clonotype, test_sample_info$clonotype)
+    expect_equal(barcode_info$clonotype, test_barcode_info$clonotype)
     # Check that library_size column is automatically added
-    expect_true("library_size" %in% colnames(sample_info))
+    expect_true("library_size" %in% colnames(barcode_info))
     # Check that non_zero_snps column is automatically added
-    expect_true("non_zero_snps" %in% colnames(sample_info))
+    expect_true("non_zero_snps" %in% colnames(barcode_info))
     # Verify library_size calculation: colSums of alt_count + ref_count
-    expect_equal(sample_info$library_size, c(14, 22))  # colSums of alt_count + ref_count
+    expect_equal(barcode_info$library_size, c(14, 22))  # colSums of alt_count + ref_count
     # Verify non_zero_snps count: all SNPs have counts
-    expect_equal(sample_info$non_zero_snps, c(2, 2))  # all SNPs have counts
+    expect_equal(barcode_info$non_zero_snps, c(2, 2))  # all SNPs have counts
 })
 
 test_that("SNPData subsetting works correctly", {
@@ -129,7 +129,7 @@ test_that("SNPData subsetting works correctly", {
         alt_count = test_alt_count,
         ref_count = test_ref_count,
         snp_info = test_snp_info,
-        sample_info = test_sample_info
+        barcode_info = test_barcode_info
     )
 
     # Test subsetting by index
@@ -174,7 +174,7 @@ test_that("SNPData coverage calculations work correctly", {
         alt_count = test_alt_count,
         ref_count = test_ref_count,
         snp_info = test_snp_info,
-        sample_info = test_sample_info
+        barcode_info = test_barcode_info
     )
 
     # Test coverage method
@@ -199,7 +199,7 @@ test_that("SNPData coverage calculations work correctly", {
 test_that("SNPData handles missing IDs correctly", {
     # Create data without snp_id and cell_id
     test_snp_info_no_id <- data.frame(pos = c(100, 200))
-    test_sample_info_no_id <- data.frame(
+    test_barcode_info_no_id <- data.frame(
         donor = c("donor_1", "donor_1"),
         clonotype = c("clonotype_1", "clonotype_2")
     )
@@ -208,7 +208,7 @@ test_that("SNPData handles missing IDs correctly", {
         alt_count = test_alt_count,
         ref_count = test_ref_count,
         snp_info = test_snp_info_no_id,
-        sample_info = test_sample_info_no_id
+        barcode_info = test_barcode_info_no_id
     )
 
     # Check that IDs were automatically assigned
@@ -231,7 +231,7 @@ test_that("SNPData validates input dimensions", {
             ref_count = test_ref_count,
             alt_count = wrong_dim_alt_count,
             snp_info = test_snp_info,
-            sample_info = test_sample_info
+            barcode_info = test_barcode_info
         ),
         "nrow\\(alt_count\\) == nrow\\(ref_count\\)"
     )
@@ -244,21 +244,21 @@ test_that("SNPData validates input dimensions", {
             ref_count = test_ref_count,
             alt_count = test_alt_count,
             snp_info = wrong_dim_snp_info,
-            sample_info = test_sample_info
+            barcode_info = test_barcode_info
         ),
         "nrow\\(ref_count\\) == nrow\\(snp_info\\)"
     )
 
-    # Test mismatched sample_info dimensions
-    wrong_dim_sample_info <- data.frame(cell_id = c("cell_1", "cell_2", "cell_3"))
-    # Verify error when sample_info rows don't match matrix columns
+    # Test mismatched barcode_info dimensions
+    wrong_dim_barcode_info <- data.frame(cell_id = c("cell_1", "cell_2", "cell_3"))
+    # Verify error when barcode_info rows don't match matrix columns
     expect_error(
         SNPData(
             alt_count = test_alt_count,
             ref_count = test_ref_count,
             snp_info = test_snp_info,
-            sample_info = wrong_dim_sample_info
+            barcode_info = wrong_dim_barcode_info
         ),
-        "ncol\\(alt_count\\) == nrow\\(sample_info\\)"
+        "ncol\\(alt_count\\) == nrow\\(barcode_info\\)"
     )
 })

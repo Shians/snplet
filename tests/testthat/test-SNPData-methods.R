@@ -30,7 +30,7 @@ test_snp_info <- data.frame(
     stringsAsFactors = FALSE
 )
 
-test_sample_info <- data.frame(
+test_barcode_info <- data.frame(
     cell_id = c("cell_1", "cell_2"),
     donor = c("donor_1", "donor_1"),
     clonotype = c("clonotype_1", "clonotype_2"),
@@ -46,7 +46,7 @@ test_that("SNPData count data frame methods work correctly", {
         alt_count = test_alt_count,
         ref_count = test_ref_count,
         snp_info = test_snp_info,
-        sample_info = test_sample_info
+        barcode_info = test_barcode_info
     )
 
     # Test barcode_count_df method
@@ -86,7 +86,7 @@ test_that("filter_snps and filter_barcodes validate column names", {
         alt_count = test_alt_count,
         ref_count = test_ref_count,
         snp_info = test_snp_info,
-        sample_info = test_sample_info
+        barcode_info = test_barcode_info
     )
 
     # Test filter_snps with non-existent column
@@ -100,7 +100,7 @@ test_that("filter_snps and filter_barcodes validate column names", {
     # Verify error when filtering barcodes by non-existent column
     expect_error(
         filter_barcodes(snp_data, not_a_column > 0),
-        "The following columns are not present in sample_info or parent environment: not_a_column"
+        "The following columns are not present in barcode_info or parent environment: not_a_column"
     )
 
     # Test filter_snps with valid column
@@ -118,7 +118,7 @@ test_that("aggregate_count_df works correctly with various grouping columns", {
         alt_count = test_alt_count,
         ref_count = test_ref_count,
         snp_info = test_snp_info,
-        sample_info = test_sample_info
+        barcode_info = test_barcode_info
     )
 
     # Test aggregation by donor
@@ -171,24 +171,24 @@ test_that("aggregate_count_df handles edge cases correctly", {
         alt_count = test_alt_count,
         ref_count = test_ref_count,
         snp_info = test_snp_info,
-        sample_info = test_sample_info
+        barcode_info = test_barcode_info
     )
 
     # Test error with non-existent column
     # Verify error when grouping by non-existent column
     expect_error(
         aggregate_count_df(snp_data, "non_existent_column"),
-        "Column 'non_existent_column' not found in sample_info"
+        "Column 'non_existent_column' not found in barcode_info"
     )
 
     # Test with NA values in grouping column
-    test_sample_info_na <- test_sample_info
-    test_sample_info_na$donor[1] <- NA
+    test_barcode_info_na <- test_barcode_info
+    test_barcode_info_na$donor[1] <- NA
     snp_data_na <- SNPData(
         alt_count = test_alt_count,
         ref_count = test_ref_count,
         snp_info = test_snp_info,
-        sample_info = test_sample_info_na
+        barcode_info = test_barcode_info_na
     )
     
     # Verify function handles NA values by excluding them
@@ -204,7 +204,7 @@ test_that("aggregate_count_df produces correct calculations", {
     test_alt_simple <- Matrix::Matrix(matrix(c(10, 20, 30, 40), nrow = 2, ncol = 2))
     test_ref_simple <- Matrix::Matrix(matrix(c(90, 80, 70, 60), nrow = 2, ncol = 2))
     
-    test_sample_info_simple <- data.frame(
+    test_barcode_info_simple <- data.frame(
         cell_id = c("cell_1", "cell_2"),
         group_col = c("group_A", "group_A"),  # Both cells in same group
         stringsAsFactors = FALSE
@@ -214,7 +214,7 @@ test_that("aggregate_count_df produces correct calculations", {
         alt_count = test_alt_simple,
         ref_count = test_ref_simple,
         snp_info = test_snp_info,
-        sample_info = test_sample_info_simple
+        barcode_info = test_barcode_info_simple
     )
 
     result <- aggregate_count_df(snp_data_simple, "group_col")

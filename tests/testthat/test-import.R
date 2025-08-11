@@ -27,9 +27,9 @@ test_that("get_example_snpdata works correctly", {
     expect_true(all(expected_snp_cols %in% colnames(snp_info)))
 
     # Test sample info structure
-    sample_info <- get_barcode_info(snp_data)
+    barcode_info <- get_barcode_info(snp_data)
     # Verify cell_id column is present in sample info
-    expect_true("cell_id" %in% colnames(sample_info))
+    expect_true("cell_id" %in% colnames(barcode_info))
 })
 
 test_that("read_vcf_base works correctly", {
@@ -154,11 +154,11 @@ test_that("import_cellsnp works with example data", {
 
     # Test metadata structure
     snp_info <- get_snp_info(snp_data)
-    sample_info <- get_barcode_info(snp_data)
+    barcode_info <- get_barcode_info(snp_data)
     # Check that SNP info rows match matrix rows
     expect_equal(nrow(snp_info), nrow(snp_data))
     # Check that sample info rows match matrix columns
-    expect_equal(nrow(sample_info), ncol(snp_data))
+    expect_equal(nrow(barcode_info), ncol(snp_data))
 
     # Test required columns
     expected_snp_cols <- c("snp_id", "chrom", "pos", "ref", "alt")
@@ -166,7 +166,7 @@ test_that("import_cellsnp works with example data", {
     # Verify all expected SNP info columns are present
     expect_true(all(expected_snp_cols %in% colnames(snp_info)))
     # Verify all expected sample info columns are present
-    expect_true(all(expected_sample_cols %in% colnames(sample_info)))
+    expect_true(all(expected_sample_cols %in% colnames(barcode_info)))
 })
 
 test_that("import_cellsnp validates gene_annotation input", {
