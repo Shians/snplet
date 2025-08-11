@@ -284,8 +284,8 @@ setMethod("get_barcode_info", signature(x = "SNPData"), function(x) x@sample_inf
 
 #' @rdname get_barcode_info
 #' @export
-setGeneric("get_sample_info", function(x) standardGeneric("get_sample_info"))
-setMethod("get_sample_info", signature(x = "SNPData"), function(x) get_barcode_info(x))
+setGeneric("get_barcode_info", function(x) standardGeneric("get_barcode_info"))
+setMethod("get_barcode_info", signature(x = "SNPData"), function(x) get_barcode_info(x))
 
 #' Get aggregated SNP count summary by any sample_info column
 #'
@@ -300,25 +300,25 @@ setMethod("get_sample_info", signature(x = "SNPData"), function(x) get_barcode_i
 #' @examples
 #' # Aggregate by donor
 #' aggregate_count_df(snp_data, "donor")
-#' 
-#' # Aggregate by clonotype  
+#'
+#' # Aggregate by clonotype
 #' aggregate_count_df(snp_data, "clonotype")
-#' 
+#'
 #' # Aggregate by any custom column
 #' aggregate_count_df(snp_data, "cell_type")
 setGeneric("aggregate_count_df", function(x, group_by, test_maf = TRUE) standardGeneric("aggregate_count_df"))
 setMethod("aggregate_count_df", signature(x = "SNPData"),
     function(x, group_by, test_maf = TRUE) {
         logger::log_info("Calculating {group_by} level counts")
-        
+
         # Check that group_by column exists in sample_info
-        if (!group_by %in% colnames(get_sample_info(x))) {
-            stop(glue::glue("Column '{group_by}' not found in sample_info. Available columns: {paste(colnames(get_sample_info(x)), collapse = ', ')}"))
+        if (!group_by %in% colnames(get_barcode_info(x))) {
+            stop(glue::glue("Column '{group_by}' not found in sample_info. Available columns: {paste(colnames(get_barcode_info(x)), collapse = ', ')}"))
         }
-        
+
         # Get grouping variable
-        groups <- get_sample_info(x)[[group_by]]
-        
+        groups <- get_barcode_info(x)[[group_by]]
+
         # Check for missing values in grouping variable
         if (any(is.na(groups))) {
             logger::log_warn("Found {sum(is.na(groups))} NA values in '{group_by}' column. These will be excluded from aggregation.")
@@ -329,7 +329,7 @@ setMethod("aggregate_count_df", signature(x = "SNPData"),
         } else {
             x_filtered <- x
         }
-        
+
         logger::log_info("Extracting reference counts")
         ref_count_grouped <- groupedRowSums(ref_count(x_filtered), groups)
         ref_count_df <- ref_count_grouped %>%

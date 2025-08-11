@@ -99,8 +99,11 @@ setMethod("oth_count", signature(object = "SNPData"), function(object) object@ot
 setGeneric("get_snp_info", function(object) standardGeneric("get_snp_info"))
 setMethod("get_snp_info", signature(object = "SNPData"), function(object) object@snp_info)
 
+setGeneric("get_barcode_info", function(object) standardGeneric("get_barcode_info"))
+setMethod("get_barcode_info", signature(object = "SNPData"), function(object) object@sample_info)
+
 setGeneric("get_sample_info", function(object) standardGeneric("get_sample_info"))
-setMethod("get_sample_info", signature(object = "SNPData"), function(object) object@sample_info)
+setMethod("get_sample_info", signature(object = "SNPData"), function(object) get_barcode_info(object))
 
 setMethod("nrow", signature(x = "SNPData"), function(x) nrow(x@ref_count))
 setMethod("ncol", signature(x = "SNPData"), function(x) ncol(x@ref_count))

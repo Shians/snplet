@@ -17,7 +17,7 @@ setMethod("to_expr_matrix", signature(x = "SNPData"),
             colnames(mat) <- colnames(ref)
             return(mat)
         } else if (level == "clonotype") {
-            clono <- get_sample_info(x)$clonotype
+            clono <- get_barcode_info(x)$clonotype
             if (is.null(clono)) stop("No clonotype column in sample_info.")
             ref <- groupedRowSums(ref_count(x), clono)
             alt <- groupedRowSums(alt_count(x), clono)
@@ -26,7 +26,7 @@ setMethod("to_expr_matrix", signature(x = "SNPData"),
             colnames(mat) <- colnames(ref)
             return(mat)
         } else if (level == "donor") {
-            donor <- get_sample_info(x)$donor
+            donor <- get_barcode_info(x)$donor
             if (is.null(donor)) stop("No donor column in sample_info.")
             ref <- groupedRowSums(ref_count(x), donor)
             alt <- groupedRowSums(alt_count(x), donor)

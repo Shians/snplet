@@ -21,7 +21,7 @@ remove_doublets <- function(x, drop_na = TRUE) {
     }
 
     # Get sample info
-    sample_info <- get_sample_info(x)
+    sample_info <- get_barcode_info(x)
 
     # Check if donor column exists
     if (!"donor" %in% colnames(sample_info)) {
@@ -118,7 +118,7 @@ remove_na_clonotypes <- function(x, clonotype_col = "clonotype") {
     }
 
     # Get sample info
-    sample_info <- get_sample_info(x)
+    sample_info <- get_barcode_info(x)
 
     # Check if clonotype column exists
     if (!clonotype_col %in% colnames(sample_info)) {

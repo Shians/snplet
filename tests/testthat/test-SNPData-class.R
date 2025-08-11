@@ -106,8 +106,8 @@ test_that("SNPData accessors work correctly", {
     # Verify non_zero_samples count: all samples have counts
     expect_equal(snp_info$non_zero_samples, c(2, 2))  # all samples have counts
 
-    # Test get_sample_info accessor
-    sample_info <- get_sample_info(snp_data)
+    # Test get_barcode_info accessor
+    sample_info <- get_barcode_info(snp_data)
     # Verify cell IDs are preserved from input
     expect_equal(sample_info$cell_id, test_sample_info$cell_id)
     # Verify donor information is preserved from input
@@ -215,11 +215,11 @@ test_that("SNPData handles missing IDs correctly", {
     # Verify snp_id column was auto-generated when missing
     expect_true("snp_id" %in% colnames(get_snp_info(snp_data)))
     # Verify cell_id column was auto-generated when missing
-    expect_true("cell_id" %in% colnames(get_sample_info(snp_data)))
+    expect_true("cell_id" %in% colnames(get_barcode_info(snp_data)))
     # Check that auto-generated SNP IDs follow expected pattern
     expect_equal(get_snp_info(snp_data)$snp_id, c("snp_1", "snp_2"))
     # Check that auto-generated cell IDs follow expected pattern
-    expect_equal(get_sample_info(snp_data)$cell_id, c("cell_1", "cell_2"))
+    expect_equal(get_barcode_info(snp_data)$cell_id, c("cell_1", "cell_2"))
 })
 
 test_that("SNPData validates input dimensions", {
