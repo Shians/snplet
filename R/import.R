@@ -113,7 +113,7 @@ import_cellsnp <- function(
     } else {
         # get barcodes from cell_snp output
         donor_info <- cells %>%
-            mutate(donor = "donor0")
+            dplyr::mutate(donor = "donor0")
     }
 
     # Read VDJ clonotype information
@@ -121,7 +121,7 @@ import_cellsnp <- function(
         vdj_file,
         col_types = readr::cols(.default = readr::col_character())
     ) %>%
-        mutate(
+        dplyr::mutate(
             barcode = stringr::str_remove(barcode, "-[0-9]+$") # Remove suffix if present
         )
 
