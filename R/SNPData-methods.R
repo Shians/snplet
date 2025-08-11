@@ -222,7 +222,7 @@ setMethod("filter_snps", signature(.data = "SNPData"),
 #' Filter SNPData object by sample/cell/barcode information
 #'
 #' @param .data A SNPData object
-#' @param ... Logical expressions to filter by, based on sample_info columns
+#' @param ... Logical expressions to filter by, based on barcode_info columns
 #' @return A new filtered SNPData object
 #' @export
 #'
@@ -244,10 +244,10 @@ setMethod("filter_barcodes", signature(.data = "SNPData"),
         dots <- rlang::enquos(...)
 
         # Check filter expressions
-        check_filter_expr(.data@sample_info, dots, "sample_info")
+        check_filter_expr(.data@barcode_info, dots, "barcode_info")
 
-        # Apply filter to sample_info
-        selected_samples <- .data@sample_info %>%
+        # Apply filter to barcode_info
+        selected_samples <- .data@barcode_info %>%
             dplyr::filter(!!!dots)
 
         if (nrow(selected_samples) == 0) {
@@ -280,19 +280,19 @@ setMethod("filter_samples", signature(.data = "SNPData"),
 #' @return A data.frame or tibble with barcode/sample/cell metadata
 #' @export
 setGeneric("get_barcode_info", function(x) standardGeneric("get_barcode_info"))
-setMethod("get_barcode_info", signature(x = "SNPData"), function(x) x@sample_info)
+setMethod("get_barcode_info", signature(x = "SNPData"), function(x) x@barcode_info)
 
-#' @rdname get_barcode_info
+#' @rdname get_sample_info
 #' @export
-setGeneric("get_barcode_info", function(x) standardGeneric("get_barcode_info"))
-setMethod("get_barcode_info", signature(x = "SNPData"), function(x) get_barcode_info(x))
+setGeneric("get_sample_info", function(x) standardGeneric("get_sample_info"))
+setMethod("get_sample_info", signature(x = "SNPData"), function(x) get_sample_info(x))
 
-#' Get aggregated SNP count summary by any sample_info column
+#' Get aggregated SNP count summary by any barcode_info column
 #'
-#' Returns a long-format data frame of reference and alternate allele counts per SNP and aggregated by the specified grouping column from sample_info.
+#' Returns a long-format data frame of reference and alternate allele counts per SNP and aggregated by the specified grouping column from barcode_info.
 #'
 #' @param x A SNPData object
-#' @param group_by Character string specifying the column name in sample_info to group by
+#' @param group_by Character string specifying the column name in barcode_info to group by
 #' @param test_maf Logical, whether to include a test_maf column (default TRUE)
 #' @return A tibble with columns: snp_id, [group_by], ref_count, alt_count, total_count, ref_ratio, maf, (optionally test_maf)
 #' @export
@@ -311,9 +311,9 @@ setMethod("aggregate_count_df", signature(x = "SNPData"),
     function(x, group_by, test_maf = TRUE) {
         logger::log_info("Calculating {group_by} level counts")
 
-        # Check that group_by column exists in sample_info
+        # Check that group_by column exists in barcode_info
         if (!group_by %in% colnames(get_barcode_info(x))) {
-            stop(glue::glue("Column '{group_by}' not found in sample_info. Available columns: {paste(colnames(get_barcode_info(x)), collapse = ', ')}"))
+            stop(glue::glue("Column '{group_by}' not found in barcode_info. Available columns: {paste(colnames(get_barcode_info(x)), collapse = ', ')}"))
         }
 
         # Get grouping variable

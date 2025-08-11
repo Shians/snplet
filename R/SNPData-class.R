@@ -4,12 +4,12 @@ setClass("SNPData",
         alt_count = "Matrix",
         oth_count = "Matrix",
         snp_info = "data.frame",
-        sample_info = "data.frame"
+        barcode_info = "data.frame"
     )
 )
 
 setMethod("initialize", signature(.Object = "SNPData"),
-    function(.Object, ref_count, alt_count, oth_count = NULL, snp_info, sample_info) {
+    function(.Object, ref_count, alt_count, oth_count = NULL, snp_info, barcode_info) {
         # validate dimension compatibility
         stopifnot(nrow(alt_count) == nrow(ref_count))
         stopifnot(ncol(alt_count) == ncol(ref_count))
@@ -21,7 +21,7 @@ setMethod("initialize", signature(.Object = "SNPData"),
             oth_count <- Matrix::Matrix(0, nrow = nrow(ref_count), ncol = ncol(ref_count), sparse = TRUE)
         }
 
-        stopifnot(ncol(alt_count) == nrow(sample_info))
+        stopifnot(ncol(alt_count) == nrow(barcode_info))
         stopifnot(nrow(ref_count) == nrow(snp_info))
 
         # assign snp_ids if none exist
@@ -30,13 +30,13 @@ setMethod("initialize", signature(.Object = "SNPData"),
         }
 
         # assign cell_ids if none exist
-        if (!"cell_id" %in% colnames(sample_info)) {
-            sample_info$cell_id <- paste0("cell_", seq_len(nrow(sample_info)))
+        if (!"cell_id" %in% colnames(barcode_info)) {
+            barcode_info$cell_id <- paste0("cell_", seq_len(nrow(barcode_info)))
         }
 
-        colnames(ref_count) <- sample_info$cell_id
-        colnames(alt_count) <- sample_info$cell_id
-        colnames(oth_count) <- sample_info$cell_id
+        colnames(ref_count) <- barcode_info$cell_id
+        colnames(alt_count) <- barcode_info$cell_id
+        colnames(oth_count) <- barcode_info$cell_id
         rownames(ref_count) <- snp_info$snp_id
         rownames(alt_count) <- snp_info$snp_id
         rownames(oth_count) <- snp_info$snp_id
@@ -45,13 +45,13 @@ setMethod("initialize", signature(.Object = "SNPData"),
         .Object@alt_count <- alt_count
         .Object@oth_count <- oth_count
         .Object@snp_info <- snp_info
-        .Object@sample_info <- sample_info
+        .Object@barcode_info <- barcode_info
 
         .Object@snp_info$coverage <- Matrix::rowSums(alt_count + ref_count)
         .Object@snp_info$non_zero_samples <- Matrix::rowSums(alt_count + ref_count > 0)
 
-        .Object@sample_info$library_size <- Matrix::colSums(alt_count + ref_count)
-        .Object@sample_info$non_zero_snps <- Matrix::colSums(alt_count + ref_count > 0)
+        .Object@barcode_info$library_size <- Matrix::colSums(alt_count + ref_count)
+        .Object@barcode_info$non_zero_snps <- Matrix::colSums(alt_count + ref_count > 0)
 
         .Object
     }
@@ -66,23 +66,23 @@ setMethod("[", signature(x = "SNPData", i = "ANY", j = "ANY"),
         alt_count <- x@alt_count[i, j, drop = FALSE]
         oth_count <- x@oth_count[i, j, drop = FALSE]
         snp_info <- x@snp_info[i, ]
-        sample_info <- x@sample_info[j, ]
+        barcode_info <- x@barcode_info[j, ]
 
         snp_info$coverage <- Matrix::rowSums(alt_count + ref_count)
         snp_info$non_zero_samples <- Matrix::rowSums(alt_count + ref_count > 0)
 
-        sample_info$library_size <- Matrix::colSums(alt_count + ref_count)
-        sample_info$non_zero_snps <- Matrix::colSums(alt_count + ref_count > 0)
+        barcode_info$library_size <- Matrix::colSums(alt_count + ref_count)
+        barcode_info$non_zero_snps <- Matrix::colSums(alt_count + ref_count > 0)
 
-        new("SNPData", alt_count = alt_count, ref_count = ref_count, oth_count = oth_count, snp_info = snp_info, sample_info = sample_info)
+        new("SNPData", alt_count = alt_count, ref_count = ref_count, oth_count = oth_count, snp_info = snp_info, barcode_info = barcode_info)
     }
 )
 
 # Constructor
-setGeneric("SNPData", function(ref_count, alt_count, snp_info, sample_info, oth_count = NULL) standardGeneric("SNPData"))
-setMethod("SNPData", signature(ref_count = "Matrix", alt_count = "Matrix", snp_info = "data.frame", sample_info = "data.frame"),
-    function(ref_count, alt_count, snp_info, sample_info, oth_count = NULL) {
-        new("SNPData", ref_count = ref_count, alt_count = alt_count, oth_count = oth_count, snp_info = snp_info, sample_info = sample_info)
+setGeneric("SNPData", function(ref_count, alt_count, snp_info, barcode_info, oth_count = NULL) standardGeneric("SNPData"))
+setMethod("SNPData", signature(ref_count = "Matrix", alt_count = "Matrix", snp_info = "data.frame", barcode_info = "data.frame"),
+    function(ref_count, alt_count, snp_info, barcode_info, oth_count = NULL) {
+        new("SNPData", ref_count = ref_count, alt_count = alt_count, oth_count = oth_count, snp_info = snp_info, barcode_info = barcode_info)
     }
 )
 
@@ -100,7 +100,7 @@ setGeneric("get_snp_info", function(object) standardGeneric("get_snp_info"))
 setMethod("get_snp_info", signature(object = "SNPData"), function(object) object@snp_info)
 
 setGeneric("get_barcode_info", function(object) standardGeneric("get_barcode_info"))
-setMethod("get_barcode_info", signature(object = "SNPData"), function(object) object@sample_info)
+setMethod("get_barcode_info", signature(object = "SNPData"), function(object) object@barcode_info)
 
 setGeneric("get_sample_info", function(object) standardGeneric("get_sample_info"))
 setMethod("get_sample_info", signature(object = "SNPData"), function(object) get_barcode_info(object))
@@ -124,7 +124,7 @@ setMethod("show", signature(object = "SNPData"),
         cat("SNP info:", "\n")
         print(object@snp_info)
         cat("Sample info:", "\n")
-        print(object@sample_info)
+        print(object@barcode_info)
     }
 )
 
