@@ -64,7 +64,7 @@ export_cellsnp <- function(snpdata, out_dir) {
     # Write barcodes into cellSNP.samples.tsv
     samples_file <- file.path(out_dir, "cellSNP.samples.tsv")
     cells <- get_barcode_info(snpdata)
-    readr::write_tsv(cells$barcode, samples_file, col_names = FALSE)
+    readr::write_tsv(dplyr::select(cells, barcode), samples_file, col_names = FALSE)
 
     logger::log_success("SNPData exported to {out_dir}")
 }
