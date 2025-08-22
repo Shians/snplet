@@ -1,7 +1,7 @@
 #' Remove doublet cells from a SNPData object
 #'
 #' This function filters out cells that are identified as doublets from a SNPData object.
-#' Doublets are identified based on the 'donor' column in the sample_info slot, where
+#' Doublets are identified based on the 'donor' column in the barcode_info slot, where
 #' cells labeled as 'doublet' are removed.
 #'
 #' @param x A SNPData object
@@ -21,16 +21,16 @@ remove_doublets <- function(x, drop_na = TRUE) {
     }
 
     # Get sample info
-    sample_info <- get_sample_info(x)
+    barcode_info <- get_barcode_info(x)
 
     # Check if donor column exists
-    if (!"donor" %in% colnames(sample_info)) {
-        warning("No 'donor' column found in sample_info, returning original object")
+    if (!"donor" %in% colnames(barcode_info)) {
+        warning("No 'donor' column found in barcode_info, returning original object")
         return(x)
     }
 
     # Identify doublets
-    cells_to_remove <- sample_info$donor == "doublet"
+    cells_to_remove <- barcode_info$donor == "doublet"
 
     # Handle NA values
     if (drop_na) {
@@ -97,11 +97,11 @@ remove_na_genes <- function(x, gene_col = "gene_name") {
 #' Remove barcodes with NA clonotype values
 #'
 #' This function filters out barcodes that have NA values in the clonotype column
-#' of the sample_info slot. This is useful for analyses that require valid
+#' of the barcode_info slot. This is useful for analyses that require valid
 #' clonotype assignments for all barcodes.
 #'
 #' @param x A SNPData object
-#' @param clonotype_col The column name in sample_info containing clonotype values (default: "clonotype")
+#' @param clonotype_col The column name in barcode_info containing clonotype values (default: "clonotype")
 #'
 #' @return A filtered SNPData object with NA clonotype barcodes removed
 #' @export
@@ -118,18 +118,18 @@ remove_na_clonotypes <- function(x, clonotype_col = "clonotype") {
     }
 
     # Get sample info
-    sample_info <- get_sample_info(x)
+    barcode_info <- get_barcode_info(x)
 
     # Check if clonotype column exists
-    if (!clonotype_col %in% colnames(sample_info)) {
-        warning(paste0("No '", clonotype_col, "' column found in sample_info, returning original object"))
+    if (!clonotype_col %in% colnames(barcode_info)) {
+        warning(paste0("No '", clonotype_col, "' column found in barcode_info, returning original object"))
         return(x)
     }
 
     # Identify barcodes with NA clonotype values
-    barcodes_to_remove <- is.na(sample_info[[clonotype_col]])
+    barcodes_to_remove <- is.na(barcode_info[[clonotype_col]])
 
-    clonotypes_total <- nrow(sample_info)
+    clonotypes_total <- nrow(barcode_info)
     clonotypes_removed <- sum(barcodes_to_remove)
     clonotypes_remaining <- clonotypes_total - clonotypes_removed
     removed_perc <- scales::percent(clonotypes_removed / clonotypes_total, accuracy = 0.01)

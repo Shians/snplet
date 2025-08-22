@@ -4,8 +4,11 @@
 .Ruserdata
 
 .DS_Store
-.github
+.github/copilot-instructions.md
+
+CLAUDE.md
 
 example_data
 output
 annotation
+lib
