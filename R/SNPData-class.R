@@ -135,19 +135,3 @@ setMethod("coverage", signature(x = "SNPData"),
         x@alt_count + x@ref_count
     }
 )
-
-# Reference fraction method
-setGeneric("ref_fraction", function(x) standardGeneric("ref_fraction"))
-setMethod("ref_fraction", signature(x = "SNPData"),
-    function(x) {
-        x@ref_count / (x@ref_count + x@alt_count)
-    }
-)
-
-# Major allele fraction method
-setGeneric("major_allele_frac", function(x) standardGeneric("major_allele_frac"))
-setMethod("major_allele_frac", signature(x = "SNPData"),
-    function(x) {
-        abs(x@ref_count / (x@ref_count + x@alt_count) - 0.5) + 0.5
-    }
-)
