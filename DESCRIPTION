@@ -1,7 +1,7 @@
 Package: snplet
 Type: Package
 Title: Package for handling SNP based allele-specific expression analysis
-Version: 0.3.0
+Version: 0.3.1
 Authors@R: c(
     person(
       "Shian", "Su",
