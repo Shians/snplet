@@ -208,12 +208,18 @@ merge_cell_annotations <- function(donor_info, vdj_info, barcode_column, clonoty
 
     # Ensure barcode_column exists in vdj_info
     if (!barcode_column %in% colnames(vdj_info)) {
-        stop(paste("Column", barcode_column, "not found in VDJ annotation file"))
+        stop(paste0(
+            "Column ", barcode_column,
+            " not found in VDJ annotation file"
+        ))
     }
 
     # Ensure clonotype_column exists in vdj_info
     if (!clonotype_column %in% colnames(vdj_info)) {
-        stop(paste("Column", clonotype_column, "not found in VDJ annotation file"))
+        stop(paste0(
+            "Column ", clonotype_column,
+            " not found in VDJ annotation file"
+        ))
     }
 
     # Extract relevant columns from VDJ data

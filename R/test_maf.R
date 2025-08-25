@@ -18,7 +18,8 @@ test_maf <- function(x, p = 0.10) {
     req_cols <- c("ref_count", "alt_count", "total_count")
     missing_cols <- setdiff(req_cols, colnames(x))
     if (length(missing_cols) > 0) {
-        stop(glue::glue("Missing required columns: {paste(missing_cols, collapse = ', ')}"))
+        missing_list <- paste0(missing_cols, collapse = ", ")
+        stop(glue::glue("Missing required columns: {missing_list}"))
     }
 
     minor_allele_count <- pmin(x$ref_count, x$alt_count)

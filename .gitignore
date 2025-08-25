@@ -6,6 +6,8 @@
 .DS_Store
 .github/copilot-instructions.md
 
+..Rcheck/
+
 CLAUDE.md
 
 example_data

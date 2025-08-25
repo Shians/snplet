@@ -313,7 +313,8 @@ setMethod("aggregate_count_df", signature(x = "SNPData"),
 
         # Check that group_by column exists in barcode_info
         if (!group_by %in% colnames(get_barcode_info(x))) {
-            stop(glue::glue("Column '{group_by}' not found in barcode_info. Available columns: {paste(colnames(get_barcode_info(x)), collapse = ', ')}"))
+            available_cols <- paste0(colnames(get_barcode_info(x)), collapse = ", ")
+            stop(glue::glue("Column '{group_by}' not found in barcode_info. Available columns: {available_cols}"))
         }
 
         # Get grouping variable
