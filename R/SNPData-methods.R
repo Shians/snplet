@@ -160,7 +160,17 @@ setMethod("clonotype_count_df", signature(x = "SNPData"),
     }
 )
 
-# Helper function to check that columns in filter expressions exist in the data.frame
+#' Check that columns in filter expressions exist in the data.frame
+#'
+#' Helper function to validate that all columns referenced in filter expressions
+#' exist in the target data.frame or in the parent environment. Used internally
+#' by filtering functions to provide informative error messages.
+#'
+#' @param df A data.frame to check column existence against
+#' @param dots A list of quosures containing filter expressions
+#' @param df_name Character string naming the data.frame for error messages
+#' @return Invisibly returns NULL if all columns exist, otherwise throws an error
+#' @keywords internal
 check_filter_expr <- function(df, dots, df_name = "data.frame") {
     vars <- unique(unlist(lapply(dots, function(q) all.vars(rlang::get_expr(q)))))
     missing_vars <- setdiff(vars, colnames(df))
@@ -282,10 +292,16 @@ setMethod("filter_samples", signature(.data = "SNPData"),
 setGeneric("get_barcode_info", function(x) standardGeneric("get_barcode_info"))
 setMethod("get_barcode_info", signature(x = "SNPData"), function(x) x@barcode_info)
 
-#' @rdname get_sample_info
+#' Get sample/cell metadata from a SNPData object (alias for get_barcode_info)
+#'
+#' @param x A SNPData object
+#' @return A data.frame or tibble with sample/cell/barcode metadata
 #' @export
+#'
+#' @examples
+#' sample_metadata <- get_sample_info(snp_data)
 setGeneric("get_sample_info", function(x) standardGeneric("get_sample_info"))
-setMethod("get_sample_info", signature(x = "SNPData"), function(x) get_sample_info(x))
+setMethod("get_sample_info", signature(x = "SNPData"), function(x) get_barcode_info(x))
 
 #' Get aggregated SNP count summary by any barcode_info column
 #'

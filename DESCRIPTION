@@ -47,3 +47,4 @@ LazyData: false
 biocViews: SingleCell, RNASeq, Genetics, SNP, GeneExpression, Transcriptomics, Sequencing
 URL: https://github.com/shiansu/snplet
 BugReports: https://github.com/shiansu/snplet/issues
+RoxygenNote: 7.3.2

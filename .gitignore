@@ -9,6 +9,8 @@
 ..Rcheck/
 
 CLAUDE.md
+release.sh
+scripts/release.R
 
 example_data
 output
