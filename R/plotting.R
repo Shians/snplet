@@ -55,7 +55,7 @@ plot_gene_anno_track <- function(gene_anno, x_range) {
 plot_maf_track <- function(allele_count_df, facet, x_range) {
     allele_count_df %>%
         ggplot2::ggplot(aes(x = pos, y = maf)) +
-        ggplot2::geom_hline(yintercept = 0.1, linetype = "dashed", color = "red", size = 0.5) +
+        ggplot2::geom_hline(yintercept = 0.1, linetype = "dashed", color = "red", linewidth = 0.5) +
         ggplot2::geom_point(size = 1, alpha = 0.10) +
         ggplot2::facet_grid(rows = ggplot2::vars(donor_id)) +
         ggplot2::scale_x_continuous(
@@ -104,13 +104,8 @@ plot_maf_pval_track <- function(allele_counts_df, facet, x_range) {
     allele_counts_df %>%
         ggplot2::ggplot(ggplot2::aes(x = pos, y = -log10(adj_p_val))) +
         ggplot2::geom_hline(yintercept = 1.3, linetype = "dashed", color = "red") +
-        ggplot2::geom_vline(
-            data = signif_snps_clonotype,
-            ggplot2::aes(xintercept = pos),
-            linetype = "dotted",
-            color = "gray") +
         ggplot2::geom_point(size = 1) +
-        ggplot2::facet_grid(rows = vars({{facet}})) +
+        ggplot2::facet_grid(rows = ggplot2::vars({{facet}})) +
         ggplot2::scale_x_continuous(
             labels = scales::label_number(scale_cut = scales::cut_short_scale(), suffix = "b"),
             limits = x_range,
