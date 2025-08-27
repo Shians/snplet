@@ -6,6 +6,9 @@
 \usage{
 check_file(path)
 }
+\arguments{
+\item{path}{Path to the file to check}
+}
 \description{
 Check if a file exists
 }

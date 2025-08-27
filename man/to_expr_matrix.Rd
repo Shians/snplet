@@ -2,9 +2,12 @@
 % Please edit documentation in R/to_expr_matrix.R
 \name{to_expr_matrix}
 \alias{to_expr_matrix}
+\alias{to_expr_matrix,SNPData-method}
 \title{Convert SNPData to expression-like matrix}
 \usage{
 to_expr_matrix(x, level = c("barcode", "clonotype", "donor"))
+
+\S4method{to_expr_matrix}{SNPData}(x, level = c("barcode", "clonotype", "donor"))
 }
 \arguments{
 \item{x}{SNPData object}

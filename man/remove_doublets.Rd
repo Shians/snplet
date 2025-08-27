@@ -8,6 +8,8 @@ remove_doublets(x, drop_na = TRUE)
 }
 \arguments{
 \item{x}{A SNPData object}
+
+\item{drop_na}{Logical, whether to also remove cells with NA donor assignments (default TRUE)}
 }
 \value{
 A filtered SNPData object with doublets removed
@@ -19,6 +21,7 @@ cells labeled as 'doublet' are removed.
 }
 \examples{
 \dontrun{
+snp_data <- get_example_snpdata()
 # Remove doublets from SNPData object
 filtered_data <- remove_doublets(snp_data)
 }

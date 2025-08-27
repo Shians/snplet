@@ -3,7 +3,26 @@
 \docType{class}
 \name{SNPData-class}
 \alias{SNPData-class}
+\alias{[,SNPData,ANY,ANY,ANY-method}
+\alias{dim,SNPData-method}
 \title{SNPData: S4 class for single-cell SNP count data}
+\usage{
+\S4method{[}{SNPData,ANY,ANY,ANY}(x, i, j)
+
+\S4method{dim}{SNPData}(x)
+}
+\arguments{
+\item{x}{A SNPData object}
+
+\item{i}{Numeric or logical vector for subsetting SNPs (rows)}
+
+\item{j}{Numeric or logical vector for subsetting samples (columns)}
+}
+\value{
+A subsetted SNPData object
+
+A numeric vector of length 2 giving the number of SNPs and samples
+}
 \description{
 An S4 class to store and manipulate single-cell SNP count matrices with associated metadata.
 This class integrates reference/alternate allele count matrices, SNP information, and

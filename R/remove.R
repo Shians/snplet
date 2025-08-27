@@ -5,12 +5,14 @@
 #' cells labeled as 'doublet' are removed.
 #'
 #' @param x A SNPData object
+#' @param drop_na Logical, whether to also remove cells with NA donor assignments (default TRUE)
 #'
 #' @return A filtered SNPData object with doublets removed
 #' @export
 #'
 #' @examples
 #' \dontrun{
+#' snp_data <- get_example_snpdata()
 #' # Remove doublets from SNPData object
 #' filtered_data <- remove_doublets(snp_data)
 #' }

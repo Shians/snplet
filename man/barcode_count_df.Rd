@@ -2,9 +2,12 @@
 % Please edit documentation in R/SNPData-methods.R
 \name{barcode_count_df}
 \alias{barcode_count_df}
+\alias{barcode_count_df,SNPData-method}
 \title{Get barcode/cell-level SNP count summary}
 \usage{
 barcode_count_df(x, test_maf = TRUE)
+
+\S4method{barcode_count_df}{SNPData}(x, test_maf = TRUE)
 }
 \arguments{
 \item{x}{A SNPData object}
@@ -18,5 +21,8 @@ A tibble with columns: snp_id, cell_id, ref_count, alt_count, total_count, ref_r
 Returns a long-format data frame of reference and alternate allele counts per SNP and cell/barcode.
 }
 \examples{
+\dontrun{
+snp_data <- get_example_snpdata()
 barcode_count_df(snp_data)
+}
 }

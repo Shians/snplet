@@ -2,9 +2,12 @@
 % Please edit documentation in R/SNPData-methods.R
 \name{filter_snps}
 \alias{filter_snps}
+\alias{filter_snps,SNPData-method}
 \title{Filter SNPData object by SNP information}
 \usage{
 filter_snps(.data, ...)
+
+\S4method{filter_snps}{SNPData}(.data, ...)
 }
 \arguments{
 \item{.data}{A SNPData object}
@@ -19,10 +22,8 @@ Filter SNPData object by SNP information
 }
 \examples{
 \dontrun{
+snp_data <- get_example_snpdata()
 # Filter SNPs with coverage > 10
 filtered_snps <- filter_snps(snp_data, coverage > 10)
-
-# Filter SNPs with multiple conditions
-filtered_snps <- filter_snps(snp_data, coverage > 10, non_zero_samples > 5)
 }
 }

@@ -2,9 +2,12 @@
 % Please edit documentation in R/SNPData-methods.R
 \name{aggregate_count_df}
 \alias{aggregate_count_df}
+\alias{aggregate_count_df,SNPData-method}
 \title{Get aggregated SNP count summary by any barcode_info column}
 \usage{
 aggregate_count_df(x, group_by, test_maf = TRUE)
+
+\S4method{aggregate_count_df}{SNPData}(x, group_by, test_maf = TRUE)
 }
 \arguments{
 \item{x}{A SNPData object}
@@ -20,12 +23,13 @@ A tibble with columns: snp_id, [group_by], ref_count, alt_count, total_count, re
 Returns a long-format data frame of reference and alternate allele counts per SNP and aggregated by the specified grouping column from barcode_info.
 }
 \examples{
+\dontrun{
+snp_data <- get_example_snpdata()
 # Aggregate by donor
 aggregate_count_df(snp_data, "donor")
 
 # Aggregate by clonotype
 aggregate_count_df(snp_data, "clonotype")
+}
 
-# Aggregate by any custom column
-aggregate_count_df(snp_data, "cell_type")
 }

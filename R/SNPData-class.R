@@ -119,6 +119,14 @@ setMethod("initialize", signature(.Object = "SNPData"),
     }
 )
 
+#' Subset a SNPData object
+#'
+#' @param x A SNPData object
+#' @param i Numeric or logical vector for subsetting SNPs (rows)
+#' @param j Numeric or logical vector for subsetting samples (columns)
+#' @return A subsetted SNPData object
+#' @rdname SNPData-class
+#' @export
 setMethod("[", signature(x = "SNPData", i = "ANY", j = "ANY"),
     function(x, i, j) {
         if (missing(i)) i <- seq_len(nrow(x@alt_count))
@@ -171,6 +179,12 @@ setMethod("nrow", signature(x = "SNPData"), function(x) nrow(x@ref_count))
 setMethod("ncol", signature(x = "SNPData"), function(x) ncol(x@ref_count))
 
 # Dimensions
+#' Get dimensions of a SNPData object
+#'
+#' @param x A SNPData object
+#' @return A numeric vector of length 2 giving the number of SNPs and samples
+#' @rdname SNPData-class
+#' @export
 setMethod("dim", signature(x = "SNPData"), function(x) c(nrow(x@alt_count), ncol(x@alt_count)))
 setMethod("nrow", signature(x = "SNPData"), function(x) nrow(x@alt_count))
 setMethod("ncol", signature(x = "SNPData"), function(x) ncol(x@alt_count))

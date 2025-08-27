@@ -1,7 +1,7 @@
 #' @importFrom Matrix Matrix rowSums colSums readMM writeMM rowMeans
 #' @importFrom dplyr mutate inner_join filter left_join select rename distinct
 #' @importFrom dplyr first summarise if_else count arrange desc slice any_of
-#' @importFrom tidyr pivot_longer contains
+#' @importFrom tidyr pivot_longer contains everything
 #' @importFrom tibble as_tibble
 #' @importFrom rlang enquos get_expr
 #' @importFrom scales percent label_comma label_number cut_short_scale
@@ -22,4 +22,5 @@
 #' @importFrom furrr future_map2_dbl
 #' @importFrom R.utils gzip
 #' @importFrom grid unit
+#' @importFrom stats median quantile p.adjust
 NULL

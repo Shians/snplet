@@ -2,9 +2,12 @@
 % Please edit documentation in R/SNPData-methods.R
 \name{clonotype_count_df}
 \alias{clonotype_count_df}
+\alias{clonotype_count_df,SNPData-method}
 \title{Get clonotype-level SNP count summary}
 \usage{
 clonotype_count_df(x, test_maf = TRUE)
+
+\S4method{clonotype_count_df}{SNPData}(x, test_maf = TRUE)
 }
 \arguments{
 \item{x}{A SNPData object}
@@ -18,5 +21,8 @@ A tibble with columns: snp_id, clonotype, ref_count, alt_count, total_count, ref
 Returns a long-format data frame of reference and alternate allele counts per SNP and clonotype, with most likely donor annotation.
 }
 \examples{
+\dontrun{
+snp_data <- get_example_snpdata()
 clonotype_count_df(snp_data)
+}
 }

@@ -260,6 +260,7 @@ merge_cell_annotations <- function(donor_info, vdj_info, barcode_column, clonoty
 #' testing and vignettes.
 #'
 #' @return A SNPData object constructed from example data included with the package.
+#' @export
 #' @examples
 #' snp_data <- get_example_snpdata()
 get_example_snpdata <- function() {

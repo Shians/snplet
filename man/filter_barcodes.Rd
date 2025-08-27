@@ -2,12 +2,18 @@
 % Please edit documentation in R/SNPData-methods.R
 \name{filter_barcodes}
 \alias{filter_barcodes}
+\alias{filter_barcodes,SNPData-method}
 \alias{filter_samples}
+\alias{filter_samples,SNPData-method}
 \title{Filter SNPData object by sample/cell/barcode information}
 \usage{
 filter_barcodes(.data, ...)
 
+\S4method{filter_barcodes}{SNPData}(.data, ...)
+
 filter_samples(.data, ...)
+
+\S4method{filter_samples}{SNPData}(.data, ...)
 }
 \arguments{
 \item{.data}{A SNPData object}
