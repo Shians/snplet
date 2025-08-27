@@ -14,7 +14,7 @@
 #'   theme_density()
 #' }
 #'
-#' @internal
+#' @keywords internal
 theme_density <- function() {
     theme(
         panel.background = element_blank(),

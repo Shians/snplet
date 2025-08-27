@@ -1,4 +1,14 @@
 ^.*\.Rproj$
-^\.Rproj\.user$
-^LICENSE\.md$
 ^\.github$
+^\.Rproj\.user$
+^\.claude$
+^\.Rhistory$
+^annotation$
+^example_data$
+^output$
+^LICENSE\.md$
+^CLAUDE\.md$
+^release\.sh$
+^release\.R$
+^lib$
+^scripts$

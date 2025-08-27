@@ -8,8 +8,12 @@
 #' @export
 #'
 #' @examples
+#' \dontrun{
+#' snp_data <- get_example_snpdata()
 #' barcode_count_df(snp_data)
+#' }
 setGeneric("barcode_count_df", function(x, test_maf = TRUE) standardGeneric("barcode_count_df"))
+#' @rdname barcode_count_df
 setMethod("barcode_count_df", signature(x = "SNPData"),
     function(x, test_maf = TRUE) {
         logger::log_info("Calculating barcode/cell level counts")
@@ -62,8 +66,12 @@ setMethod("barcode_count_df", signature(x = "SNPData"),
 #' @export
 #'
 #' @examples
+#' \dontrun{
+#' snp_data <- get_example_snpdata()
 #' donor_count_df(snp_data)
+#' }
 setGeneric("donor_count_df", function(x, test_maf = TRUE) standardGeneric("donor_count_df"))
+#' @rdname donor_count_df
 setMethod("donor_count_df", signature(x = "SNPData"),
     function(x, test_maf = TRUE) {
         logger::log_info("Calculating donor level counts")
@@ -111,8 +119,12 @@ setMethod("donor_count_df", signature(x = "SNPData"),
 #' @export
 #'
 #' @examples
+#' \dontrun{
+#' snp_data <- get_example_snpdata()
 #' clonotype_count_df(snp_data)
+#' }
 setGeneric("clonotype_count_df", function(x, test_maf = TRUE) standardGeneric("clonotype_count_df"))
+#' @rdname clonotype_count_df
 setMethod("clonotype_count_df", signature(x = "SNPData"),
     function(x, test_maf = TRUE) {
         logger::log_info("Calculating clonotype level counts")
@@ -160,7 +172,17 @@ setMethod("clonotype_count_df", signature(x = "SNPData"),
     }
 )
 
-# Helper function to check that columns in filter expressions exist in the data.frame
+#' Check that columns in filter expressions exist in the data.frame
+#'
+#' Helper function to validate that all columns referenced in filter expressions
+#' exist in the target data.frame or in the parent environment. Used internally
+#' by filtering functions to provide informative error messages.
+#'
+#' @param df A data.frame to check column existence against
+#' @param dots A list of quosures containing filter expressions
+#' @param df_name Character string naming the data.frame for error messages
+#' @return Invisibly returns NULL if all columns exist, otherwise throws an error
+#' @keywords internal
 check_filter_expr <- function(df, dots, df_name = "data.frame") {
     vars <- unique(unlist(lapply(dots, function(q) all.vars(rlang::get_expr(q)))))
     missing_vars <- setdiff(vars, colnames(df))
@@ -183,13 +205,12 @@ check_filter_expr <- function(df, dots, df_name = "data.frame") {
 #'
 #' @examples
 #' \dontrun{
+#' snp_data <- get_example_snpdata()
 #' # Filter SNPs with coverage > 10
 #' filtered_snps <- filter_snps(snp_data, coverage > 10)
-#'
-#' # Filter SNPs with multiple conditions
-#' filtered_snps <- filter_snps(snp_data, coverage > 10, non_zero_samples > 5)
 #' }
 setGeneric("filter_snps", function(.data, ...) standardGeneric("filter_snps"))
+#' @rdname filter_snps
 setMethod("filter_snps", signature(.data = "SNPData"),
     function(.data, ...) {
         # Capture NSE expressions
@@ -238,6 +259,7 @@ setMethod("filter_snps", signature(.data = "SNPData"),
 #' filtered_cells <- filter_barcodes(snp_data, library_size > 1000, non_zero_snps > 50)
 #' }
 setGeneric("filter_barcodes", function(.data, ...) standardGeneric("filter_barcodes"))
+#' @rdname filter_barcodes
 setMethod("filter_barcodes", signature(.data = "SNPData"),
     function(.data, ...) {
         # Capture NSE expressions
@@ -271,6 +293,7 @@ setMethod("filter_barcodes", signature(.data = "SNPData"),
 #' @rdname filter_barcodes
 #' @export
 setGeneric("filter_samples", function(.data, ...) standardGeneric("filter_samples"))
+#' @rdname filter_barcodes
 setMethod("filter_samples", signature(.data = "SNPData"),
     function(.data, ...) filter_barcodes(.data, ...))
 
@@ -279,13 +302,26 @@ setMethod("filter_samples", signature(.data = "SNPData"),
 #' @param x A SNPData object
 #' @return A data.frame or tibble with barcode/sample/cell metadata
 #' @export
+#' @rdname SNPData-methods
 setGeneric("get_barcode_info", function(x) standardGeneric("get_barcode_info"))
+#' @rdname SNPData-methods
 setMethod("get_barcode_info", signature(x = "SNPData"), function(x) x@barcode_info)
 
-#' @rdname get_sample_info
+#' Get sample/cell metadata from a SNPData object (alias for get_barcode_info)
+#'
+#' @param x A SNPData object
+#' @return A data.frame or tibble with sample/cell/barcode metadata
 #' @export
+#' @rdname SNPData-methods
+#'
+#' @examples
+#' \dontrun{
+#' snp_data <- get_example_snpdata()
+#' sample_metadata <- get_sample_info(snp_data)
+#' }
 setGeneric("get_sample_info", function(x) standardGeneric("get_sample_info"))
-setMethod("get_sample_info", signature(x = "SNPData"), function(x) get_sample_info(x))
+#' @rdname SNPData-methods
+setMethod("get_sample_info", signature(x = "SNPData"), function(x) get_barcode_info(x))
 
 #' Get aggregated SNP count summary by any barcode_info column
 #'
@@ -298,22 +334,25 @@ setMethod("get_sample_info", signature(x = "SNPData"), function(x) get_sample_in
 #' @export
 #'
 #' @examples
+#' \dontrun{
+#' snp_data <- get_example_snpdata()
 #' # Aggregate by donor
 #' aggregate_count_df(snp_data, "donor")
 #'
 #' # Aggregate by clonotype
 #' aggregate_count_df(snp_data, "clonotype")
+#' }
 #'
-#' # Aggregate by any custom column
-#' aggregate_count_df(snp_data, "cell_type")
 setGeneric("aggregate_count_df", function(x, group_by, test_maf = TRUE) standardGeneric("aggregate_count_df"))
+#' @rdname aggregate_count_df
 setMethod("aggregate_count_df", signature(x = "SNPData"),
     function(x, group_by, test_maf = TRUE) {
         logger::log_info("Calculating {group_by} level counts")
 
         # Check that group_by column exists in barcode_info
         if (!group_by %in% colnames(get_barcode_info(x))) {
-            stop(glue::glue("Column '{group_by}' not found in barcode_info. Available columns: {paste(colnames(get_barcode_info(x)), collapse = ', ')}"))
+            available_cols <- paste0(colnames(get_barcode_info(x)), collapse = ", ")
+            stop(glue::glue("Column '{group_by}' not found in barcode_info. Available columns: {available_cols}"))
         }
 
         # Get grouping variable

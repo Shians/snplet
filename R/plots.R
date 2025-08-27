@@ -9,7 +9,7 @@
 #'
 #' @examples
 #' \dontrun{
-#' snp_data <- read_cellsnp("/path/to/cellsnp")
+#' snp_data <- get_example_snpdata()
 #' plot_lib_size_distribution(snp_data)
 #' }
 plot_lib_size_distribution <- function(snp_data) {

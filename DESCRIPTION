@@ -1,15 +1,16 @@
 Package: snplet
 Type: Package
 Title: Package for handling SNP based allele-specific expression analysis
-Version: 0.3.0
+Version: 0.3.4
 Authors@R: c(
     person(
       "Shian", "Su",
       email = "su.s@wehi.edu.au",
-      role = c("aut", "cre")
+      role = c("aut", "cre"),
+      comment = c(ORCID = "0000-0003-0800-3567")
     )
   )
-Description: Enables downstream analysis of allele-specific expression and clonal evolution in 
+Description: Enables downstream analysis of allele-specific expression and clonal evolution in
     single-cell RNA sequencing data using output from cellSNP-lite, Vireo, and cellranger VDJ.
     The package integrates SNP genotype calls, donor assignments, and clonotype annotations to
     assess allelic imbalance and analyze clonal relationships across individual cells. Core
@@ -25,21 +26,23 @@ Imports:
     ggplot2,
     ggrepel,
     glue,
+    grid,
     logger,
+    magrittr,
     plyranges,
-    purrr,
     R.utils,
     readr,
     rlang,
     scales,
     stringr,
     tibble,
-    tidyr,
-    grid,
-    methods,
-    Matrix
+    tidyr
 Suggests:
     testthat
 License: Apache License (>= 2)
 Encoding: UTF-8
-LazyData: true
+LazyData: false
+biocViews: SingleCell, RNASeq, Genetics, SNP, GeneExpression, Transcriptomics, Sequencing
+URL: https://github.com/shiansu/snplet
+BugReports: https://github.com/shiansu/snplet/issues
+RoxygenNote: 7.3.2

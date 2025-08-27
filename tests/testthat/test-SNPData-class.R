@@ -181,20 +181,6 @@ test_that("SNPData coverage calculations work correctly", {
     expected_coverage <- Matrix::Matrix(matrix(c(6, 8, 10, 12), nrow = 2, ncol = 2))
     # Verify coverage calculation: alt_count + ref_count
     expect_equal_unnamed(coverage(snp_data), expected_coverage)
-
-    # Test ref_fraction method
-    expected_ref_fraction <- Matrix::Matrix(matrix(c(5/6, 6/8, 7/10, 8/12), nrow = 2, ncol = 2))
-    # Verify ref_fraction calculation: ref_count / (ref_count + alt_count)
-    expect_equal_unnamed(ref_fraction(snp_data), expected_ref_fraction)
-
-    # Test major_allele_frac method
-    expected_major_allele_frac <- Matrix::Matrix(matrix(
-        c(0.5 + abs(5/6 - 0.5), 0.5 + abs(6/8 - 0.5),
-          0.5 + abs(7/10 - 0.5), 0.5 + abs(8/12 - 0.5)),
-        nrow = 2, ncol = 2
-    ))
-    # Verify major_allele_frac calculation: 0.5 + abs(ref_fraction - 0.5)
-    expect_equal_unnamed(major_allele_frac(snp_data), expected_major_allele_frac)
 })
 test_that("SNPData handles missing IDs correctly", {
     # Create data without snp_id and cell_id

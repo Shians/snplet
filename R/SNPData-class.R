@@ -1,3 +1,65 @@
+#' SNPData: S4 class for single-cell SNP count data
+#'
+#' An S4 class to store and manipulate single-cell SNP count matrices with associated metadata.
+#' This class integrates reference/alternate allele count matrices, SNP information, and
+#' cell/barcode metadata to support allele-specific expression analysis workflows.
+#'
+#' @slot ref_count A sparse Matrix containing reference allele counts (SNPs x cells)
+#' @slot alt_count A sparse Matrix containing alternate allele counts (SNPs x cells)
+#' @slot oth_count A sparse Matrix containing other allele counts (SNPs x cells)
+#' @slot snp_info A data.frame containing SNP metadata with automatically computed coverage and non_zero_samples columns
+#' @slot barcode_info A data.frame containing cell/barcode metadata with automatically computed library_size and non_zero_snps columns
+#'
+#' @section Accessors:
+#' \describe{
+#'   \item{\code{ref_count(x)}}{Get reference allele count matrix}
+#'   \item{\code{alt_count(x)}}{Get alternate allele count matrix}
+#'   \item{\code{oth_count(x)}}{Get other allele count matrix}
+#'   \item{\code{get_snp_info(x)}}{Get SNP metadata data.frame}
+#'   \item{\code{get_barcode_info(x)}}{Get cell/barcode metadata data.frame}
+#'   \item{\code{get_sample_info(x)}}{Alias for get_barcode_info()}
+#'   \item{\code{coverage(x)}}{Get total coverage matrix (ref + alt counts)}
+#' }
+#'
+#' @section Dimensions:
+#' \describe{
+#'   \item{\code{nrow(x)}, \code{ncol(x)}, \code{dim(x)}}{Get object dimensions}
+#'   \item{\code{rownames(x)}, \code{colnames(x)}}{Get row/column names (SNP/cell IDs)}
+#' }
+#'
+#' @section Note:
+#' The class automatically computes summary statistics in metadata:
+#' \itemize{
+#'   \item \code{snp_info$coverage}: Total counts per SNP across all cells
+#'   \item \code{snp_info$non_zero_samples}: Number of cells with non-zero counts per SNP
+#'   \item \code{barcode_info$library_size}: Total counts per cell across all SNPs
+#'   \item \code{barcode_info$non_zero_snps}: Number of SNPs with non-zero counts per cell
+#' }
+#'
+#' @examples
+#' \dontrun{
+#' # Create SNPData object
+#' snp_data <- SNPData(
+#'   ref_count = ref_matrix,
+#'   alt_count = alt_matrix,
+#'   snp_info = snp_df,
+#'   barcode_info = cell_df
+#' )
+#'
+#' # Access count matrices
+#' ref_counts <- ref_count(snp_data)
+#' alt_counts <- alt_count(snp_data)
+#'
+#' # Access metadata
+#' snp_metadata <- get_snp_info(snp_data)
+#' cell_metadata <- get_barcode_info(snp_data)
+#'
+#' # Calculate derived metrics
+#' total_coverage <- coverage(snp_data)
+#' }
+#'
+#' @exportClass SNPData
+#' @export
 setClass("SNPData",
     slots = c(
         ref_count = "Matrix",
@@ -57,6 +119,14 @@ setMethod("initialize", signature(.Object = "SNPData"),
     }
 )
 
+#' Subset a SNPData object
+#'
+#' @param x A SNPData object
+#' @param i Numeric or logical vector for subsetting SNPs (rows)
+#' @param j Numeric or logical vector for subsetting samples (columns)
+#' @return A subsetted SNPData object
+#' @rdname SNPData-class
+#' @export
 setMethod("[", signature(x = "SNPData", i = "ANY", j = "ANY"),
     function(x, i, j) {
         if (missing(i)) i <- seq_len(nrow(x@alt_count))
@@ -109,6 +179,12 @@ setMethod("nrow", signature(x = "SNPData"), function(x) nrow(x@ref_count))
 setMethod("ncol", signature(x = "SNPData"), function(x) ncol(x@ref_count))
 
 # Dimensions
+#' Get dimensions of a SNPData object
+#'
+#' @param x A SNPData object
+#' @return A numeric vector of length 2 giving the number of SNPs and samples
+#' @rdname SNPData-class
+#' @export
 setMethod("dim", signature(x = "SNPData"), function(x) c(nrow(x@alt_count), ncol(x@alt_count)))
 setMethod("nrow", signature(x = "SNPData"), function(x) nrow(x@alt_count))
 setMethod("ncol", signature(x = "SNPData"), function(x) ncol(x@alt_count))
@@ -133,21 +209,5 @@ setGeneric("coverage", function(x) standardGeneric("coverage"))
 setMethod("coverage", signature(x = "SNPData"),
     function(x) {
         x@alt_count + x@ref_count
-    }
-)
-
-# Reference fraction method
-setGeneric("ref_fraction", function(x) standardGeneric("ref_fraction"))
-setMethod("ref_fraction", signature(x = "SNPData"),
-    function(x) {
-        x@ref_count / (x@ref_count + x@alt_count)
-    }
-)
-
-# Major allele fraction method
-setGeneric("major_allele_frac", function(x) standardGeneric("major_allele_frac"))
-setMethod("major_allele_frac", signature(x = "SNPData"),
-    function(x) {
-        abs(x@ref_count / (x@ref_count + x@alt_count) - 0.5) + 0.5
     }
 )

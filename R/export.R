@@ -1,13 +1,16 @@
 #' Export SNPData object to cellSNP-compatible files
 #'
-#' Writes the components of a SNPData object to an output folder in a format compatible with import_cellsnp.
+#' Writes the components of a SNPData object to an output folder in a format
+#' compatible with import_cellsnp.
 #'
 #' @param snpdata A SNPData object
 #' @param out_dir Output directory to write files
 #' @export
 #'
 #' @examples
+#' \dontrun{
 #' export_cellsnp(snp_data, "exported_cellsnp")
+#' }
 export_cellsnp <- function(snpdata, out_dir) {
     if (!dir.exists(out_dir)) dir.create(out_dir, recursive = TRUE)
     logger::log_info("Exporting SNPData to {out_dir}")
@@ -60,11 +63,13 @@ export_cellsnp <- function(snpdata, out_dir) {
         dplyr::distinct()
     readr::write_csv(vdj_df, vdj_file)
     logger::log_info("VDJ info written to: {vdj_file}")
-  
+
     # Write barcodes into cellSNP.samples.tsv
     samples_file <- file.path(out_dir, "cellSNP.samples.tsv")
     cells <- get_barcode_info(snpdata)
-    readr::write_tsv(dplyr::select(cells, barcode), samples_file, col_names = FALSE)
+    readr::write_tsv(
+        dplyr::select(cells, barcode), samples_file, col_names = FALSE
+    )
 
     logger::log_success("SNPData exported to {out_dir}")
 }
