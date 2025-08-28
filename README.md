@@ -1,15 +1,26 @@
 # snplet
 
-A work-in-progress R package for handling single-cell SNP data in terms of REF and ALT counts, where clonotype and donor ids are present.
+**This package is currently work-in-progress. The functions are expected to change dramatically throughout development and nothing should be considered stable.**
 
-## Overview
+An R package for single-cell SNP data analysis, focusing on allele-specific expression. Integrates SNP count matrices (REF/ALT), donor assignments from Vireo, and clonotype metadata from cellranger VDJ to support comprehensive allele-specific analysis workflows.
 
-This package provides functionality for analyzing single-cell SNP data, particularly focusing on:
-- Handling REF and ALT allele counts from SNP data
-- Managing metadata containing clonotype and donor information
-- Computing various allele-specific expression metrics
-- Supporting operations on both cell-level and aggregated (donor/clonotype) data
+## Features
 
-## Status
+### Core Data Structure
+- **SNPData S4 Class**: Central object containing REF/ALT count matrices, SNP metadata, and cell metadata
+- **Automatic metrics**: Coverage, library size, and minor allele frequency calculations
 
-This package is currently under development. The core functionality is implemented but the API may change as the package evolves. 
+### Data Processing
+- **Quality filtering**: Filter SNPs and cells by coverage, library size, and metadata
+- **Data aggregation**: Summarize counts at cell, donor, and clonotype levels
+
+## Installation
+
+```r
+# Install from GitHub
+devtools::install_github("shians/snplet")
+```
+
+## License
+
+This project is licensed under the Apache License (>= 2).
