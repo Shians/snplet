@@ -274,13 +274,6 @@ setMethod("get_sample_info", signature(x = "SNPData"), function(x) {
     get_barcode_info(x)
 })
 
-#' @exportMethod nrow
-#' @rdname SNPData-class
-setMethod("nrow", signature(x = "SNPData"), function(x) nrow(x@ref_count))
-#' @exportMethod ncol
-#' @rdname SNPData-class
-setMethod("ncol", signature(x = "SNPData"), function(x) ncol(x@ref_count))
-
 # Dimensions
 #' Get dimensions of a SNPData object
 #'
@@ -291,8 +284,10 @@ setMethod("ncol", signature(x = "SNPData"), function(x) ncol(x@ref_count))
 setMethod("dim", signature(x = "SNPData"), function(x) {
     c(nrow(x@alt_count), ncol(x@alt_count))
 })
+#' @rdname SNPData-class
 #' @exportMethod nrow
 setMethod("nrow", signature(x = "SNPData"), function(x) nrow(x@alt_count))
+#' @rdname SNPData-class
 #' @exportMethod ncol
 setMethod("ncol", signature(x = "SNPData"), function(x) ncol(x@alt_count))
 

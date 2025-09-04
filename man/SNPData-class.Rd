@@ -18,9 +18,9 @@
 \alias{get_barcode_info,SNPData-method}
 \alias{get_sample_info}
 \alias{get_sample_info,SNPData-method}
+\alias{dim,SNPData-method}
 \alias{nrow,SNPData-method}
 \alias{ncol,SNPData-method}
-\alias{dim,SNPData-method}
 \alias{rownames,SNPData-method}
 \alias{colnames,SNPData-method}
 \alias{show,SNPData-method}
@@ -58,11 +58,11 @@ get_sample_info(x)
 
 \S4method{get_sample_info}{SNPData}(x)
 
+\S4method{dim}{SNPData}(x)
+
 \S4method{nrow}{SNPData}(x)
 
 \S4method{ncol}{SNPData}(x)
-
-\S4method{dim}{SNPData}(x)
 
 \S4method{rownames}{SNPData}(x)
 

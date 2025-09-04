@@ -31,5 +31,4 @@ aggregate_count_df(snp_data, "donor")
 # Aggregate by clonotype
 aggregate_count_df(snp_data, "clonotype")
 }
-
 }

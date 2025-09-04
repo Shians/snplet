@@ -12,6 +12,7 @@
 #' snp_data <- get_example_snpdata()
 #' barcode_count_df(snp_data)
 #' }
+#' @rdname barcode_count_df
 setGeneric("barcode_count_df", function(x, test_maf = TRUE) standardGeneric("barcode_count_df"))
 #' @rdname barcode_count_df
 setMethod(
@@ -72,6 +73,7 @@ setMethod(
 #' snp_data <- get_example_snpdata()
 #' donor_count_df(snp_data)
 #' }
+#' @rdname donor_count_df
 setGeneric("donor_count_df", function(x, test_maf = TRUE) standardGeneric("donor_count_df"))
 #' @rdname donor_count_df
 setMethod(
@@ -127,6 +129,7 @@ setMethod(
 #' snp_data <- get_example_snpdata()
 #' clonotype_count_df(snp_data)
 #' }
+#' @rdname clonotype_count_df
 setGeneric("clonotype_count_df", function(x, test_maf = TRUE) standardGeneric("clonotype_count_df"))
 #' @rdname clonotype_count_df
 setMethod(
@@ -186,7 +189,7 @@ setMethod(
 #'
 #' @param df A data.frame to check column existence against
 #' @param dots A list of quosures containing filter expressions
-#' @param df_name Character string naming the data.frame for error messages
+#' @param df_name Character string naming the data.frame for error messages (default "data.frame")
 #' @return Invisibly returns NULL if all columns exist, otherwise throws an error
 #' @keywords internal
 check_filter_expr <- function(df, dots, df_name = "data.frame") {
@@ -217,6 +220,7 @@ check_filter_expr <- function(df, dots, df_name = "data.frame") {
 #' # Filter SNPs with coverage > 10
 #' filtered_snps <- filter_snps(snp_data, coverage > 10)
 #' }
+#' @rdname filter_snps
 setGeneric("filter_snps", function(.data, ...) standardGeneric("filter_snps"))
 #' @rdname filter_snps
 setMethod(
@@ -259,6 +263,7 @@ setMethod(
 #'
 #' @examples
 #' \dontrun{
+#' snp_data <- get_example_snpdata()
 #' # Filter cells with library size > 1000
 #' filtered_cells <- filter_barcodes(snp_data, library_size > 1000)
 #'
@@ -268,6 +273,7 @@ setMethod(
 #' # Filter cells with multiple conditions
 #' filtered_cells <- filter_barcodes(snp_data, library_size > 1000, non_zero_snps > 50)
 #' }
+#' @rdname filter_barcodes
 setGeneric("filter_barcodes", function(.data, ...) standardGeneric("filter_barcodes"))
 #' @rdname filter_barcodes
 setMethod(
@@ -331,7 +337,7 @@ setMethod(
 #' # Aggregate by clonotype
 #' aggregate_count_df(snp_data, "clonotype")
 #' }
-#'
+#' @rdname aggregate_count_df
 setGeneric("aggregate_count_df", function(x, group_by, test_maf = TRUE) standardGeneric("aggregate_count_df"))
 #' @rdname aggregate_count_df
 setMethod(
