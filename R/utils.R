@@ -1,8 +1,24 @@
 # Suppress R CMD check notes about global variables used in data.frame operations
 utils::globalVariables(c(
-    "adj_p_val", "alt", "barcode", "cell", "cell_id", "chrom", "clonotype", 
-    "donor", "donor_id", "gene_name", "library_size", "maf", "n", "pos", 
-    "ref", "seqnames", "signif_snps_clonotype", "snp_id", "start", 
+    "adj_p_val",
+    "alt",
+    "barcode",
+    "cell",
+    "cell_id",
+    "chrom",
+    "clonotype",
+    "donor",
+    "donor_id",
+    "gene_name",
+    "library_size",
+    "maf",
+    "n",
+    "pos",
+    "ref",
+    "seqnames",
+    "signif_snps_clonotype",
+    "snp_id",
+    "start",
     "total_count"
 ))
 

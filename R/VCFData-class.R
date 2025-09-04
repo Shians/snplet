@@ -46,7 +46,8 @@
 #'
 #' @exportClass VCFData
 #' @export
-setClass("VCFData",
+setClass(
+    "VCFData",
     slots = c(
         header = "character",
         samples = "character",
@@ -54,33 +55,31 @@ setClass("VCFData",
     )
 )
 
-setMethod("initialize", signature(.Object = "VCFData"),
-    function(.Object, header, samples, variants) {
-        # Validate inputs
-        stopifnot(is.character(header))
-        stopifnot(is.character(samples))
-        stopifnot(is.data.frame(variants))
-        
-        # Check that variants has required VCF columns
-        required_cols <- c("CHROM", "POS", "ID", "REF", "ALT", "QUAL", "FILTER", "INFO")
-        missing_cols <- setdiff(required_cols, colnames(variants))
-        if (length(missing_cols) > 0) {
-            stop("Missing required VCF columns: ", paste(missing_cols, collapse = ", "))
-        }
-        
-        # Ensure POS is numeric
-        if (!is.numeric(variants$POS)) {
-            variants$POS <- as.numeric(variants$POS)
-        }
-        
-        # Assign to slots
-        .Object@header <- header
-        .Object@samples <- samples
-        .Object@variants <- variants
-        
-        .Object
+setMethod("initialize", signature(.Object = "VCFData"), function(.Object, header, samples, variants) {
+    # Validate inputs
+    stopifnot(is.character(header))
+    stopifnot(is.character(samples))
+    stopifnot(is.data.frame(variants))
+
+    # Check that variants has required VCF columns
+    required_cols <- c("CHROM", "POS", "ID", "REF", "ALT", "QUAL", "FILTER", "INFO")
+    missing_cols <- setdiff(required_cols, colnames(variants))
+    if (length(missing_cols) > 0) {
+        stop("Missing required VCF columns: ", paste(missing_cols, collapse = ", "))
     }
-)
+
+    # Ensure POS is numeric
+    if (!is.numeric(variants$POS)) {
+        variants$POS <- as.numeric(variants$POS)
+    }
+
+    # Assign to slots
+    .Object@header <- header
+    .Object@samples <- samples
+    .Object@variants <- variants
+
+    .Object
+})
 
 # Constructor
 #' @exportMethod VCFData
@@ -88,7 +87,9 @@ setMethod("initialize", signature(.Object = "VCFData"),
 setGeneric("VCFData", function(header, samples, variants) standardGeneric("VCFData"))
 #' @exportMethod VCFData
 #' @rdname VCFData-class
-setMethod("VCFData", signature(header = "character", samples = "character", variants = "data.frame"),
+setMethod(
+    "VCFData",
+    signature(header = "character", samples = "character", variants = "data.frame"),
     function(header, samples, variants) {
         new("VCFData", header = header, samples = samples, variants = variants)
     }
@@ -142,23 +143,20 @@ setMethod("colnames", signature(x = "VCFData"), function(x) colnames(x@variants)
 # Show method
 #' @exportMethod show
 #' @rdname VCFData-class
-setMethod("show", signature(object = "VCFData"),
-    function(object) {
-        cat("Object of class 'VCFData'", "\n")
-        cat("Dimensions: ", nrow(object), " variants x ", ncol(object), " columns", "\n")
-        cat("Samples: ", length(object@samples), " (",
-            paste(head(object@samples, 3), collapse = ", "))
-        if (length(object@samples) > 3) {
-            cat("...)")
-        } else {
-            cat(")")
-        }
-        cat("\n")
-        cat("Header lines: ", length(object@header), "\n")
-        cat("Variants preview:", "\n")
-        print(head(object@variants))
+setMethod("show", signature(object = "VCFData"), function(object) {
+    cat("Object of class 'VCFData'", "\n")
+    cat("Dimensions: ", nrow(object), " variants x ", ncol(object), " columns", "\n")
+    cat("Samples: ", length(object@samples), " (", paste(head(object@samples, 3), collapse = ", "))
+    if (length(object@samples) > 3) {
+        cat("...)")
+    } else {
+        cat(")")
     }
-)
+    cat("\n")
+    cat("Header lines: ", length(object@header), "\n")
+    cat("Variants preview:", "\n")
+    print(head(object@variants))
+})
 
 # Subset method
 #' Subset a VCFData object
@@ -169,23 +167,18 @@ setMethod("show", signature(object = "VCFData"),
 #' @return A subsetted VCFData object
 #' @rdname VCFData-class
 #' @export
-setMethod("[", signature(x = "VCFData", i = "ANY", j = "ANY"),
-    function(x, i, j) {
-        if (missing(i)) {
-            i <- seq_len(nrow(x@variants))
-        }
-        if (missing(j)) {
-            j <- seq_len(ncol(x@variants))
-        }
-
-        variants_subset <- x@variants[i, j, drop = FALSE]
-
-        new("VCFData",
-            header = x@header,
-            samples = x@samples,
-            variants = variants_subset)
+setMethod("[", signature(x = "VCFData", i = "ANY", j = "ANY"), function(x, i, j) {
+    if (missing(i)) {
+        i <- seq_len(nrow(x@variants))
     }
-)
+    if (missing(j)) {
+        j <- seq_len(ncol(x@variants))
+    }
+
+    variants_subset <- x@variants[i, j, drop = FALSE]
+
+    new("VCFData", header = x@header, samples = x@samples, variants = variants_subset)
+})
 
 #' Read VCF file and create VCFData object
 #'
@@ -208,10 +201,10 @@ read_vcf <- function(file) {
     } else {
         header_lines <- readLines(file)
     }
-    
+
     # Extract only the ## header lines (not #CHROM)
     header_lines <- header_lines[grepl("^##", header_lines)]
-    
+
     # Read the variant data using read_tsv with "##" comment
     variants <- readr::read_tsv(
         file,
@@ -222,10 +215,10 @@ read_vcf <- function(file) {
         ),
         show_col_types = FALSE
     )
-    
+
     # Clean up column names (remove # from CHROM)
     colnames(variants)[1] <- gsub("^#", "", colnames(variants)[1])
-    
+
     # Extract sample names (columns after FORMAT, if present)
     col_names <- colnames(variants)
     format_idx <- which(col_names == "FORMAT")
@@ -240,13 +233,13 @@ read_vcf <- function(file) {
             sample_names <- character(0)
         }
     }
-    
+
     # Create VCFData object
     vcf_data <- VCFData(
         header = header_lines,
         samples = sample_names,
         variants = variants
     )
-    
+
     return(vcf_data)
 }
