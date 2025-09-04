@@ -20,8 +20,7 @@ of the snp_info slot. This is useful for focusing analysis on SNPs
 that are associated with known genes.
 }
 \examples{
-\dontrun{
+snp_data <- get_example_snpdata()
 # Filter out SNPs with NA gene names
 filtered_data <- remove_na_genes(snp_data)
-}
 }
