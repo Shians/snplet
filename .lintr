@@ -1,0 +1,5 @@
+# .lintr
+linters: linters_with_defaults(
+    indentation_linter = indentation_linter(indent = 2),
+    line_length_linter = line_length_linter(80)
+)

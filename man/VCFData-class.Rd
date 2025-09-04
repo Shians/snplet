@@ -19,14 +19,15 @@
 \item{j}{Numeric or logical vector for subsetting columns}
 }
 \value{
-A numeric vector of length 2 giving the number of variants and columns
+A numeric vector of length 2 giving the number of variants and
+  columns
 
 A subsetted VCFData object
 }
 \description{
 An S4 class to store and manipulate VCF (Variant Call Format) data.
-This class stores variant information, sample metadata, and VCF header information
-to support genomic variant analysis workflows.
+This class stores variant information, sample metadata, and VCF header
+information to support genomic variant analysis workflows.
 }
 \section{Slots}{
 
@@ -35,7 +36,8 @@ to support genomic variant analysis workflows.
 
 \item{\code{samples}}{A character vector of sample names from the VCF file}
 
-\item{\code{variants}}{A data.frame containing variant information with standard VCF columns}
+\item{\code{variants}}{A data.frame containing variant information with standard VCF
+columns}
 }}
 
 \section{Accessors}{
