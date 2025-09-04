@@ -12,9 +12,12 @@
 #' snp_data <- get_example_snpdata()
 #' barcode_count_df(snp_data)
 #' }
+#' @rdname barcode_count_df
 setGeneric("barcode_count_df", function(x, test_maf = TRUE) standardGeneric("barcode_count_df"))
 #' @rdname barcode_count_df
-setMethod("barcode_count_df", signature(x = "SNPData"),
+setMethod(
+    "barcode_count_df",
+    signature(x = "SNPData"),
     function(x, test_maf = TRUE) {
         logger::log_info("Calculating barcode/cell level counts")
 
@@ -70,9 +73,12 @@ setMethod("barcode_count_df", signature(x = "SNPData"),
 #' snp_data <- get_example_snpdata()
 #' donor_count_df(snp_data)
 #' }
+#' @rdname donor_count_df
 setGeneric("donor_count_df", function(x, test_maf = TRUE) standardGeneric("donor_count_df"))
 #' @rdname donor_count_df
-setMethod("donor_count_df", signature(x = "SNPData"),
+setMethod(
+    "donor_count_df",
+    signature(x = "SNPData"),
     function(x, test_maf = TRUE) {
         logger::log_info("Calculating donor level counts")
 
@@ -123,9 +129,12 @@ setMethod("donor_count_df", signature(x = "SNPData"),
 #' snp_data <- get_example_snpdata()
 #' clonotype_count_df(snp_data)
 #' }
+#' @rdname clonotype_count_df
 setGeneric("clonotype_count_df", function(x, test_maf = TRUE) standardGeneric("clonotype_count_df"))
 #' @rdname clonotype_count_df
-setMethod("clonotype_count_df", signature(x = "SNPData"),
+setMethod(
+    "clonotype_count_df",
+    signature(x = "SNPData"),
     function(x, test_maf = TRUE) {
         logger::log_info("Calculating clonotype level counts")
 
@@ -180,7 +189,7 @@ setMethod("clonotype_count_df", signature(x = "SNPData"),
 #'
 #' @param df A data.frame to check column existence against
 #' @param dots A list of quosures containing filter expressions
-#' @param df_name Character string naming the data.frame for error messages
+#' @param df_name Character string naming the data.frame for error messages (default "data.frame")
 #' @return Invisibly returns NULL if all columns exist, otherwise throws an error
 #' @keywords internal
 check_filter_expr <- function(df, dots, df_name = "data.frame") {
@@ -190,7 +199,9 @@ check_filter_expr <- function(df, dots, df_name = "data.frame") {
     still_missing <- missing_vars[!vapply(missing_vars, exists, logical(1), envir = parent.frame())]
     if (length(still_missing) > 0) {
         stop(paste0(
-            "The following columns are not present in ", df_name, " or parent environment: ",
+            "The following columns are not present in ",
+            df_name,
+            " or parent environment: ",
             paste(still_missing, collapse = ", ")
         ))
     }
@@ -209,9 +220,12 @@ check_filter_expr <- function(df, dots, df_name = "data.frame") {
 #' # Filter SNPs with coverage > 10
 #' filtered_snps <- filter_snps(snp_data, coverage > 10)
 #' }
+#' @rdname filter_snps
 setGeneric("filter_snps", function(.data, ...) standardGeneric("filter_snps"))
 #' @rdname filter_snps
-setMethod("filter_snps", signature(.data = "SNPData"),
+setMethod(
+    "filter_snps",
+    signature(.data = "SNPData"),
     function(.data, ...) {
         # Capture NSE expressions
         dots <- rlang::enquos(...)
@@ -249,6 +263,7 @@ setMethod("filter_snps", signature(.data = "SNPData"),
 #'
 #' @examples
 #' \dontrun{
+#' snp_data <- get_example_snpdata()
 #' # Filter cells with library size > 1000
 #' filtered_cells <- filter_barcodes(snp_data, library_size > 1000)
 #'
@@ -258,9 +273,12 @@ setMethod("filter_snps", signature(.data = "SNPData"),
 #' # Filter cells with multiple conditions
 #' filtered_cells <- filter_barcodes(snp_data, library_size > 1000, non_zero_snps > 50)
 #' }
+#' @rdname filter_barcodes
 setGeneric("filter_barcodes", function(.data, ...) standardGeneric("filter_barcodes"))
 #' @rdname filter_barcodes
-setMethod("filter_barcodes", signature(.data = "SNPData"),
+setMethod(
+    "filter_barcodes",
+    signature(.data = "SNPData"),
     function(.data, ...) {
         # Capture NSE expressions
         dots <- rlang::enquos(...)
@@ -294,34 +312,11 @@ setMethod("filter_barcodes", signature(.data = "SNPData"),
 #' @export
 setGeneric("filter_samples", function(.data, ...) standardGeneric("filter_samples"))
 #' @rdname filter_barcodes
-setMethod("filter_samples", signature(.data = "SNPData"),
-    function(.data, ...) filter_barcodes(.data, ...))
-
-#' Get barcode/sample/cell metadata from a SNPData object
-#'
-#' @param x A SNPData object
-#' @return A data.frame or tibble with barcode/sample/cell metadata
-#' @export
-#' @rdname SNPData-methods
-setGeneric("get_barcode_info", function(x) standardGeneric("get_barcode_info"))
-#' @rdname SNPData-methods
-setMethod("get_barcode_info", signature(x = "SNPData"), function(x) x@barcode_info)
-
-#' Get sample/cell metadata from a SNPData object (alias for get_barcode_info)
-#'
-#' @param x A SNPData object
-#' @return A data.frame or tibble with sample/cell/barcode metadata
-#' @export
-#' @rdname SNPData-methods
-#'
-#' @examples
-#' \dontrun{
-#' snp_data <- get_example_snpdata()
-#' sample_metadata <- get_sample_info(snp_data)
-#' }
-setGeneric("get_sample_info", function(x) standardGeneric("get_sample_info"))
-#' @rdname SNPData-methods
-setMethod("get_sample_info", signature(x = "SNPData"), function(x) get_barcode_info(x))
+setMethod(
+    "filter_samples",
+    signature(.data = "SNPData"),
+    function(.data, ...) filter_barcodes(.data, ...)
+)
 
 #' Get aggregated SNP count summary by any barcode_info column
 #'
@@ -342,10 +337,12 @@ setMethod("get_sample_info", signature(x = "SNPData"), function(x) get_barcode_i
 #' # Aggregate by clonotype
 #' aggregate_count_df(snp_data, "clonotype")
 #' }
-#'
+#' @rdname aggregate_count_df
 setGeneric("aggregate_count_df", function(x, group_by, test_maf = TRUE) standardGeneric("aggregate_count_df"))
 #' @rdname aggregate_count_df
-setMethod("aggregate_count_df", signature(x = "SNPData"),
+setMethod(
+    "aggregate_count_df",
+    signature(x = "SNPData"),
     function(x, group_by, test_maf = TRUE) {
         logger::log_info("Calculating {group_by} level counts")
 
@@ -360,7 +357,9 @@ setMethod("aggregate_count_df", signature(x = "SNPData"),
 
         # Check for missing values in grouping variable
         if (any(is.na(groups))) {
-            logger::log_warn("Found {sum(is.na(groups))} NA values in '{group_by}' column. These will be excluded from aggregation.")
+            logger::log_warn(
+                "Found {sum(is.na(groups))} NA values in '{group_by}' column. These will be excluded from aggregation."
+            )
             # Filter out samples with NA values
             keep_samples <- !is.na(groups)
             x_filtered <- x[, keep_samples]

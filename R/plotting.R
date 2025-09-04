@@ -105,7 +105,7 @@ plot_maf_pval_track <- function(allele_counts_df, facet, x_range) {
         ggplot2::ggplot(ggplot2::aes(x = pos, y = -log10(adj_p_val))) +
         ggplot2::geom_hline(yintercept = 1.3, linetype = "dashed", color = "red") +
         ggplot2::geom_point(size = 1) +
-        ggplot2::facet_grid(rows = ggplot2::vars({{facet}})) +
+        ggplot2::facet_grid(rows = ggplot2::vars({{ facet }})) +
         ggplot2::scale_x_continuous(
             labels = scales::label_number(scale_cut = scales::cut_short_scale(), suffix = "b"),
             limits = x_range,

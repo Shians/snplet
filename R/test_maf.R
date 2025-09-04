@@ -27,7 +27,7 @@ test_maf <- function(x, p = 0.10) {
     p_val <- furrr::future_map2_dbl(
         minor_allele_count,
         ceiling(x$total_count),
-        ~binom.test(.x, .y, p, alternative = "greater")$p.value
+        ~ binom.test(.x, .y, p, alternative = "greater")$p.value
     )
 
     result <- x %>%

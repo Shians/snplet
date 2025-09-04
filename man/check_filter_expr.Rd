@@ -11,7 +11,7 @@ check_filter_expr(df, dots, df_name = "data.frame")
 
 \item{dots}{A list of quosures containing filter expressions}
 
-\item{df_name}{Character string naming the data.frame for error messages}
+\item{df_name}{Character string naming the data.frame for error messages (default "data.frame")}
 }
 \value{
 Invisibly returns NULL if all columns exist, otherwise throws an error

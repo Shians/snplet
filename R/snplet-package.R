@@ -8,7 +8,7 @@
 #' @importFrom logger log_info log_success log_warn
 #' @importFrom glue glue
 #' @importFrom stringr str_remove str_to_title
-#' @importFrom methods is new setClass setGeneric setMethod
+#' @importFrom methods is new setClass setGeneric setMethod show
 #' @importFrom magrittr %>%
 #' @importFrom ggplot2 ggplot aes geom_density scale_y_continuous scale_x_log10
 #' @importFrom ggplot2 geom_segment scale_x_continuous theme_void theme
@@ -23,4 +23,5 @@
 #' @importFrom R.utils gzip
 #' @importFrom grid unit
 #' @importFrom stats median quantile p.adjust
+#' @importFrom utils head
 NULL

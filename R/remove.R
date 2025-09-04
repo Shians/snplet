@@ -45,7 +45,9 @@ remove_doublets <- function(x, drop_na = TRUE) {
     barcodes_removed <- sum(cells_to_remove)
     barcodes_remaining <- barcodes_total - barcodes_removed
     removed_perc <- scales::percent(barcodes_removed / barcodes_total, accuracy = 0.01)
-    logger::log_info("{barcodes_removed} ({removed_perc}) doublet barcodes removed. {barcodes_remaining} barcodes remaining.")
+    logger::log_info(
+        "{barcodes_removed} ({removed_perc}) doublet barcodes removed. {barcodes_remaining} barcodes remaining."
+    )
 
     # Return filtered data
     return(x[, !cells_to_remove])
@@ -90,7 +92,9 @@ remove_na_genes <- function(x, gene_col = "gene_name") {
     snps_removed <- sum(!snps_to_keep)
     snps_remaining <- snps_total - snps_removed
     removed_perc <- scales::percent(snps_removed / snps_total, accuracy = 0.01)
-    logger::log_info("{snps_removed} ({removed_perc}) SNPs with NA gene_name values removed. {snps_remaining} SNPs remaining.")
+    logger::log_info(
+        "{snps_removed} ({removed_perc}) SNPs with NA gene_name values removed. {snps_remaining} SNPs remaining."
+    )
 
     # Return filtered data
     return(x[snps_to_keep, ])
@@ -135,9 +139,10 @@ remove_na_clonotypes <- function(x, clonotype_col = "clonotype") {
     clonotypes_removed <- sum(barcodes_to_remove)
     clonotypes_remaining <- clonotypes_total - clonotypes_removed
     removed_perc <- scales::percent(clonotypes_removed / clonotypes_total, accuracy = 0.01)
-    logger::log_info("{clonotypes_removed} ({removed_perc}) barcodes with NA clonotype values removed. {clonotypes_remaining} barcodes remaining.")
+    logger::log_info(
+        "{clonotypes_removed} ({removed_perc}) barcodes with NA clonotype values removed. {clonotypes_remaining} barcodes remaining."
+    )
 
     # Return filtered data
     return(x[, !barcodes_to_remove])
 }
-

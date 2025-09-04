@@ -12,7 +12,9 @@
 #' export_cellsnp(snp_data, "exported_cellsnp")
 #' }
 export_cellsnp <- function(snpdata, out_dir) {
-    if (!dir.exists(out_dir)) dir.create(out_dir, recursive = TRUE)
+    if (!dir.exists(out_dir)) {
+        dir.create(out_dir, recursive = TRUE)
+    }
     logger::log_info("Exporting SNPData to {out_dir}")
 
     # Write ALT, REF, and OTH matrices as Matrix Market files
@@ -68,7 +70,9 @@ export_cellsnp <- function(snpdata, out_dir) {
     samples_file <- file.path(out_dir, "cellSNP.samples.tsv")
     cells <- get_barcode_info(snpdata)
     readr::write_tsv(
-        dplyr::select(cells, barcode), samples_file, col_names = FALSE
+        dplyr::select(cells, barcode),
+        samples_file,
+        col_names = FALSE
     )
 
     logger::log_success("SNPData exported to {out_dir}")

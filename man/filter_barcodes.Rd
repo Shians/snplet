@@ -28,6 +28,7 @@ Filter SNPData object by sample/cell/barcode information
 }
 \examples{
 \dontrun{
+snp_data <- get_example_snpdata()
 # Filter cells with library size > 1000
 filtered_cells <- filter_barcodes(snp_data, library_size > 1000)
 

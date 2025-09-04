@@ -4,12 +4,75 @@
 \name{SNPData-class}
 \alias{SNPData-class}
 \alias{[,SNPData,ANY,ANY,ANY-method}
+\alias{SNPData}
+\alias{SNPData,Matrix,Matrix,data.frame,data.frame-method}
+\alias{ref_count}
+\alias{ref_count,SNPData-method}
+\alias{alt_count}
+\alias{alt_count,SNPData-method}
+\alias{oth_count}
+\alias{oth_count,SNPData-method}
+\alias{get_snp_info}
+\alias{get_snp_info,SNPData-method}
+\alias{get_barcode_info}
+\alias{get_barcode_info,SNPData-method}
+\alias{get_sample_info}
+\alias{get_sample_info,SNPData-method}
 \alias{dim,SNPData-method}
+\alias{nrow,SNPData-method}
+\alias{ncol,SNPData-method}
+\alias{rownames,SNPData-method}
+\alias{colnames,SNPData-method}
+\alias{show,SNPData-method}
+\alias{coverage}
+\alias{coverage,SNPData-method}
 \title{SNPData: S4 class for single-cell SNP count data}
 \usage{
 \S4method{[}{SNPData,ANY,ANY,ANY}(x, i, j)
 
+SNPData(ref_count, alt_count, snp_info, barcode_info, oth_count = NULL)
+
+\S4method{SNPData}{Matrix,Matrix,data.frame,data.frame}(ref_count, alt_count, snp_info, barcode_info, oth_count = NULL)
+
+ref_count(x)
+
+\S4method{ref_count}{SNPData}(x)
+
+alt_count(x)
+
+\S4method{alt_count}{SNPData}(x)
+
+oth_count(x)
+
+\S4method{oth_count}{SNPData}(x)
+
+get_snp_info(x)
+
+\S4method{get_snp_info}{SNPData}(x)
+
+get_barcode_info(x)
+
+\S4method{get_barcode_info}{SNPData}(x)
+
+get_sample_info(x)
+
+\S4method{get_sample_info}{SNPData}(x)
+
 \S4method{dim}{SNPData}(x)
+
+\S4method{nrow}{SNPData}(x)
+
+\S4method{ncol}{SNPData}(x)
+
+\S4method{rownames}{SNPData}(x)
+
+\S4method{colnames}{SNPData}(x)
+
+\S4method{show}{SNPData}(object)
+
+coverage(x)
+
+\S4method{coverage}{SNPData}(x)
 }
 \arguments{
 \item{x}{A SNPData object}
@@ -17,6 +80,18 @@
 \item{i}{Numeric or logical vector for subsetting SNPs (rows)}
 
 \item{j}{Numeric or logical vector for subsetting samples (columns)}
+
+\item{ref_count}{A sparse Matrix containing reference allele counts (SNPs x cells)}
+
+\item{alt_count}{A sparse Matrix containing alternate allele counts (SNPs x cells)}
+
+\item{snp_info}{A data.frame containing SNP metadata}
+
+\item{barcode_info}{A data.frame containing cell/barcode metadata}
+
+\item{oth_count}{A sparse Matrix containing other allele counts (SNPs x cells), optional}
+
+\item{object}{A SNPData object for show method}
 }
 \value{
 A subsetted SNPData object
