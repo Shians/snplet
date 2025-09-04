@@ -4,6 +4,14 @@
 #' This class stores variant information, sample metadata, and VCF header information
 #' to support genomic variant analysis workflows.
 #'
+#' @param header A character vector containing VCF header lines
+#' @param samples A character vector of sample names from the VCF file
+#' @param variants A data.frame containing variant information with standard VCF columns
+#' @param object A VCFData object for show method
+#' @param x A VCFData object
+#' @param i Numeric or logical vector for subsetting variants (rows)
+#' @param j Numeric or logical vector for subsetting columns
+#'
 #' @slot header A character vector containing VCF header lines
 #' @slot samples A character vector of sample names from the VCF file
 #' @slot variants A data.frame containing variant information with standard VCF columns
@@ -76,8 +84,10 @@ setMethod("initialize", signature(.Object = "VCFData"),
 
 # Constructor
 #' @exportMethod VCFData
+#' @rdname VCFData-class
 setGeneric("VCFData", function(header, samples, variants) standardGeneric("VCFData"))
 #' @exportMethod VCFData
+#' @rdname VCFData-class
 setMethod("VCFData", signature(header = "character", samples = "character", variants = "data.frame"),
     function(header, samples, variants) {
         new("VCFData", header = header, samples = samples, variants = variants)
@@ -86,24 +96,32 @@ setMethod("VCFData", signature(header = "character", samples = "character", vari
 
 # Accessors
 #' @exportMethod get_header
+#' @rdname VCFData-class
 setGeneric("get_header", function(x) standardGeneric("get_header"))
 #' @exportMethod get_header
+#' @rdname VCFData-class
 setMethod("get_header", signature(x = "VCFData"), function(x) x@header)
 
 #' @exportMethod get_samples
+#' @rdname VCFData-class
 setGeneric("get_samples", function(x) standardGeneric("get_samples"))
 #' @exportMethod get_samples
+#' @rdname VCFData-class
 setMethod("get_samples", signature(x = "VCFData"), function(x) x@samples)
 
 #' @exportMethod get_variants
+#' @rdname VCFData-class
 setGeneric("get_variants", function(x) standardGeneric("get_variants"))
 #' @exportMethod get_variants
+#' @rdname VCFData-class
 setMethod("get_variants", signature(x = "VCFData"), function(x) x@variants)
 
 # Dimensions
 #' @exportMethod nrow
+#' @rdname VCFData-class
 setMethod("nrow", signature(x = "VCFData"), function(x) nrow(x@variants))
 #' @exportMethod ncol
+#' @rdname VCFData-class
 setMethod("ncol", signature(x = "VCFData"), function(x) ncol(x@variants))
 
 #' Get dimensions of a VCFData object
@@ -115,12 +133,15 @@ setMethod("ncol", signature(x = "VCFData"), function(x) ncol(x@variants))
 setMethod("dim", signature(x = "VCFData"), function(x) c(nrow(x@variants), ncol(x@variants)))
 
 #' @exportMethod rownames
+#' @rdname VCFData-class
 setMethod("rownames", signature(x = "VCFData"), function(x) rownames(x@variants))
 #' @exportMethod colnames
+#' @rdname VCFData-class
 setMethod("colnames", signature(x = "VCFData"), function(x) colnames(x@variants))
 
 # Show method
 #' @exportMethod show
+#' @rdname VCFData-class
 setMethod("show", signature(object = "VCFData"),
     function(object) {
         cat("Object of class 'VCFData'", "\n")

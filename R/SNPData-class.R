@@ -4,6 +4,16 @@
 #' This class integrates reference/alternate allele count matrices, SNP information, and
 #' cell/barcode metadata to support allele-specific expression analysis workflows.
 #'
+#' @param ref_count A sparse Matrix containing reference allele counts (SNPs x cells)
+#' @param alt_count A sparse Matrix containing alternate allele counts (SNPs x cells)
+#' @param oth_count A sparse Matrix containing other allele counts (SNPs x cells), optional
+#' @param snp_info A data.frame containing SNP metadata
+#' @param barcode_info A data.frame containing cell/barcode metadata
+#' @param object A SNPData object for show method
+#' @param x A SNPData object
+#' @param i Numeric or logical vector for subsetting SNPs (rows)
+#' @param j Numeric or logical vector for subsetting samples (columns)
+#'
 #' @slot ref_count A sparse Matrix containing reference allele counts (SNPs x cells)
 #' @slot alt_count A sparse Matrix containing alternate allele counts (SNPs x cells)
 #' @slot oth_count A sparse Matrix containing other allele counts (SNPs x cells)
@@ -60,7 +70,8 @@
 #'
 #' @exportClass SNPData
 #' @export
-setClass("SNPData",
+setClass(
+    "SNPData",
     slots = c(
         ref_count = "Matrix",
         alt_count = "Matrix",
@@ -70,8 +81,17 @@ setClass("SNPData",
     )
 )
 
-setMethod("initialize", signature(.Object = "SNPData"),
-    function(.Object, ref_count, alt_count, oth_count = NULL, snp_info, barcode_info) {
+setMethod(
+    "initialize",
+    signature(.Object = "SNPData"),
+    function(
+        .Object,
+        ref_count,
+        alt_count,
+        oth_count = NULL,
+        snp_info,
+        barcode_info
+    ) {
         # validate dimension compatibility
         stopifnot(nrow(alt_count) == nrow(ref_count))
         stopifnot(ncol(alt_count) == ncol(ref_count))
@@ -80,7 +100,12 @@ setMethod("initialize", signature(.Object = "SNPData"),
             stopifnot(nrow(oth_count) == nrow(ref_count))
             stopifnot(ncol(oth_count) == ncol(ref_count))
         } else {
-            oth_count <- Matrix::Matrix(0, nrow = nrow(ref_count), ncol = ncol(ref_count), sparse = TRUE)
+            oth_count <- Matrix::Matrix(
+                0,
+                nrow = nrow(ref_count),
+                ncol = ncol(ref_count),
+                sparse = TRUE
+            )
         }
 
         stopifnot(ncol(alt_count) == nrow(barcode_info))
@@ -97,8 +122,8 @@ setMethod("initialize", signature(.Object = "SNPData"),
         }
 
         # convert to tibble
-        snp_info <- as_tibble(snp_info)
-        barcode_info <- as_tibble(barcode_info)
+        snp_info <- tibble::as_tibble(snp_info)
+        barcode_info <- tibble::as_tibble(barcode_info)
 
         colnames(ref_count) <- barcode_info$cell_id
         colnames(alt_count) <- barcode_info$cell_id
@@ -114,10 +139,16 @@ setMethod("initialize", signature(.Object = "SNPData"),
         .Object@barcode_info <- barcode_info
 
         .Object@snp_info$coverage <- Matrix::rowSums(alt_count + ref_count)
-        .Object@snp_info$non_zero_samples <- Matrix::rowSums(alt_count + ref_count > 0)
+        .Object@snp_info$non_zero_samples <- Matrix::rowSums(
+            alt_count + ref_count > 0
+        )
 
-        .Object@barcode_info$library_size <- Matrix::colSums(alt_count + ref_count)
-        .Object@barcode_info$non_zero_snps <- Matrix::colSums(alt_count + ref_count > 0)
+        .Object@barcode_info$library_size <- Matrix::colSums(
+            alt_count + ref_count
+        )
+        .Object@barcode_info$non_zero_snps <- Matrix::colSums(
+            alt_count + ref_count > 0
+        )
 
         .Object
     }
@@ -131,7 +162,9 @@ setMethod("initialize", signature(.Object = "SNPData"),
 #' @return A subsetted SNPData object
 #' @rdname SNPData-class
 #' @export
-setMethod("[", signature(x = "SNPData", i = "ANY", j = "ANY"),
+setMethod(
+    "[",
+    signature(x = "SNPData", i = "ANY", j = "ANY"),
     function(x, i, j) {
         if (missing(i)) {
             i <- seq_len(nrow(x@alt_count))
@@ -152,54 +185,100 @@ setMethod("[", signature(x = "SNPData", i = "ANY", j = "ANY"),
         barcode_info$library_size <- Matrix::colSums(alt_count + ref_count)
         barcode_info$non_zero_snps <- Matrix::colSums(alt_count + ref_count > 0)
 
-        new("SNPData", alt_count = alt_count, ref_count = ref_count, oth_count = oth_count, snp_info = snp_info, barcode_info = barcode_info)
+        new(
+            "SNPData",
+            alt_count = alt_count,
+            ref_count = ref_count,
+            oth_count = oth_count,
+            snp_info = snp_info,
+            barcode_info = barcode_info
+        )
     }
 )
 
 # Constructor
 #' @exportMethod SNPData
-setGeneric("SNPData", function(ref_count, alt_count, snp_info, barcode_info, oth_count = NULL) standardGeneric("SNPData"))
-#' @exportMethod SNPData
-setMethod("SNPData", signature(ref_count = "Matrix", alt_count = "Matrix", snp_info = "data.frame", barcode_info = "data.frame"),
+#' @rdname SNPData-class
+setGeneric(
+    "SNPData",
     function(ref_count, alt_count, snp_info, barcode_info, oth_count = NULL) {
-        new("SNPData", ref_count = ref_count, alt_count = alt_count, oth_count = oth_count, snp_info = snp_info, barcode_info = barcode_info)
+        standardGeneric("SNPData")
+    }
+)
+#' @exportMethod SNPData
+#' @rdname SNPData-class
+setMethod(
+    "SNPData",
+    signature(
+        ref_count = "Matrix",
+        alt_count = "Matrix",
+        snp_info = "data.frame",
+        barcode_info = "data.frame"
+    ),
+    function(ref_count, alt_count, snp_info, barcode_info, oth_count = NULL) {
+        new(
+            "SNPData",
+            ref_count = ref_count,
+            alt_count = alt_count,
+            oth_count = oth_count,
+            snp_info = snp_info,
+            barcode_info = barcode_info
+        )
     }
 )
 
 # Accessors
 #' @exportMethod ref_count
+#' @rdname SNPData-class
 setGeneric("ref_count", function(x) standardGeneric("ref_count"))
 #' @exportMethod ref_count
+#' @rdname SNPData-class
 setMethod("ref_count", signature(x = "SNPData"), function(x) x@ref_count)
 
 #' @exportMethod alt_count
+#' @rdname SNPData-class
 setGeneric("alt_count", function(x) standardGeneric("alt_count"))
 #' @exportMethod alt_count
+#' @rdname SNPData-class
 setMethod("alt_count", signature(x = "SNPData"), function(x) x@alt_count)
 
 #' @exportMethod oth_count
+#' @rdname SNPData-class
 setGeneric("oth_count", function(x) standardGeneric("oth_count"))
 #' @exportMethod oth_count
+#' @rdname SNPData-class
 setMethod("oth_count", signature(x = "SNPData"), function(x) x@oth_count)
 
 #' @exportMethod get_snp_info
+#' @rdname SNPData-class
 setGeneric("get_snp_info", function(x) standardGeneric("get_snp_info"))
 #' @exportMethod get_snp_info
+#' @rdname SNPData-class
 setMethod("get_snp_info", signature(x = "SNPData"), function(x) x@snp_info)
 
 #' @exportMethod get_barcode_info
+#' @rdname SNPData-class
 setGeneric("get_barcode_info", function(x) standardGeneric("get_barcode_info"))
 #' @exportMethod get_barcode_info
-setMethod("get_barcode_info", signature(x = "SNPData"), function(x) x@barcode_info)
+#' @rdname SNPData-class
+setMethod("get_barcode_info", signature(x = "SNPData"), function(x) {
+    x@barcode_info
+})
 
 #' @exportMethod get_sample_info
+#' @rdname SNPData-class
 setGeneric("get_sample_info", function(x) standardGeneric("get_sample_info"))
 #' @exportMethod get_sample_info
-setMethod("get_sample_info", signature(x = "SNPData"), function(x) get_barcode_info(x))
+#' @rdname SNPData-class
+setMethod("get_sample_info", signature(x = "SNPData"), function(x) {
+    get_barcode_info(x)
+})
 
 #' @exportMethod nrow
+#' @rdname SNPData-class
 setMethod("nrow", signature(x = "SNPData"), function(x) nrow(x@ref_count))
 #' @exportMethod ncol
+#' @rdname SNPData-class
 setMethod("ncol", signature(x = "SNPData"), function(x) ncol(x@ref_count))
 
 # Dimensions
@@ -209,23 +288,41 @@ setMethod("ncol", signature(x = "SNPData"), function(x) ncol(x@ref_count))
 #' @return A numeric vector of length 2 giving the number of SNPs and samples
 #' @rdname SNPData-class
 #' @exportMethod dim
-setMethod("dim", signature(x = "SNPData"), function(x) c(nrow(x@alt_count), ncol(x@alt_count)))
+setMethod("dim", signature(x = "SNPData"), function(x) {
+    c(nrow(x@alt_count), ncol(x@alt_count))
+})
 #' @exportMethod nrow
 setMethod("nrow", signature(x = "SNPData"), function(x) nrow(x@alt_count))
 #' @exportMethod ncol
 setMethod("ncol", signature(x = "SNPData"), function(x) ncol(x@alt_count))
 
 #' @exportMethod rownames
-setMethod("rownames", signature(x = "SNPData"), function(x) rownames(x@alt_count))
+#' @rdname SNPData-class
+setMethod("rownames", signature(x = "SNPData"), function(x) {
+    rownames(x@alt_count)
+})
 #' @exportMethod colnames
-setMethod("colnames", signature(x = "SNPData"), function(x) colnames(x@alt_count))
+#' @rdname SNPData-class
+setMethod("colnames", signature(x = "SNPData"), function(x) {
+    colnames(x@alt_count)
+})
 
 # Show method
 #' @exportMethod show
-setMethod("show", signature(object = "SNPData"),
+#' @rdname SNPData-class
+setMethod(
+    "show",
+    signature(object = "SNPData"),
     function(object) {
         cat("Object of class 'SNPData'", "\n")
-        cat("Dimensions: ", nrow(object), " SNPs x ", ncol(object), " samples", "\n")
+        cat(
+            "Dimensions: ",
+            nrow(object),
+            " SNPs x ",
+            ncol(object),
+            " samples",
+            "\n"
+        )
         cat("SNP info:", "\n")
         print(object@snp_info)
         cat("Sample info:", "\n")
@@ -235,9 +332,13 @@ setMethod("show", signature(object = "SNPData"),
 
 # Coverage method
 #' @exportMethod coverage
+#' @rdname SNPData-class
 setGeneric("coverage", function(x) standardGeneric("coverage"))
 #' @exportMethod coverage
-setMethod("coverage", signature(x = "SNPData"),
+#' @rdname SNPData-class
+setMethod(
+    "coverage",
+    signature(x = "SNPData"),
     function(x) {
         x@alt_count + x@ref_count
     }
