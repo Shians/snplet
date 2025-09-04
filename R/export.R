@@ -12,7 +12,9 @@
 #' export_cellsnp(snp_data, "exported_cellsnp")
 #' }
 export_cellsnp <- function(snpdata, out_dir) {
-    if (!dir.exists(out_dir)) dir.create(out_dir, recursive = TRUE)
+    if (!dir.exists(out_dir)) {
+        dir.create(out_dir, recursive = TRUE)
+    }
     logger::log_info("Exporting SNPData to {out_dir}")
 
     # Write ALT, REF, and OTH matrices as Matrix Market files

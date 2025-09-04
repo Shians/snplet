@@ -133,8 +133,12 @@ setMethod("initialize", signature(.Object = "SNPData"),
 #' @export
 setMethod("[", signature(x = "SNPData", i = "ANY", j = "ANY"),
     function(x, i, j) {
-        if (missing(i)) i <- seq_len(nrow(x@alt_count))
-        if (missing(j)) j <- seq_len(ncol(x@alt_count))
+        if (missing(i)) {
+            i <- seq_len(nrow(x@alt_count))
+        }
+        if (missing(j)) {
+            j <- seq_len(ncol(x@alt_count))
+        }
 
         ref_count <- x@ref_count[i, j, drop = FALSE]
         alt_count <- x@alt_count[i, j, drop = FALSE]

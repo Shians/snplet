@@ -126,8 +126,13 @@ setMethod("show", signature(object = "VCFData"),
         cat("Object of class 'VCFData'", "\n")
         cat("Dimensions: ", nrow(object), " variants x ", ncol(object), " columns", "\n")
         cat("Samples: ", length(object@samples), " (",
-            paste(head(object@samples, 3), collapse = ", "),
-            if (length(object@samples) > 3) "..." else "", ")", "\n")
+            paste(head(object@samples, 3), collapse = ", "))
+        if (length(object@samples) > 3) {
+            cat("...)")
+        } else {
+            cat(")")
+        }
+        cat("\n")
         cat("Header lines: ", length(object@header), "\n")
         cat("Variants preview:", "\n")
         print(head(object@variants))
@@ -145,8 +150,12 @@ setMethod("show", signature(object = "VCFData"),
 #' @export
 setMethod("[", signature(x = "VCFData", i = "ANY", j = "ANY"),
     function(x, i, j) {
-        if (missing(i)) i <- seq_len(nrow(x@variants))
-        if (missing(j)) j <- seq_len(ncol(x@variants))
+        if (missing(i)) {
+            i <- seq_len(nrow(x@variants))
+        }
+        if (missing(j)) {
+            j <- seq_len(ncol(x@variants))
+        }
 
         variants_subset <- x@variants[i, j, drop = FALSE]
 
