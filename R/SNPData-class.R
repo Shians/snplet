@@ -96,6 +96,10 @@ setMethod("initialize", signature(.Object = "SNPData"),
             barcode_info$cell_id <- paste0("cell_", seq_len(nrow(barcode_info)))
         }
 
+        # convert to tibble
+        snp_info <- as_tibble(snp_info)
+        barcode_info <- as_tibble(barcode_info)
+
         colnames(ref_count) <- barcode_info$cell_id
         colnames(alt_count) <- barcode_info$cell_id
         colnames(oth_count) <- barcode_info$cell_id
@@ -149,7 +153,9 @@ setMethod("[", signature(x = "SNPData", i = "ANY", j = "ANY"),
 )
 
 # Constructor
+#' @exportMethod SNPData
 setGeneric("SNPData", function(ref_count, alt_count, snp_info, barcode_info, oth_count = NULL) standardGeneric("SNPData"))
+#' @exportMethod SNPData
 setMethod("SNPData", signature(ref_count = "Matrix", alt_count = "Matrix", snp_info = "data.frame", barcode_info = "data.frame"),
     function(ref_count, alt_count, snp_info, barcode_info, oth_count = NULL) {
         new("SNPData", ref_count = ref_count, alt_count = alt_count, oth_count = oth_count, snp_info = snp_info, barcode_info = barcode_info)
@@ -157,25 +163,39 @@ setMethod("SNPData", signature(ref_count = "Matrix", alt_count = "Matrix", snp_i
 )
 
 # Accessors
-setGeneric("ref_count", function(object) standardGeneric("ref_count"))
-setMethod("ref_count", signature(object = "SNPData"), function(object) object@ref_count)
+#' @exportMethod ref_count
+setGeneric("ref_count", function(x) standardGeneric("ref_count"))
+#' @exportMethod ref_count
+setMethod("ref_count", signature(x = "SNPData"), function(x) x@ref_count)
 
-setGeneric("alt_count", function(object) standardGeneric("alt_count"))
-setMethod("alt_count", signature(object = "SNPData"), function(object) object@alt_count)
+#' @exportMethod alt_count
+setGeneric("alt_count", function(x) standardGeneric("alt_count"))
+#' @exportMethod alt_count
+setMethod("alt_count", signature(x = "SNPData"), function(x) x@alt_count)
 
-setGeneric("oth_count", function(object) standardGeneric("oth_count"))
-setMethod("oth_count", signature(object = "SNPData"), function(object) object@oth_count)
+#' @exportMethod oth_count
+setGeneric("oth_count", function(x) standardGeneric("oth_count"))
+#' @exportMethod oth_count
+setMethod("oth_count", signature(x = "SNPData"), function(x) x@oth_count)
 
-setGeneric("get_snp_info", function(object) standardGeneric("get_snp_info"))
-setMethod("get_snp_info", signature(object = "SNPData"), function(object) object@snp_info)
+#' @exportMethod get_snp_info
+setGeneric("get_snp_info", function(x) standardGeneric("get_snp_info"))
+#' @exportMethod get_snp_info
+setMethod("get_snp_info", signature(x = "SNPData"), function(x) x@snp_info)
 
-setGeneric("get_barcode_info", function(object) standardGeneric("get_barcode_info"))
-setMethod("get_barcode_info", signature(object = "SNPData"), function(object) object@barcode_info)
+#' @exportMethod get_barcode_info
+setGeneric("get_barcode_info", function(x) standardGeneric("get_barcode_info"))
+#' @exportMethod get_barcode_info
+setMethod("get_barcode_info", signature(x = "SNPData"), function(x) x@barcode_info)
 
-setGeneric("get_sample_info", function(object) standardGeneric("get_sample_info"))
-setMethod("get_sample_info", signature(object = "SNPData"), function(object) get_barcode_info(object))
+#' @exportMethod get_sample_info
+setGeneric("get_sample_info", function(x) standardGeneric("get_sample_info"))
+#' @exportMethod get_sample_info
+setMethod("get_sample_info", signature(x = "SNPData"), function(x) get_barcode_info(x))
 
+#' @exportMethod nrow
 setMethod("nrow", signature(x = "SNPData"), function(x) nrow(x@ref_count))
+#' @exportMethod ncol
 setMethod("ncol", signature(x = "SNPData"), function(x) ncol(x@ref_count))
 
 # Dimensions
@@ -184,15 +204,20 @@ setMethod("ncol", signature(x = "SNPData"), function(x) ncol(x@ref_count))
 #' @param x A SNPData object
 #' @return A numeric vector of length 2 giving the number of SNPs and samples
 #' @rdname SNPData-class
-#' @export
+#' @exportMethod dim
 setMethod("dim", signature(x = "SNPData"), function(x) c(nrow(x@alt_count), ncol(x@alt_count)))
+#' @exportMethod nrow
 setMethod("nrow", signature(x = "SNPData"), function(x) nrow(x@alt_count))
+#' @exportMethod ncol
 setMethod("ncol", signature(x = "SNPData"), function(x) ncol(x@alt_count))
 
+#' @exportMethod rownames
 setMethod("rownames", signature(x = "SNPData"), function(x) rownames(x@alt_count))
+#' @exportMethod colnames
 setMethod("colnames", signature(x = "SNPData"), function(x) colnames(x@alt_count))
 
 # Show method
+#' @exportMethod show
 setMethod("show", signature(object = "SNPData"),
     function(object) {
         cat("Object of class 'SNPData'", "\n")
@@ -205,7 +230,9 @@ setMethod("show", signature(object = "SNPData"),
 )
 
 # Coverage method
+#' @exportMethod coverage
 setGeneric("coverage", function(x) standardGeneric("coverage"))
+#' @exportMethod coverage
 setMethod("coverage", signature(x = "SNPData"),
     function(x) {
         x@alt_count + x@ref_count

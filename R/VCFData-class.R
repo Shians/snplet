@@ -75,7 +75,9 @@ setMethod("initialize", signature(.Object = "VCFData"),
 )
 
 # Constructor
+#' @exportMethod VCFData
 setGeneric("VCFData", function(header, samples, variants) standardGeneric("VCFData"))
+#' @exportMethod VCFData
 setMethod("VCFData", signature(header = "character", samples = "character", variants = "data.frame"),
     function(header, samples, variants) {
         new("VCFData", header = header, samples = samples, variants = variants)
@@ -83,17 +85,25 @@ setMethod("VCFData", signature(header = "character", samples = "character", vari
 )
 
 # Accessors
-setGeneric("get_header", function(object) standardGeneric("get_header"))
-setMethod("get_header", signature(object = "VCFData"), function(object) object@header)
+#' @exportMethod get_header
+setGeneric("get_header", function(x) standardGeneric("get_header"))
+#' @exportMethod get_header
+setMethod("get_header", signature(x = "VCFData"), function(x) x@header)
 
-setGeneric("get_samples", function(object) standardGeneric("get_samples"))
-setMethod("get_samples", signature(object = "VCFData"), function(object) object@samples)
+#' @exportMethod get_samples
+setGeneric("get_samples", function(x) standardGeneric("get_samples"))
+#' @exportMethod get_samples
+setMethod("get_samples", signature(x = "VCFData"), function(x) x@samples)
 
-setGeneric("get_variants", function(object) standardGeneric("get_variants"))
-setMethod("get_variants", signature(object = "VCFData"), function(object) object@variants)
+#' @exportMethod get_variants
+setGeneric("get_variants", function(x) standardGeneric("get_variants"))
+#' @exportMethod get_variants
+setMethod("get_variants", signature(x = "VCFData"), function(x) x@variants)
 
 # Dimensions
+#' @exportMethod nrow
 setMethod("nrow", signature(x = "VCFData"), function(x) nrow(x@variants))
+#' @exportMethod ncol
 setMethod("ncol", signature(x = "VCFData"), function(x) ncol(x@variants))
 
 #' Get dimensions of a VCFData object
@@ -101,20 +111,23 @@ setMethod("ncol", signature(x = "VCFData"), function(x) ncol(x@variants))
 #' @param x A VCFData object
 #' @return A numeric vector of length 2 giving the number of variants and columns
 #' @rdname VCFData-class
-#' @export
+#' @exportMethod dim
 setMethod("dim", signature(x = "VCFData"), function(x) c(nrow(x@variants), ncol(x@variants)))
 
+#' @exportMethod rownames
 setMethod("rownames", signature(x = "VCFData"), function(x) rownames(x@variants))
+#' @exportMethod colnames
 setMethod("colnames", signature(x = "VCFData"), function(x) colnames(x@variants))
 
 # Show method
+#' @exportMethod show
 setMethod("show", signature(object = "VCFData"),
     function(object) {
         cat("Object of class 'VCFData'", "\n")
         cat("Dimensions: ", nrow(object), " variants x ", ncol(object), " columns", "\n")
-        cat("Samples: ", length(object@samples), " (", 
-            paste(head(object@samples, 3), collapse = ", "), 
-            if(length(object@samples) > 3) "..." else "", ")", "\n")
+        cat("Samples: ", length(object@samples), " (",
+            paste(head(object@samples, 3), collapse = ", "),
+            if (length(object@samples) > 3) "..." else "", ")", "\n")
         cat("Header lines: ", length(object@header), "\n")
         cat("Variants preview:", "\n")
         print(head(object@variants))
@@ -134,12 +147,12 @@ setMethod("[", signature(x = "VCFData", i = "ANY", j = "ANY"),
     function(x, i, j) {
         if (missing(i)) i <- seq_len(nrow(x@variants))
         if (missing(j)) j <- seq_len(ncol(x@variants))
-        
+
         variants_subset <- x@variants[i, j, drop = FALSE]
-        
-        new("VCFData", 
-            header = x@header, 
-            samples = x@samples, 
+
+        new("VCFData",
+            header = x@header,
+            samples = x@samples,
             variants = variants_subset)
     }
 )
