@@ -3,31 +3,77 @@
 \docType{class}
 \name{VCFData-class}
 \alias{VCFData-class}
+\alias{VCFData}
+\alias{VCFData,character,character,data.frame-method}
+\alias{get_header}
+\alias{get_header,VCFData-method}
+\alias{get_samples}
+\alias{get_samples,VCFData-method}
+\alias{get_variants}
+\alias{get_variants,VCFData-method}
+\alias{nrow,VCFData-method}
+\alias{ncol,VCFData-method}
 \alias{dim,VCFData-method}
+\alias{rownames,VCFData-method}
+\alias{colnames,VCFData-method}
+\alias{show,VCFData-method}
 \alias{[,VCFData,ANY,ANY,ANY-method}
 \title{VCFData: S4 class for VCF variant data}
 \usage{
+VCFData(header, samples, variants)
+
+\S4method{VCFData}{character,character,data.frame}(header, samples, variants)
+
+get_header(x)
+
+\S4method{get_header}{VCFData}(x)
+
+get_samples(x)
+
+\S4method{get_samples}{VCFData}(x)
+
+get_variants(x)
+
+\S4method{get_variants}{VCFData}(x)
+
+\S4method{nrow}{VCFData}(x)
+
+\S4method{ncol}{VCFData}(x)
+
 \S4method{dim}{VCFData}(x)
+
+\S4method{rownames}{VCFData}(x)
+
+\S4method{colnames}{VCFData}(x)
+
+\S4method{show}{VCFData}(object)
 
 \S4method{[}{VCFData,ANY,ANY,ANY}(x, i, j)
 }
 \arguments{
+\item{header}{A character vector containing VCF header lines}
+
+\item{samples}{A character vector of sample names from the VCF file}
+
+\item{variants}{A data.frame containing variant information with standard VCF columns}
+
 \item{x}{A VCFData object}
+
+\item{object}{A VCFData object for show method}
 
 \item{i}{Numeric or logical vector for subsetting variants (rows)}
 
 \item{j}{Numeric or logical vector for subsetting columns}
 }
 \value{
-A numeric vector of length 2 giving the number of variants and
-  columns
+A numeric vector of length 2 giving the number of variants and columns
 
 A subsetted VCFData object
 }
 \description{
 An S4 class to store and manipulate VCF (Variant Call Format) data.
-This class stores variant information, sample metadata, and VCF header
-information to support genomic variant analysis workflows.
+This class stores variant information, sample metadata, and VCF header information
+to support genomic variant analysis workflows.
 }
 \section{Slots}{
 
@@ -36,8 +82,7 @@ information to support genomic variant analysis workflows.
 
 \item{\code{samples}}{A character vector of sample names from the VCF file}
 
-\item{\code{variants}}{A data.frame containing variant information with standard VCF
-columns}
+\item{\code{variants}}{A data.frame containing variant information with standard VCF columns}
 }}
 
 \section{Accessors}{
