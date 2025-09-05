@@ -220,8 +220,8 @@ check_filter_expr <- function(df, dots, df_name = "data.frame") {
                 i <- i + 1
             },
             error = function(e) {
-                # Break on error (likely reached top of call stack)
-                break
+                # Return NULL on error (will be handled by outer check)
+                # Can't use break here, so just return - loop will exit naturally
             }
         )
     }
