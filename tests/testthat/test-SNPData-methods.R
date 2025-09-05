@@ -54,7 +54,7 @@ test_that("SNPData count data frame methods work correctly", {
     # Verify barcode_count_df returns a tibble
     expect_s3_class(cell_df, "tbl_df")
     # Check that result has expected number of rows (2 SNPs x 2 cells)
-    expect_equal(nrow(cell_df), 4)  # 2 SNPs x 2 cells
+    expect_equal(nrow(cell_df), 4) # 2 SNPs x 2 cells
     expected_barcode_cols <- c("snp_id", "cell_id", "ref_count", "alt_count", "total_count", "ref_ratio", "maf")
     # Verify all expected columns are present in barcode data frame
     expect_true(all(expected_barcode_cols %in% colnames(cell_df)))
@@ -64,7 +64,7 @@ test_that("SNPData count data frame methods work correctly", {
     # Verify donor_count_df returns a tibble
     expect_s3_class(donor_df, "tbl_df")
     # Check that result has expected number of rows (2 SNPs x 1 donor)
-    expect_equal(nrow(donor_df), 2)  # 2 SNPs x 1 donor
+    expect_equal(nrow(donor_df), 2) # 2 SNPs x 1 donor
     expected_donor_cols <- c("snp_id", "donor", "ref_count", "alt_count", "total_count", "ref_ratio", "maf")
     # Verify all expected columns are present in donor data frame
     expect_true(all(expected_donor_cols %in% colnames(donor_df)))
@@ -74,8 +74,17 @@ test_that("SNPData count data frame methods work correctly", {
     # Verify clonotype_count_df returns a tibble
     expect_s3_class(clonotype_df, "tbl_df")
     # Check that result has expected number of rows (2 SNPs x 2 clonotypes)
-    expect_equal(nrow(clonotype_df), 4)  # 2 SNPs x 2 clonotypes
-    expected_clonotype_cols <- c("snp_id", "clonotype", "ref_count", "alt_count", "total_count", "ref_ratio", "maf", "donor")
+    expect_equal(nrow(clonotype_df), 4) # 2 SNPs x 2 clonotypes
+    expected_clonotype_cols <- c(
+        "snp_id",
+        "clonotype",
+        "ref_count",
+        "alt_count",
+        "total_count",
+        "ref_ratio",
+        "maf",
+        "donor"
+    )
     # Verify all expected columns are present in clonotype data frame
     expect_true(all(expected_clonotype_cols %in% colnames(clonotype_df)))
 })
@@ -93,14 +102,14 @@ test_that("filter_snps and filter_barcodes validate column names", {
     # Verify error when filtering SNPs by non-existent column
     expect_error(
         filter_snps(snp_data, not_a_column > 0),
-        "The following columns are not present in snp_info or parent environment: not_a_column"
+        "The following columns are not present in snp_info or accessible environment: not_a_column"
     )
 
     # Test filter_barcodes with non-existent column
     # Verify error when filtering barcodes by non-existent column
     expect_error(
         filter_barcodes(snp_data, not_a_column > 0),
-        "The following columns are not present in barcode_info or parent environment: not_a_column"
+        "The following columns are not present in barcode_info or accessible environment: not_a_column"
     )
 
     # Test filter_snps with valid column
@@ -110,6 +119,95 @@ test_that("filter_snps and filter_barcodes validate column names", {
     # Test filter_barcodes with valid column
     # Verify successful filtering when using valid sample info column
     expect_s4_class(filter_barcodes(snp_data, donor == "donor_1"), "SNPData")
+})
+
+test_that("variable resolution in filter expressions works correctly", {
+    # Setup
+    snp_data <- SNPData(
+        alt_count = test_alt_count,
+        ref_count = test_ref_count,
+        snp_info = test_snp_info,
+        barcode_info = test_barcode_info
+    )
+
+    # Test function parameter resolution - basic case
+    filter_with_param <- function(data, threshold_value) {
+        filter_barcodes(data, donor == threshold_value)
+    }
+    # Verify function parameters are accessible in filter expressions
+    expect_s4_class(filter_with_param(snp_data, "donor_1"), "SNPData")
+
+    # Test nested function variable resolution
+    outer_function <- function(data, outer_var) {
+        inner_function <- function() {
+            # outer_var should be accessible due to lexical scoping
+            filter_barcodes(data, donor == outer_var)
+        }
+        inner_function()
+    }
+    # Verify lexically scoped variables are accessible
+    expect_s4_class(outer_function(snp_data, "donor_1"), "SNPData")
+
+    # Test multiple parameter resolution
+    multi_param_filter <- function(data, param1, param2) {
+        # Both parameters should be accessible
+        result1 <- filter_barcodes(data, donor == param1)
+        result2 <- filter_snps(result1, pos > param2)
+        result2
+    }
+    # Verify multiple parameters work correctly
+    expect_s4_class(multi_param_filter(snp_data, "donor_1", 50), "SNPData")
+
+    # Test that truly non-existent variables still cause errors
+    test_nonexistent_var <- function(data) {
+        # completely_made_up_var should not exist anywhere
+        filter_barcodes(data, donor == completely_made_up_var)
+    }
+    # Verify non-existent variables still cause appropriate errors
+    expect_error(
+        test_nonexistent_var(snp_data),
+        "completely_made_up_var"
+    )
+
+    # Test local environment variables
+    test_global_var <- "donor_1"
+    # Verify local variables are accessible in filter expressions
+    expect_s4_class(filter_barcodes(snp_data, donor == test_global_var), "SNPData")
+})
+
+test_that("variable resolution respects R scoping rules", {
+    # Setup
+    snp_data <- SNPData(
+        alt_count = test_alt_count,
+        ref_count = test_ref_count,
+        snp_info = test_snp_info,
+        barcode_info = test_barcode_info
+    )
+
+    # Test that variables in enclosing environments work
+    create_filter_function <- function(default_donor) {
+        function(data, override_donor = NULL) {
+            target_donor <- if (is.null(override_donor)) default_donor else override_donor
+            filter_barcodes(data, donor == target_donor)
+        }
+    }
+
+    filter_func <- create_filter_function("donor_1")
+    # Verify closure variables are accessible
+    expect_s4_class(filter_func(snp_data), "SNPData")
+    # Verify parameter override works
+    expect_s4_class(filter_func(snp_data, "donor_1"), "SNPData")
+
+    # Test with local variables in function scope
+    test_local_vars <- function(data) {
+        local_threshold <- 150
+        local_donor <- "donor_1"
+        result1 <- filter_snps(data, pos > local_threshold)
+        result2 <- filter_barcodes(result1, donor == local_donor)
+        result2
+    }
+    # Verify local variables within functions are accessible
+    expect_s4_class(test_local_vars(snp_data), "SNPData")
 })
 
 test_that("aggregate_count_df works correctly with various grouping columns", {
@@ -126,20 +224,20 @@ test_that("aggregate_count_df works correctly with various grouping columns", {
     # Verify donor aggregation returns a tibble
     expect_s3_class(donor_agg_df, "tbl_df")
     # Check that result has expected number of rows (2 SNPs x 1 donor)
-    expect_equal(nrow(donor_agg_df), 2)  # 2 SNPs x 1 unique donor
+    expect_equal(nrow(donor_agg_df), 2) # 2 SNPs x 1 unique donor
     expected_cols <- c("snp_id", "donor", "ref_count", "alt_count", "total_count", "ref_ratio", "maf")
     # Verify all expected columns are present
     expect_true(all(expected_cols %in% colnames(donor_agg_df)))
     # Check that counts are properly aggregated (sum of both cells)
-    expect_equal(donor_agg_df$ref_count[1], 5 + 7)  # ref counts for snp_1: cell_1 + cell_2
-    expect_equal(donor_agg_df$alt_count[1], 1 + 3)  # alt counts for snp_1: cell_1 + cell_2
+    expect_equal(donor_agg_df$ref_count[1], 5 + 7) # ref counts for snp_1: cell_1 + cell_2
+    expect_equal(donor_agg_df$alt_count[1], 1 + 3) # alt counts for snp_1: cell_1 + cell_2
 
     # Test aggregation by clonotype
     clonotype_agg_df <- aggregate_count_df(snp_data, "clonotype")
     # Verify clonotype aggregation returns a tibble
     expect_s3_class(clonotype_agg_df, "tbl_df")
     # Check that result has expected number of rows (2 SNPs x 2 clonotypes)
-    expect_equal(nrow(clonotype_agg_df), 4)  # 2 SNPs x 2 unique clonotypes
+    expect_equal(nrow(clonotype_agg_df), 4) # 2 SNPs x 2 unique clonotypes
     expected_clonotype_cols <- c("snp_id", "clonotype", "ref_count", "alt_count", "total_count", "ref_ratio", "maf")
     # Verify all expected columns are present for clonotype
     expect_true(all(expected_clonotype_cols %in% colnames(clonotype_agg_df)))
@@ -149,7 +247,7 @@ test_that("aggregate_count_df works correctly with various grouping columns", {
     # Verify cell_type aggregation returns a tibble
     expect_s3_class(cell_type_agg_df, "tbl_df")
     # Check that result has expected number of rows (2 SNPs x 2 cell_types)
-    expect_equal(nrow(cell_type_agg_df), 4)  # 2 SNPs x 2 unique cell_types
+    expect_equal(nrow(cell_type_agg_df), 4) # 2 SNPs x 2 unique cell_types
     expected_cell_type_cols <- c("snp_id", "cell_type", "ref_count", "alt_count", "total_count", "ref_ratio", "maf")
     # Verify all expected columns are present for cell_type
     expect_true(all(expected_cell_type_cols %in% colnames(cell_type_agg_df)))
@@ -190,26 +288,26 @@ test_that("aggregate_count_df handles edge cases correctly", {
         snp_info = test_snp_info,
         barcode_info = test_barcode_info_na
     )
-    
+
     # Verify function handles NA values by excluding them
     result_na <- suppressMessages(aggregate_count_df(snp_data_na, "donor"))
     # Check that function issues warning about NA values (checking this indirectly by verifying behavior)
     expect_true(exists("result_na"))
     # Check that result excludes NA groups
-    expect_equal(nrow(result_na), 2)  # 2 SNPs x 1 non-NA donor
+    expect_equal(nrow(result_na), 2) # 2 SNPs x 1 non-NA donor
 })
 
 test_that("aggregate_count_df produces correct calculations", {
     # Setup with known values for easier testing
     test_alt_simple <- Matrix::Matrix(matrix(c(10, 20, 30, 40), nrow = 2, ncol = 2))
     test_ref_simple <- Matrix::Matrix(matrix(c(90, 80, 70, 60), nrow = 2, ncol = 2))
-    
+
     test_barcode_info_simple <- data.frame(
         cell_id = c("cell_1", "cell_2"),
-        group_col = c("group_A", "group_A"),  # Both cells in same group
+        group_col = c("group_A", "group_A"), # Both cells in same group
         stringsAsFactors = FALSE
     )
-    
+
     snp_data_simple <- SNPData(
         alt_count = test_alt_simple,
         ref_count = test_ref_simple,
@@ -218,11 +316,11 @@ test_that("aggregate_count_df produces correct calculations", {
     )
 
     result <- aggregate_count_df(snp_data_simple, "group_col")
-    
+
     # Check aggregated counts for first SNP
     # Verify ref_count aggregation: 90 + 70 = 160
     expect_equal(result$ref_count[1], 160)
-    # Verify alt_count aggregation: 10 + 30 = 40  
+    # Verify alt_count aggregation: 10 + 30 = 40
     expect_equal(result$alt_count[1], 40)
     # Verify total_count calculation: 160 + 40 = 200
     expect_equal(result$total_count[1], 200)
@@ -231,7 +329,7 @@ test_that("aggregate_count_df produces correct calculations", {
     # Verify maf calculation: min(160, 40)/200 = 0.2
     expect_equal(result$maf[1], 0.2)
 
-    # Check aggregated counts for second SNP  
+    # Check aggregated counts for second SNP
     # Verify ref_count aggregation: 80 + 60 = 140
     expect_equal(result$ref_count[2], 140)
     # Verify alt_count aggregation: 20 + 40 = 60

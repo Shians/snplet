@@ -195,13 +195,42 @@ setMethod(
 check_filter_expr <- function(df, dots, df_name = "data.frame") {
     vars <- unique(unlist(lapply(dots, function(q) all.vars(rlang::get_expr(q)))))
     missing_vars <- setdiff(vars, colnames(df))
-    # Only error if missing_vars are not found in parent.frame()
-    still_missing <- missing_vars[!vapply(missing_vars, exists, logical(1), envir = parent.frame())]
+
+    # Check if variables exist in any accessible parent frame environments
+    i <- 1
+    # Check if missing variables actually exist in accessible environments
+    still_missing <- missing_vars
+    while (length(still_missing) > 0) {
+        tryCatch(
+            {
+                parent_frame <- parent.frame(i)
+                if (identical(parent_frame, globalenv())) {
+                    break
+                }
+
+                # Check which missing variables exist in this frame
+                found_vars <- still_missing[vapply(
+                    still_missing,
+                    exists,
+                    logical(1),
+                    envir = parent_frame,
+                    inherits = FALSE
+                )]
+                still_missing <- setdiff(still_missing, found_vars)
+                i <- i + 1
+            },
+            error = function(e) {
+                # Return NULL on error (will be handled by outer check)
+                # Can't use break here, so just return - loop will exit naturally
+            }
+        )
+    }
+
     if (length(still_missing) > 0) {
         stop(paste0(
             "The following columns are not present in ",
             df_name,
-            " or parent environment: ",
+            " or accessible environment: ",
             paste(still_missing, collapse = ", ")
         ))
     }
