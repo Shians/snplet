@@ -200,10 +200,15 @@ merge_cell_annotations <- function(donor_info, vdj_info, barcode_column, clonoty
     # Standardize column names
     if ("cell" %in% colnames(donor_info)) {
         donor_info <- donor_info %>%
-            dplyr::rename(
-                barcode = cell,
-                donor = donor_id
-            )
+            dplyr::rename(barcode = cell)
+    } else if ("cell_id" %in% colnames(donor_info)) {
+        donor_info <- donor_info %>%
+            dplyr::rename(barcode = cell_id)
+    }
+
+    if ("donor_id" %in% colnames(donor_info)) {
+        donor_info <- donor_info %>%
+            dplyr::rename(donor = donor_id)
     }
 
     # Ensure barcode_column exists in vdj_info

@@ -67,8 +67,8 @@ test_that("read_vcf_base works correctly", {
     expect_type(vcf_data$alt, "character")
 })
 
-test_that("merge_cell_annotations works correctly", {
-    # Setup - Create test data
+test_that("merge_cell_annotations works correctly with standard column names", {
+    # Setup - Create test data with standard column names
     donor_info <- data.frame(
         cell = c("CELL1", "CELL2", "CELL3"),
         donor_id = c("donor1", "donor2", "donor1"),
@@ -100,6 +100,8 @@ test_that("merge_cell_annotations works correctly", {
     # Test merge behavior (left join on donor_info)
     # Verify only donor_info cells are included (left join behavior)
     expect_equal(sort(result$barcode), c("CELL1", "CELL2", "CELL3"))
+    # Verify cell_id values are generated sequentially
+    expect_equal(sort(result$cell_id), c("cell_1", "cell_2", "cell_3"))
     # Check that result has expected number of rows
     expect_equal(nrow(result), 3)
 
@@ -114,7 +116,117 @@ test_that("merge_cell_annotations works correctly", {
     # Verify CELL3 has correct donor assignment
     expect_equal(cell3_row$donor, "donor1")
     # Verify CELL3 has NA clonotype (not present in VDJ data)
-    expect_true(is.na(cell3_row$clonotype))  # Not in VDJ data
+    expect_true(is.na(cell3_row$clonotype)) # Not in VDJ data
+})
+
+test_that("merge_cell_annotations handles cell_id column naming", {
+    # Setup - Create test data with cell_id instead of cell
+    donor_info <- data.frame(
+        cell_id = c("CELL1", "CELL2", "CELL3"),
+        donor_id = c("donor1", "donor2", "donor1"),
+        stringsAsFactors = FALSE
+    )
+
+    vdj_info <- data.frame(
+        barcode = c("CELL1", "CELL2", "CELL4"),
+        raw_clonotype_id = c("clonotype1", "clonotype2", "clonotype1"),
+        stringsAsFactors = FALSE
+    )
+
+    # Execute merge
+    result <- merge_cell_annotations(
+        donor_info = donor_info,
+        vdj_info = vdj_info,
+        barcode_column = "barcode",
+        clonotype_column = "raw_clonotype_id"
+    )
+
+    # Test that cell_id column was renamed to barcode for internal processing
+    # Verify merge_cell_annotations returns a data frame
+    expect_s3_class(result, "data.frame")
+    # Check that all required columns are present after merge
+    expect_true(all(c("cell_id", "donor", "clonotype") %in% colnames(result)))
+    # Verify correct number of rows after merge
+    expect_equal(nrow(result), 3)
+
+    # Test specific merge results
+    cell1_row <- result[result$barcode == "CELL1", ]
+    # Verify CELL1 has correct donor assignment with cell_id input
+    expect_equal(cell1_row$donor, "donor1")
+    # Verify CELL1 has correct clonotype assignment with cell_id input
+    expect_equal(cell1_row$clonotype, "clonotype1")
+})
+
+test_that("merge_cell_annotations handles donor column without donor_id", {
+    # Setup - Create test data with donor instead of donor_id
+    donor_info <- data.frame(
+        cell = c("CELL1", "CELL2", "CELL3"),
+        donor = c("donor1", "donor2", "donor1"),
+        stringsAsFactors = FALSE
+    )
+
+    vdj_info <- data.frame(
+        barcode = c("CELL1", "CELL2", "CELL4"),
+        raw_clonotype_id = c("clonotype1", "clonotype2", "clonotype1"),
+        stringsAsFactors = FALSE
+    )
+
+    # Execute merge
+    result <- merge_cell_annotations(
+        donor_info = donor_info,
+        vdj_info = vdj_info,
+        barcode_column = "barcode",
+        clonotype_column = "raw_clonotype_id"
+    )
+
+    # Test that donor column is preserved without renaming
+    # Verify merge_cell_annotations returns a data frame
+    expect_s3_class(result, "data.frame")
+    # Check that all required columns are present after merge
+    expect_true(all(c("cell_id", "donor", "clonotype") %in% colnames(result)))
+
+    # Test specific merge results
+    cell1_row <- result[result$barcode == "CELL1", ]
+    # Verify CELL1 has correct donor assignment when donor column already exists
+    expect_equal(cell1_row$donor, "donor1")
+})
+
+test_that("merge_cell_annotations handles mixed column naming scenarios", {
+    # Setup - Create test data with cell_id and no donor_id (only donor)
+    donor_info <- data.frame(
+        cell_id = c("CELL1", "CELL2", "CELL3"),
+        donor = c("donor1", "donor2", "donor1"),
+        stringsAsFactors = FALSE
+    )
+
+    vdj_info <- data.frame(
+        barcode = c("CELL1", "CELL2", "CELL4"),
+        raw_clonotype_id = c("clonotype1", "clonotype2", "clonotype1"),
+        stringsAsFactors = FALSE
+    )
+
+    # Execute merge
+    result <- merge_cell_annotations(
+        donor_info = donor_info,
+        vdj_info = vdj_info,
+        barcode_column = "barcode",
+        clonotype_column = "raw_clonotype_id"
+    )
+
+    # Test mixed column naming scenario
+    # Verify merge_cell_annotations returns a data frame
+    expect_s3_class(result, "data.frame")
+    # Check that all required columns are present after merge
+    expect_true(all(c("cell_id", "donor", "clonotype") %in% colnames(result)))
+    # Verify correct number of rows after merge
+    expect_equal(nrow(result), 3)
+
+    # Test specific merge results
+    cell2_row <- result[result$barcode == "CELL2", ]
+    # Verify CELL2 has correct donor assignment in mixed naming scenario
+    expect_equal(cell2_row$donor, "donor2")
+    # Verify CELL2 has correct clonotype assignment in mixed naming scenario
+    expect_equal(cell2_row$clonotype, "clonotype2")
 })
 
 test_that("import_cellsnp works with example data", {
