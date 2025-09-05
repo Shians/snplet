@@ -254,13 +254,14 @@ test_that("aggregate_count_df works correctly with various grouping columns", {
 
     # Test with test_maf = FALSE
     no_maf_df <- aggregate_count_df(snp_data, "donor", test_maf = FALSE)
-    # Verify test_maf column is not present when test_maf = FALSE
-    expect_false("test_maf" %in% colnames(no_maf_df))
+    expected_maf_cols <- c("minor_allele_count", "p_val", "adj_p_val")
+    # Verify test_maf function columns are not present when test_maf = FALSE
+    expect_false(any(expected_maf_cols %in% colnames(no_maf_df)))
 
     # Test with test_maf = TRUE (default)
     with_maf_df <- aggregate_count_df(snp_data, "donor", test_maf = TRUE)
-    # Verify test_maf column is present when test_maf = TRUE
-    expect_true("test_maf" %in% colnames(with_maf_df))
+    # Verify test_maf function columns are present when test_maf = TRUE
+    expect_true(all(expected_maf_cols %in% colnames(with_maf_df)))
 })
 
 test_that("aggregate_count_df handles edge cases correctly", {
@@ -295,6 +296,148 @@ test_that("aggregate_count_df handles edge cases correctly", {
     expect_true(exists("result_na"))
     # Check that result excludes NA groups
     expect_equal(nrow(result_na), 2) # 2 SNPs x 1 non-NA donor
+})
+
+test_that("test_maf=TRUE adds correct statistical columns to barcode_count_df", {
+    # Setup
+    snp_data <- SNPData(
+        alt_count = test_alt_count,
+        ref_count = test_ref_count,
+        snp_info = test_snp_info,
+        barcode_info = test_barcode_info
+    )
+
+    # Test with test_maf = TRUE (default)
+    result_with_maf <- barcode_count_df(snp_data, test_maf = TRUE)
+    expected_maf_cols <- c("minor_allele_count", "p_val", "adj_p_val")
+    # Verify test_maf function columns are added when test_maf = TRUE
+    expect_true(all(expected_maf_cols %in% colnames(result_with_maf)))
+    # Verify minor_allele_count is calculated correctly
+    expect_true(all(result_with_maf$minor_allele_count == pmin(result_with_maf$ref_count, result_with_maf$alt_count)))
+    # Verify p_val and adj_p_val are numeric
+    expect_true(is.numeric(result_with_maf$p_val))
+    expect_true(is.numeric(result_with_maf$adj_p_val))
+
+    # Test with test_maf = FALSE
+    result_without_maf <- barcode_count_df(snp_data, test_maf = FALSE)
+    # Verify test_maf columns are not present when test_maf = FALSE
+    expect_false(any(expected_maf_cols %in% colnames(result_without_maf)))
+})
+
+test_that("test_maf=TRUE adds correct statistical columns to donor_count_df", {
+    # Setup
+    snp_data <- SNPData(
+        alt_count = test_alt_count,
+        ref_count = test_ref_count,
+        snp_info = test_snp_info,
+        barcode_info = test_barcode_info
+    )
+
+    # Test with test_maf = TRUE (default)
+    result_with_maf <- donor_count_df(snp_data, test_maf = TRUE)
+    expected_maf_cols <- c("minor_allele_count", "p_val", "adj_p_val")
+    # Verify test_maf function columns are added when test_maf = TRUE
+    expect_true(all(expected_maf_cols %in% colnames(result_with_maf)))
+    # Verify minor_allele_count is calculated correctly
+    expect_true(all(result_with_maf$minor_allele_count == pmin(result_with_maf$ref_count, result_with_maf$alt_count)))
+    # Verify p_val and adj_p_val are numeric
+    expect_true(is.numeric(result_with_maf$p_val))
+    expect_true(is.numeric(result_with_maf$adj_p_val))
+
+    # Test with test_maf = FALSE
+    result_without_maf <- donor_count_df(snp_data, test_maf = FALSE)
+    # Verify test_maf columns are not present when test_maf = FALSE
+    expect_false(any(expected_maf_cols %in% colnames(result_without_maf)))
+})
+
+test_that("test_maf=TRUE adds correct statistical columns to clonotype_count_df", {
+    # Setup
+    snp_data <- SNPData(
+        alt_count = test_alt_count,
+        ref_count = test_ref_count,
+        snp_info = test_snp_info,
+        barcode_info = test_barcode_info
+    )
+
+    # Test with test_maf = TRUE (default)
+    result_with_maf <- clonotype_count_df(snp_data, test_maf = TRUE)
+    expected_maf_cols <- c("minor_allele_count", "p_val", "adj_p_val")
+    # Verify test_maf function columns are added when test_maf = TRUE
+    expect_true(all(expected_maf_cols %in% colnames(result_with_maf)))
+    # Verify minor_allele_count is calculated correctly
+    expect_true(all(result_with_maf$minor_allele_count == pmin(result_with_maf$ref_count, result_with_maf$alt_count)))
+    # Verify p_val and adj_p_val are numeric
+    expect_true(is.numeric(result_with_maf$p_val))
+    expect_true(is.numeric(result_with_maf$adj_p_val))
+    # Verify donor column is still present (specific to clonotype_count_df)
+    expect_true("donor" %in% colnames(result_with_maf))
+
+    # Test with test_maf = FALSE
+    result_without_maf <- clonotype_count_df(snp_data, test_maf = FALSE)
+    # Verify test_maf columns are not present when test_maf = FALSE
+    expect_false(any(expected_maf_cols %in% colnames(result_without_maf)))
+})
+
+test_that("test_maf=TRUE adds correct statistical columns to aggregate_count_df", {
+    # Setup
+    snp_data <- SNPData(
+        alt_count = test_alt_count,
+        ref_count = test_ref_count,
+        snp_info = test_snp_info,
+        barcode_info = test_barcode_info
+    )
+
+    # Test with test_maf = TRUE (default) for donor aggregation
+    result_with_maf <- aggregate_count_df(snp_data, "donor", test_maf = TRUE)
+    expected_maf_cols <- c("minor_allele_count", "p_val", "adj_p_val")
+    # Verify test_maf function columns are added when test_maf = TRUE
+    expect_true(all(expected_maf_cols %in% colnames(result_with_maf)))
+    # Verify minor_allele_count is calculated correctly
+    expect_true(all(result_with_maf$minor_allele_count == pmin(result_with_maf$ref_count, result_with_maf$alt_count)))
+    # Verify p_val and adj_p_val are numeric
+    expect_true(is.numeric(result_with_maf$p_val))
+    expect_true(is.numeric(result_with_maf$adj_p_val))
+
+    # Test with test_maf = FALSE
+    result_without_maf <- aggregate_count_df(snp_data, "donor", test_maf = FALSE)
+    # Verify test_maf columns are not present when test_maf = FALSE
+    expect_false(any(expected_maf_cols %in% colnames(result_without_maf)))
+
+    # Test with different grouping column (clonotype) and test_maf = TRUE
+    result_clonotype_maf <- aggregate_count_df(snp_data, "clonotype", test_maf = TRUE)
+    # Verify test_maf columns are present for different grouping variables
+    expect_true(all(expected_maf_cols %in% colnames(result_clonotype_maf)))
+})
+
+test_that("test_maf function produces meaningful statistical results", {
+    # Setup with specific values to test statistical calculations
+    test_alt_specific <- Matrix::Matrix(matrix(c(5, 15, 8, 12), nrow = 2, ncol = 2))
+    test_ref_specific <- Matrix::Matrix(matrix(c(95, 85, 92, 88), nrow = 2, ncol = 2))
+
+    snp_data_specific <- SNPData(
+        alt_count = test_alt_specific,
+        ref_count = test_ref_specific,
+        snp_info = test_snp_info,
+        barcode_info = test_barcode_info
+    )
+
+    result <- barcode_count_df(snp_data_specific, test_maf = TRUE)
+
+    # Verify p-values are between 0 and 1
+    expect_true(all(result$p_val >= 0 & result$p_val <= 1))
+    # Verify adjusted p-values are between 0 and 1
+    expect_true(all(result$adj_p_val >= 0 & result$adj_p_val <= 1))
+    # Verify adjusted p-values are >= original p-values (BH correction property)
+    expect_true(all(result$adj_p_val >= result$p_val))
+    # Verify minor allele count calculation matches expectation
+    expected_minor <- pmin(result$ref_count, result$alt_count)
+    expect_equal(result$minor_allele_count, expected_minor)
+
+    # Test that the function preserves all original columns
+    base_result <- barcode_count_df(snp_data_specific, test_maf = FALSE)
+    original_cols <- colnames(base_result)
+    # Verify all original columns are preserved when test_maf = TRUE
+    expect_true(all(original_cols %in% colnames(result)))
 })
 
 test_that("aggregate_count_df produces correct calculations", {
