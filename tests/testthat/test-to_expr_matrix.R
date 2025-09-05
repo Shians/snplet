@@ -55,17 +55,17 @@ test_that("to_expr_matrix works with barcode level", {
     # Verify function returns matrix
     result <- to_expr_matrix(test_snp_data, level = "barcode")
     expect_s4_class(result, "Matrix")
-    
+
     # Check dimensions
     # Verify matrix has correct dimensions
     expect_equal(dim(result), c(3, 2))
-    
+
     # Check row and column names
     # Verify row names are set correctly
     expect_equal(rownames(result), rownames(test_ref_count))
-    # Verify column names are set correctly 
+    # Verify column names are set correctly
     expect_equal(colnames(result), colnames(test_ref_count))
-    
+
     # Test calculation manually for first element
     # Calculate expected value: sign(ref - alt) * log1p(abs(ref - alt))
     expected_val <- sign(5 - 1) * log1p(abs(5 - 1))
@@ -78,11 +78,11 @@ test_that("to_expr_matrix works with clonotype level", {
     # Verify function returns matrix (may be regular matrix after grouping)
     result <- to_expr_matrix(test_snp_data, level = "clonotype")
     expect_true(is.matrix(result) || inherits(result, "Matrix"))
-    
+
     # Check dimensions (should aggregate by clonotypes)
     # Verify matrix has correct dimensions (3 SNPs, 2 clonotypes)
     expect_equal(dim(result), c(3, 2))
-    
+
     # Check that aggregation occurred
     # Verify column names reflect clonotype grouping
     expect_equal(colnames(result), c("clonotype_1", "clonotype_2"))
@@ -93,11 +93,11 @@ test_that("to_expr_matrix works with donor level", {
     # Verify function returns matrix (may be regular matrix after grouping)
     result <- to_expr_matrix(test_snp_data, level = "donor")
     expect_true(is.matrix(result) || inherits(result, "Matrix"))
-    
+
     # Check dimensions (should aggregate by donors)
     # Verify matrix has correct dimensions (3 SNPs, 2 donors)
     expect_equal(dim(result), c(3, 2))
-    
+
     # Check that aggregation occurred
     # Verify column names reflect donor grouping
     expect_equal(colnames(result), c("donor_1", "donor_2"))
@@ -110,14 +110,14 @@ test_that("to_expr_matrix handles missing clonotype column", {
         donor = c("donor_1", "donor_2"),
         stringsAsFactors = FALSE
     )
-    
+
     snp_data_no_clono <- SNPData(
         ref_count = test_ref_count,
         alt_count = test_alt_count,
         snp_info = test_snp_info,
         barcode_info = barcode_no_clono
     )
-    
+
     # Verify error when clonotype column is missing
     expect_error(
         to_expr_matrix(snp_data_no_clono, level = "clonotype"),
@@ -132,14 +132,14 @@ test_that("to_expr_matrix handles missing donor column", {
         clonotype = c("clonotype_1", "clonotype_2"),
         stringsAsFactors = FALSE
     )
-    
+
     snp_data_no_donor <- SNPData(
         ref_count = test_ref_count,
         alt_count = test_alt_count,
         snp_info = test_snp_info,
         barcode_info = barcode_no_donor
     )
-    
+
     # Verify error when donor column is missing
     expect_error(
         to_expr_matrix(snp_data_no_donor, level = "donor"),
@@ -153,13 +153,13 @@ test_that("to_expr_matrix handles argument matching", {
     result_default <- to_expr_matrix(test_snp_data)
     result_barcode <- to_expr_matrix(test_snp_data, level = "barcode")
     expect_equal(result_default, result_barcode)
-    
+
     # Test partial matching
     # Verify partial matching works for level argument
     result_partial <- to_expr_matrix(test_snp_data, level = "clo")
     result_full <- to_expr_matrix(test_snp_data, level = "clonotype")
     expect_equal(result_partial, result_full)
-    
+
     # Test invalid level
     # Verify error with invalid level
     expect_error(

@@ -102,9 +102,9 @@ test_that("SNPData accessors work correctly", {
     # Check that non_zero_samples column is automatically added
     expect_true("non_zero_samples" %in% colnames(snp_info))
     # Verify coverage calculation: rowSums of alt_count + ref_count
-    expect_equal_unnamed(snp_info$coverage, c(16, 20))  # rowSums of alt_count + ref_count
+    expect_equal_unnamed(snp_info$coverage, c(16, 20)) # rowSums of alt_count + ref_count
     # Verify non_zero_samples count: all samples have counts
-    expect_equal_unnamed(snp_info$non_zero_samples, c(2, 2))  # all samples have counts
+    expect_equal_unnamed(snp_info$non_zero_samples, c(2, 2)) # all samples have counts
 
     # Test get_barcode_info accessor
     barcode_info <- get_barcode_info(snp_data)
@@ -119,9 +119,9 @@ test_that("SNPData accessors work correctly", {
     # Check that non_zero_snps column is automatically added
     expect_true("non_zero_snps" %in% colnames(barcode_info))
     # Verify library_size calculation: colSums of alt_count + ref_count
-    expect_equal_unnamed(barcode_info$library_size, c(14, 22))  # colSums of alt_count + ref_count
+    expect_equal_unnamed(barcode_info$library_size, c(14, 22)) # colSums of alt_count + ref_count
     # Verify non_zero_snps count: all SNPs have counts
-    expect_equal_unnamed(barcode_info$non_zero_snps, c(2, 2))  # all SNPs have counts
+    expect_equal_unnamed(barcode_info$non_zero_snps, c(2, 2)) # all SNPs have counts
 })
 
 test_that("SNPData subsetting works correctly", {
