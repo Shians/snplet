@@ -16,7 +16,6 @@ Writes the components of a SNPData object to an output folder in a format
 compatible with import_cellsnp.
 }
 \examples{
-\dontrun{
+snp_data <- get_example_snpdata()
 export_cellsnp(snp_data, "exported_cellsnp")
-}
 }

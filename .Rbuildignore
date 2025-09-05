@@ -3,6 +3,8 @@
 ^\.Rproj\.user$
 ^\.claude$
 ^\.Rhistory$
+^\.lintr$
+^air.toml$
 ^annotation$
 ^example_data$
 ^output$
@@ -12,3 +14,4 @@
 ^release\.R$
 ^lib$
 ^scripts$
+^strategies$

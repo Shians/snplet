@@ -66,10 +66,9 @@ remove_doublets <- function(x, drop_na = TRUE) {
 #' @export
 #'
 #' @examples
-#' \dontrun{
+#' snp_data <- get_example_snpdata()
 #' # Filter out SNPs with NA gene names
 #' filtered_data <- remove_na_genes(snp_data)
-#' }
 remove_na_genes <- function(x, gene_col = "gene_name") {
     # Check that x is a SNPData object
     if (!methods::is(x, "SNPData")) {
@@ -113,10 +112,9 @@ remove_na_genes <- function(x, gene_col = "gene_name") {
 #' @export
 #'
 #' @examples
-#' \dontrun{
+#' snp_data <- get_example_snpdata()
 #' # Remove barcodes with NA clonotype values
 #' filtered_data <- remove_na_clonotypes(snp_data)
-#' }
 remove_na_clonotypes <- function(x, clonotype_col = "clonotype") {
     # Check that x is a SNPData object
     if (!methods::is(x, "SNPData")) {

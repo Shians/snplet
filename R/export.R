@@ -8,9 +8,8 @@
 #' @export
 #'
 #' @examples
-#' \dontrun{
+#' snp_data <- get_example_snpdata()
 #' export_cellsnp(snp_data, "exported_cellsnp")
-#' }
 export_cellsnp <- function(snpdata, out_dir) {
     if (!dir.exists(out_dir)) {
         dir.create(out_dir, recursive = TRUE)

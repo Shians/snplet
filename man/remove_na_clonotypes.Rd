@@ -20,8 +20,7 @@ of the barcode_info slot. This is useful for analyses that require valid
 clonotype assignments for all barcodes.
 }
 \examples{
-\dontrun{
+snp_data <- get_example_snpdata()
 # Remove barcodes with NA clonotype values
 filtered_data <- remove_na_clonotypes(snp_data)
-}
 }
