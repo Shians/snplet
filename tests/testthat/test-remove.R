@@ -117,12 +117,12 @@ test_that("remove_doublets handles NA values correctly", {
     # Test with drop_na = TRUE (default)
     filtered_drop_na <- remove_doublets(snp_data_with_na, drop_na = TRUE)
     # Verify NA donor cells are removed when drop_na = TRUE
-    expect_equal(ncol(filtered_drop_na), 2)  # Should remove cell with NA donor
+    expect_equal(ncol(filtered_drop_na), 2) # Should remove cell with NA donor
 
     # Test with drop_na = FALSE
     filtered_keep_na <- remove_doublets(snp_data_with_na, drop_na = FALSE)
     # Verify NA donor cells are kept when drop_na = FALSE
-    expect_equal(ncol(filtered_keep_na), 3)  # Should keep all cells
+    expect_equal(ncol(filtered_keep_na), 3) # Should keep all cells
 })
 
 test_that("remove_doublets validates input", {

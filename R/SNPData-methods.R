@@ -197,33 +197,35 @@ check_filter_expr <- function(df, dots, df_name = "data.frame") {
     missing_vars <- setdiff(vars, colnames(df))
 
     # Check if variables exist in any accessible parent frame environments
-    i <- 1
-    # Check if missing variables actually exist in accessible environments
     still_missing <- missing_vars
-    while (length(still_missing) > 0) {
-        tryCatch(
-            {
-                parent_frame <- parent.frame(i)
-                if (identical(parent_frame, globalenv())) {
-                    break
-                }
+    if (length(still_missing) > 0) {
+        # Start from parent.frame(2) to skip the calling filtering function
+        # and check the environment where the user called the filtering function
+        for (i in 2:sys.nframe()) {
+            tryCatch(
+                {
+                    parent_frame <- parent.frame(i)
 
-                # Check which missing variables exist in this frame
-                found_vars <- still_missing[vapply(
-                    still_missing,
-                    exists,
-                    logical(1),
-                    envir = parent_frame,
-                    inherits = FALSE
-                )]
-                still_missing <- setdiff(still_missing, found_vars)
-                i <- i + 1
-            },
-            error = function(e) {
-                # Return NULL on error (will be handled by outer check)
-                # Can't use break here, so just return - loop will exit naturally
-            }
-        )
+                    # Check which missing variables exist in this frame
+                    found_vars <- still_missing[vapply(
+                        still_missing,
+                        exists,
+                        logical(1),
+                        envir = parent_frame,
+                        inherits = TRUE # Allow inheritance to check enclosing environments
+                    )]
+                    still_missing <- setdiff(still_missing, found_vars)
+
+                    # Stop if all variables found
+                    if (length(still_missing) == 0) {
+                        break
+                    }
+                },
+                error = function(e) {
+                    # Continue to next frame if this one is inaccessible
+                }
+            )
+        }
     }
 
     if (length(still_missing) > 0) {
