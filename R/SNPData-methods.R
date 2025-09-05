@@ -51,7 +51,7 @@ setMethod(
             ) %>%
             dplyr::filter(total_count > 0)
         if (isTRUE(test_maf)) {
-            out <- out %>% dplyr::mutate(test_maf = !is.na(maf) & maf > 0)
+            out <- test_maf(out)
         }
 
         logger::log_success("Barcode/cell level counts calculated")
@@ -107,7 +107,7 @@ setMethod(
             ) %>%
             dplyr::filter(total_count > 0)
         if (isTRUE(test_maf)) {
-            out <- out %>% dplyr::mutate(test_maf = !is.na(maf) & maf > 0)
+            out <- test_maf(out)
         }
 
         logger::log_success("Donor level counts calculated")
@@ -173,7 +173,7 @@ setMethod(
             ) %>%
             dplyr::filter(total_count > 0)
         if (isTRUE(test_maf)) {
-            out <- out %>% dplyr::mutate(test_maf = !is.na(maf) & maf > 0)
+            out <- test_maf(out)
         }
 
         logger::log_success("Clonotype level counts calculated")
@@ -422,7 +422,7 @@ setMethod(
             ) %>%
             dplyr::filter(total_count > 0)
         if (isTRUE(test_maf)) {
-            out <- out %>% dplyr::mutate(test_maf = !is.na(maf) & maf > 0)
+            out <- test_maf(out)
         }
 
         logger::log_success("{stringr::str_to_title(group_by)} level counts calculated")
