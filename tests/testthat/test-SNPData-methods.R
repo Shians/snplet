@@ -484,3 +484,225 @@ test_that("aggregate_count_df produces correct calculations", {
     # Verify maf calculation: min(140, 60)/200 = 0.3
     expect_equal(result$maf[2], 0.3)
 })
+
+# ==============================================================================
+# Tests for Missing Clonotype Data
+# ==============================================================================
+
+test_that("clonotype_count_df errors when clonotype column missing", {
+    # Setup - Create SNPData without clonotype column
+    barcode_info_no_clonotype <- data.frame(
+        cell_id = c("cell_1", "cell_2"),
+        donor = c("donor_1", "donor_1"),
+        stringsAsFactors = FALSE
+    )
+
+    snp_data <- SNPData(
+        alt_count = test_alt_count,
+        ref_count = test_ref_count,
+        snp_info = test_snp_info,
+        barcode_info = barcode_info_no_clonotype
+    )
+
+    # Test error when clonotype column is missing
+    # Verify clonotype_count_df errors with appropriate message
+    expect_error(
+        clonotype_count_df(snp_data),
+        "Clonotype information not available.*add_barcode_metadata"
+    )
+})
+
+test_that("clonotype_count_df errors when all clonotypes are NA", {
+    # Setup - Create SNPData with all NA clonotypes
+    barcode_info_na_clonotype <- data.frame(
+        cell_id = c("cell_1", "cell_2"),
+        donor = c("donor_1", "donor_1"),
+        clonotype = c(NA_character_, NA_character_),
+        stringsAsFactors = FALSE
+    )
+
+    snp_data <- SNPData(
+        alt_count = test_alt_count,
+        ref_count = test_ref_count,
+        snp_info = test_snp_info,
+        barcode_info = barcode_info_na_clonotype
+    )
+
+    # Test error when all clonotype values are NA
+    # Verify clonotype_count_df errors when all clonotypes are NA
+    expect_error(
+        clonotype_count_df(snp_data),
+        "All clonotype values are NA.*add_barcode_metadata"
+    )
+})
+
+test_that("remove_na_clonotypes warns when clonotype column missing", {
+    # Setup - Create SNPData without clonotype column
+    barcode_info_no_clonotype <- data.frame(
+        cell_id = c("cell_1", "cell_2"),
+        donor = c("donor_1", "donor_1"),
+        stringsAsFactors = FALSE
+    )
+
+    snp_data <- SNPData(
+        alt_count = test_alt_count,
+        ref_count = test_ref_count,
+        snp_info = test_snp_info,
+        barcode_info = barcode_info_no_clonotype
+    )
+
+    # Test warning when clonotype column is missing
+    # Verify remove_na_clonotypes warns with appropriate message
+    expect_warning(
+        result <- remove_na_clonotypes(snp_data),
+        "No 'clonotype' column found.*add_barcode_metadata"
+    )
+
+    # Verify original object is returned
+    expect_equal(nrow(result), nrow(snp_data))
+    expect_equal(ncol(result), ncol(snp_data))
+})
+
+test_that("aggregate_count_df errors when group_by clonotype but column missing", {
+    # Setup - Create SNPData without clonotype column
+    barcode_info_no_clonotype <- data.frame(
+        cell_id = c("cell_1", "cell_2"),
+        donor = c("donor_1", "donor_1"),
+        stringsAsFactors = FALSE
+    )
+
+    snp_data <- SNPData(
+        alt_count = test_alt_count,
+        ref_count = test_ref_count,
+        snp_info = test_snp_info,
+        barcode_info = barcode_info_no_clonotype
+    )
+
+    # Test error when grouping by clonotype but column missing
+    # Verify aggregate_count_df errors with appropriate message
+    expect_error(
+        aggregate_count_df(snp_data, "clonotype"),
+        "Column 'clonotype' not found in barcode_info"
+    )
+})
+
+test_that("aggregate_count_df handles all NA clonotypes with warning and error", {
+    # Setup - Create SNPData with all NA clonotypes
+    barcode_info_na_clonotype <- data.frame(
+        cell_id = c("cell_1", "cell_2"),
+        donor = c("donor_1", "donor_1"),
+        clonotype = c(NA_character_, NA_character_),
+        stringsAsFactors = FALSE
+    )
+
+    snp_data <- SNPData(
+        alt_count = test_alt_count,
+        ref_count = test_ref_count,
+        snp_info = test_snp_info,
+        barcode_info = barcode_info_na_clonotype
+    )
+
+    # Test that aggregate_count_df handles all NA values
+    # When all values are NA, they are filtered out causing an error in pivot
+    # Verify error occurs when all samples filtered out
+    expect_error(
+        suppressWarnings(
+            aggregate_count_df(snp_data, "clonotype", test_maf = FALSE)
+        ),
+        "must select at least one column"
+    )
+})
+
+test_that("clonotype functions work after adding clonotype via add_barcode_metadata", {
+    # Setup - Create SNPData without clonotype initially
+    barcode_info_no_clonotype <- data.frame(
+        cell_id = c("cell_1", "cell_2"),
+        donor = c("donor_1", "donor_1"),
+        stringsAsFactors = FALSE
+    )
+
+    snp_data <- SNPData(
+        alt_count = test_alt_count,
+        ref_count = test_ref_count,
+        snp_info = test_snp_info,
+        barcode_info = barcode_info_no_clonotype
+    )
+
+    # Verify clonotype_count_df fails initially
+    expect_error(
+        clonotype_count_df(snp_data),
+        "Clonotype information not available"
+    )
+
+    # Add clonotype information using add_barcode_metadata
+    clonotype_data <- data.frame(
+        cell_id = c("cell_1", "cell_2"),
+        clonotype = c("clonotype_1", "clonotype_2"),
+        stringsAsFactors = FALSE
+    )
+
+    snp_data_with_clonotype <- add_barcode_metadata(
+        snp_data,
+        clonotype_data,
+        join_by = "cell_id"
+    )
+
+    # Verify clonotype column now exists
+    barcode_info <- get_barcode_info(snp_data_with_clonotype)
+    expect_true("clonotype" %in% colnames(barcode_info))
+    expect_equal(barcode_info$clonotype, c("clonotype_1", "clonotype_2"))
+
+    # Verify clonotype_count_df now works
+    result <- clonotype_count_df(snp_data_with_clonotype, test_maf = FALSE)
+    expect_s3_class(result, "data.frame")
+    expect_true("clonotype" %in% colnames(result))
+
+    # Verify to_expr_matrix with clonotype level now works
+    expr_mat <- to_expr_matrix(snp_data_with_clonotype, level = "clonotype")
+    expect_true(is.matrix(expr_mat))
+    expect_equal(ncol(expr_mat), 2)
+})
+
+test_that("clonotype functions work after adding clonotype via update_barcode_metadata", {
+    # Setup - Create SNPData with all NA clonotypes
+    barcode_info_na_clonotype <- data.frame(
+        cell_id = c("cell_1", "cell_2"),
+        donor = c("donor_1", "donor_1"),
+        clonotype = c(NA_character_, NA_character_),
+        stringsAsFactors = FALSE
+    )
+
+    snp_data <- SNPData(
+        alt_count = test_alt_count,
+        ref_count = test_ref_count,
+        snp_info = test_snp_info,
+        barcode_info = barcode_info_na_clonotype
+    )
+
+    # Verify clonotype_count_df fails with all NA
+    expect_error(
+        clonotype_count_df(snp_data),
+        "All clonotype values are NA"
+    )
+
+    # Update clonotype information using update_barcode_metadata
+    snp_data_updated <- update_barcode_metadata(
+        snp_data,
+        clonotype = c("clonotype_1", "clonotype_2"),
+        overwrite = TRUE
+    )
+
+    # Verify clonotype values are updated
+    barcode_info <- get_barcode_info(snp_data_updated)
+    expect_equal(barcode_info$clonotype, c("clonotype_1", "clonotype_2"))
+    expect_false(any(is.na(barcode_info$clonotype)))
+
+    # Verify clonotype_count_df now works
+    result <- clonotype_count_df(snp_data_updated, test_maf = FALSE)
+    expect_s3_class(result, "data.frame")
+    expect_true(all(!is.na(result$clonotype)))
+
+    # Verify to_expr_matrix with clonotype level now works
+    expr_mat <- to_expr_matrix(snp_data_updated, level = "clonotype")
+    expect_true(is.matrix(expr_mat))
+})
