@@ -663,7 +663,7 @@ test_that("clonotype functions work after adding clonotype via add_barcode_metad
     expect_equal(ncol(expr_mat), 2)
 })
 
-test_that("clonotype functions work after adding clonotype via update_barcode_metadata", {
+test_that("clonotype functions work after updating clonotype with overwrite=TRUE", {
     # Setup - Create SNPData with all NA clonotypes
     barcode_info_na_clonotype <- data.frame(
         cell_id = c("cell_1", "cell_2"),
@@ -685,10 +685,17 @@ test_that("clonotype functions work after adding clonotype via update_barcode_me
         "All clonotype values are NA"
     )
 
-    # Update clonotype information using update_barcode_metadata
-    snp_data_updated <- update_barcode_metadata(
-        snp_data,
+    # Update clonotype information using add_barcode_metadata with overwrite=TRUE
+    clonotype_data <- data.frame(
+        cell_id = c("cell_1", "cell_2"),
         clonotype = c("clonotype_1", "clonotype_2"),
+        stringsAsFactors = FALSE
+    )
+
+    snp_data_updated <- add_barcode_metadata(
+        snp_data,
+        clonotype_data,
+        join_by = "cell_id",
         overwrite = TRUE
     )
 
