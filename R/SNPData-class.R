@@ -13,6 +13,7 @@
 #' @param x A SNPData object
 #' @param i Numeric or logical vector for subsetting SNPs (rows)
 #' @param j Numeric or logical vector for subsetting samples (columns)
+#' @param value A data.frame for replacement methods (barcode_info<- or snp_info<-)
 #'
 #' @slot ref_count A sparse Matrix containing reference allele counts (SNPs x cells)
 #' @slot alt_count A sparse Matrix containing alternate allele counts (SNPs x cells)
