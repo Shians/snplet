@@ -713,3 +713,129 @@ test_that("clonotype functions work after updating clonotype with overwrite=TRUE
     expr_mat <- to_expr_matrix(snp_data_updated, level = "clonotype")
     expect_true(is.matrix(expr_mat))
 })
+
+test_that("merge_snpdata combines counts and metadata correctly", {
+    alt_x <- Matrix::Matrix(
+        matrix(
+            c(
+                1, 0, # snpA
+                0, 2  # snpB
+            ),
+            nrow = 2,
+            ncol = 2,
+            dimnames = list(c("snpA", "snpB"), c("cell1", "cell2"))
+        )
+    )
+    ref_x <- Matrix::Matrix(
+        matrix(
+            c(
+                3, 0, # snpA
+                1, 1  # snpB
+            ),
+            nrow = 2,
+            ncol = 2,
+            dimnames = list(c("snpA", "snpB"), c("cell1", "cell2"))
+        )
+    )
+    alt_y <- Matrix::Matrix(
+        matrix(
+            c(
+                1, 0, # snpB
+                2, 1  # snpC
+            ),
+            nrow = 2,
+            ncol = 2,
+            dimnames = list(c("snpB", "snpC"), c("cell2", "cell3"))
+        )
+    )
+    ref_y <- Matrix::Matrix(
+        matrix(
+            c(
+                0, 2, # snpB
+                1, 1  # snpC
+            ),
+            nrow = 2,
+            ncol = 2,
+            dimnames = list(c("snpB", "snpC"), c("cell2", "cell3"))
+        )
+    )
+
+    snp_info_x <- data.frame(
+        snp_id = c("snpA", "snpB"),
+        gene = c("geneA", "geneB_x"),
+        stringsAsFactors = FALSE
+    )
+    snp_info_y <- data.frame(
+        snp_id = c("snpB", "snpC"),
+        gene = c("geneB_y", "geneC"),
+        stringsAsFactors = FALSE
+    )
+    barcode_info_x <- data.frame(
+        cell_id = c("cell1", "cell2"),
+        donor = c("d1", "d2"),
+        stringsAsFactors = FALSE
+    )
+    barcode_info_y <- data.frame(
+        cell_id = c("cell2", "cell3"),
+        donor = c("d2_y", "d3"),
+        stringsAsFactors = FALSE
+    )
+
+    x <- SNPData(
+        alt_count = alt_x,
+        ref_count = ref_x,
+        snp_info = snp_info_x,
+        barcode_info = barcode_info_x
+    )
+    y <- SNPData(
+        alt_count = alt_y,
+        ref_count = ref_y,
+        snp_info = snp_info_y,
+        barcode_info = barcode_info_y
+    )
+
+    merged <- merge_snpdata(x, y, snp_join = "union", cell_join = "union")
+
+    expect_equal(rownames(merged), c("snpA", "snpB", "snpC"))
+    expect_equal(colnames(merged), c("cell1", "cell2", "cell3"))
+
+    expected_ref <- Matrix::Matrix(
+        matrix(
+            c(
+                3, 1, 0, # snpA
+                0, 1, 1, # snpB
+                0, 2, 1  # snpC
+            ),
+            nrow = 3,
+            ncol = 3,
+            byrow = TRUE,
+            dimnames = list(c("snpA", "snpB", "snpC"), c("cell1", "cell2", "cell3"))
+        )
+    )
+    expected_alt <- Matrix::Matrix(
+        matrix(
+            c(
+                1, 0, 0, # snpA
+                0, 3, 2, # snpB
+                0, 0, 1  # snpC
+            ),
+            nrow = 3,
+            ncol = 3,
+            byrow = TRUE,
+            dimnames = list(c("snpA", "snpB", "snpC"), c("cell1", "cell2", "cell3"))
+        )
+    )
+    expect_equal(as.matrix(ref_count(merged)), as.matrix(expected_ref))
+    expect_equal(as.matrix(alt_count(merged)), as.matrix(expected_alt))
+
+    merged_snp_info <- get_snp_info(merged)
+    merged_barcode_info <- get_barcode_info(merged)
+
+    expect_equal(merged_snp_info$gene, c("geneA", "geneB_x", "geneC"))
+    expect_equal(unname(merged_snp_info$coverage), c(5, 7, 4))
+    expect_equal(unname(merged_snp_info$non_zero_samples), c(2, 2, 2))
+
+    expect_equal(merged_barcode_info$donor, c("d1", "d2", "d3"))
+    expect_equal(unname(merged_barcode_info$library_size), c(4, 7, 5))
+    expect_equal(unname(merged_barcode_info$non_zero_snps), c(1, 3, 2))
+})
