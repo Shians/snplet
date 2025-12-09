@@ -51,10 +51,10 @@ test_that("read_vcf_base works correctly", {
     expect_equal(colnames(vcf_data)[1], "snp_id")
 
     # Test SNP ID generation
-    # Check that all SNP IDs follow the expected pattern
-    expect_true(all(grepl("^snp_", vcf_data$snp_id)))
-    # Verify first SNP ID is "snp_1"
-    expect_equal(vcf_data$snp_id[1], "snp_1")
+    # Check that all SNP IDs follow standardized format "chr:pos:ref:alt"
+    expect_true(all(grepl("^chr.+:[0-9]+:[ACGT]+:[ACGT]+$", vcf_data$snp_id)))
+    # Verify first SNP ID matches expected format from VCF data
+    expect_equal(vcf_data$snp_id[1], "chr1:1108258:A:C")
 
     # Test data types
     # Verify chromosome column is character type

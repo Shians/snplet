@@ -73,6 +73,35 @@ groupedRowSums <- function(x, groups) {
     out
 }
 
+#' Generate standardized SNP IDs from genomic coordinates
+#'
+#' Creates SNP identifiers in the format "chr:pos:ref:alt" for consistent
+#' identification across datasets. This format is deterministic and contains
+#' all information needed for variant identification.
+#'
+#' @param chrom Character vector of chromosome names
+#' @param pos Integer vector of genomic positions
+#' @param ref Character vector of reference alleles
+#' @param alt Character vector of alternate alleles
+#'
+#' @return Character vector of SNP IDs in format "chr:pos:ref:alt"
+#'
+#' @examples
+#' \dontrun{
+#' snp_ids <- make_snp_id(
+#'     chrom = c("chr1", "chr2"),
+#'     pos = c(12345, 67890),
+#'     ref = c("A", "G"),
+#'     alt = c("G", "T")
+#' )
+#' # Returns: c("chr1:12345:A:G", "chr2:67890:G:T")
+#' }
+#'
+#' @keywords internal
+make_snp_id <- function(chrom, pos, ref, alt) {
+    paste(chrom, pos, ref, alt, sep = ":")
+}
+
 #' Check if a file exists
 #' @param path Path to the file to check
 check_file <- function(path) {

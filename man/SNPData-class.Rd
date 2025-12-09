@@ -103,6 +103,8 @@ coverage(x)
 
 \item{oth_count}{A sparse Matrix containing other allele counts (SNPs x cells), optional}
 
+\item{value}{A data.frame for replacement methods (barcode_info<- or snp_info<-)}
+
 \item{object}{A SNPData object for show method}
 }
 \value{

@@ -13,6 +13,7 @@
 #' @param x A SNPData object
 #' @param i Numeric or logical vector for subsetting SNPs (rows)
 #' @param j Numeric or logical vector for subsetting samples (columns)
+#' @param value A data.frame for replacement methods (barcode_info<- or snp_info<-)
 #'
 #' @slot ref_count A sparse Matrix containing reference allele counts (SNPs x cells)
 #' @slot alt_count A sparse Matrix containing alternate allele counts (SNPs x cells)
@@ -113,7 +114,18 @@ setMethod(
 
         # assign snp_ids if none exist
         if (!"snp_id" %in% colnames(snp_info)) {
-            snp_info$snp_id <- paste0("snp_", seq_len(nrow(snp_info)))
+            # Check if we have the required columns to generate standardized IDs
+            if (all(c("chrom", "pos", "ref", "alt") %in% colnames(snp_info))) {
+                snp_info$snp_id <- make_snp_id(
+                    snp_info$chrom,
+                    snp_info$pos,
+                    snp_info$ref,
+                    snp_info$alt
+                )
+            } else {
+                # Fallback to sequential IDs if genomic coordinates not available
+                snp_info$snp_id <- paste0("snp_", seq_len(nrow(snp_info)))
+            }
         }
 
         # assign cell_ids if none exist
