@@ -4,16 +4,21 @@
 \alias{merge_cell_annotations}
 \title{Merge donor and clonotype information}
 \usage{
-merge_cell_annotations(donor_info, vdj_info, barcode_column, clonotype_column)
+merge_cell_annotations(
+  donor_info,
+  vdj_info = NULL,
+  barcode_column = NULL,
+  clonotype_column = NULL
+)
 }
 \arguments{
 \item{donor_info}{Data frame with donor information from Vireo}
 
-\item{vdj_info}{Data frame with VDJ information from cellranger}
+\item{vdj_info}{Data frame with VDJ information from cellranger (NULL if not provided)}
 
-\item{barcode_column}{Name of the column in vdj_info containing cell barcodes}
+\item{barcode_column}{Name of the column in vdj_info containing cell barcodes (only used if vdj_info provided)}
 
-\item{clonotype_column}{Name of the column in vdj_info containing clonotype information}
+\item{clonotype_column}{Name of the column in vdj_info containing clonotype information (only used if vdj_info provided)}
 }
 \value{
 Data frame with merged cell annotations

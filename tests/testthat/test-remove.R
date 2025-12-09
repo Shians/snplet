@@ -272,7 +272,7 @@ test_that("remove_na_clonotypes handles missing clonotype column", {
     # Verify warning is issued when clonotype column is missing
     expect_warning(
         result <- remove_na_clonotypes(snp_data_no_clonotype),
-        "No 'clonotype' column found in barcode_info, returning original object"
+        "No 'clonotype' column found.*add_barcode_metadata"
     )
 
     # Check that original object is returned unchanged

@@ -56,14 +56,18 @@ export_cellsnp <- function(snpdata, out_dir) {
     readr::write_tsv(donor_df, donor_file)
     logger::log_info("Donor info written to: {donor_file}")
 
-    # Write VDJ info as filtered_contig_annotations.csv
-    vdj_file <- file.path(out_dir, "filtered_contig_annotations.csv")
-    vdj_df <- barcode_info %>%
-        dplyr::select(barcode, clonotype) %>%
-        dplyr::rename(raw_clonotype_id = clonotype) %>%
-        dplyr::distinct()
-    readr::write_csv(vdj_df, vdj_file)
-    logger::log_info("VDJ info written to: {vdj_file}")
+    # Write VDJ info as filtered_contig_annotations.csv (if clonotype data available)
+    if ("clonotype" %in% colnames(barcode_info) && !all(is.na(barcode_info$clonotype))) {
+        vdj_file <- file.path(out_dir, "filtered_contig_annotations.csv")
+        vdj_df <- barcode_info %>%
+            dplyr::select(barcode, clonotype) %>%
+            dplyr::rename(raw_clonotype_id = clonotype) %>%
+            dplyr::distinct()
+        readr::write_csv(vdj_df, vdj_file)
+        logger::log_info("VDJ info written to: {vdj_file}")
+    } else {
+        logger::log_info("Skipping VDJ export (no clonotype information available)")
+    }
 
     # Write barcodes into cellSNP.samples.tsv
     samples_file <- file.path(out_dir, "cellSNP.samples.tsv")

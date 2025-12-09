@@ -121,7 +121,7 @@ test_that("to_expr_matrix handles missing clonotype column", {
     # Verify error when clonotype column is missing
     expect_error(
         to_expr_matrix(snp_data_no_clono, level = "clonotype"),
-        "No clonotype column in barcode_info"
+        "Clonotype information not available.*add_barcode_metadata"
     )
 })
 
@@ -165,5 +165,72 @@ test_that("to_expr_matrix handles argument matching", {
     expect_error(
         to_expr_matrix(test_snp_data, level = "invalid"),
         "'arg' should be one of"
+    )
+})
+
+# ==============================================================================
+# Tests for Missing Clonotype Data
+# ==============================================================================
+
+test_that("to_expr_matrix errors when clonotype level requested but column missing", {
+    # Setup - Create SNPData without clonotype column
+    test_alt_count_mini <- Matrix::Matrix(matrix(c(1, 2), nrow = 1, ncol = 2))
+    test_ref_count_mini <- Matrix::Matrix(matrix(c(5, 6), nrow = 1, ncol = 2))
+
+    test_snp_info_mini <- data.frame(
+        snp_id = c("snp_1"),
+        stringsAsFactors = FALSE
+    )
+
+    barcode_info_no_clonotype <- data.frame(
+        cell_id = c("cell_1", "cell_2"),
+        donor = c("donor_1", "donor_1"),
+        stringsAsFactors = FALSE
+    )
+
+    snp_data <- SNPData(
+        alt_count = test_alt_count_mini,
+        ref_count = test_ref_count_mini,
+        snp_info = test_snp_info_mini,
+        barcode_info = barcode_info_no_clonotype
+    )
+
+    # Test error when clonotype level requested but column is missing
+    # Verify to_expr_matrix errors with appropriate message for clonotype
+    expect_error(
+        to_expr_matrix(snp_data, level = "clonotype"),
+        "Clonotype information not available.*add_barcode_metadata"
+    )
+})
+
+test_that("to_expr_matrix errors when clonotype level requested but all NA", {
+    # Setup - Create SNPData with all NA clonotypes
+    test_alt_count_mini <- Matrix::Matrix(matrix(c(1, 2), nrow = 1, ncol = 2))
+    test_ref_count_mini <- Matrix::Matrix(matrix(c(5, 6), nrow = 1, ncol = 2))
+
+    test_snp_info_mini <- data.frame(
+        snp_id = c("snp_1"),
+        stringsAsFactors = FALSE
+    )
+
+    barcode_info_na_clonotype <- data.frame(
+        cell_id = c("cell_1", "cell_2"),
+        donor = c("donor_1", "donor_1"),
+        clonotype = c(NA_character_, NA_character_),
+        stringsAsFactors = FALSE
+    )
+
+    snp_data <- SNPData(
+        alt_count = test_alt_count_mini,
+        ref_count = test_ref_count_mini,
+        snp_info = test_snp_info_mini,
+        barcode_info = barcode_info_na_clonotype
+    )
+
+    # Test error when clonotype level requested but all values are NA
+    # Verify to_expr_matrix errors when all clonotypes are NA
+    expect_error(
+        to_expr_matrix(snp_data, level = "clonotype"),
+        "All clonotype values are NA.*add_barcode_metadata"
     )
 })

@@ -126,7 +126,11 @@ remove_na_clonotypes <- function(x, clonotype_col = "clonotype") {
 
     # Check if clonotype column exists
     if (!clonotype_col %in% colnames(barcode_info)) {
-        warning(paste0("No '", clonotype_col, "' column found in barcode_info, returning original object"))
+        warning(paste0(
+            "No '", clonotype_col, "' column found in barcode_info. ",
+            "Add clonotype information using add_barcode_metadata() or import_cellsnp() with vdj_file. ",
+            "Returning original object."
+        ))
         return(x)
     }
 

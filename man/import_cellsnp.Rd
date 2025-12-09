@@ -6,9 +6,9 @@
 \usage{
 import_cellsnp(
   cellsnp_dir,
-  vdj_file,
   gene_annotation,
-  vireo_file = NA,
+  vdj_file = NULL,
+  vireo_file = NULL,
   barcode_column = "barcode",
   clonotype_column = "raw_clonotype_id"
 )
@@ -16,28 +16,36 @@ import_cellsnp(
 \arguments{
 \item{cellsnp_dir}{Directory containing cellSNP-lite output files}
 
-\item{vdj_file}{Path to filtered_contig_annotations.csv from cellranger VDJ}
-
 \item{gene_annotation}{Data frame with gene annotations for SNPs (must have same number of rows as SNP matrices)}
 
-\item{vireo_file}{Path to donors.tsv file from Vireo (optional, default: NA)}
+\item{vdj_file}{Path to filtered_contig_annotations.csv from cellranger VDJ (optional, default: NULL)}
 
-\item{barcode_column}{Name of the column in vdj_file that contains cell barcodes}
+\item{vireo_file}{Path to donors.tsv file from Vireo (optional, default: NULL)}
 
-\item{clonotype_column}{Name of the column in vdj_file that contains clonotype information}
+\item{barcode_column}{Name of the column in vdj_file that contains cell barcodes (only used if vdj_file provided)}
+
+\item{clonotype_column}{Name of the column in vdj_file that contains clonotype information (only used if vdj_file provided)}
 }
 \value{
 A SNPData object
 }
 \description{
-This function imports data from cellSNP-lite output, VDJ annotations from cellranger,
+This function imports data from cellSNP-lite output, with optional VDJ annotations from cellranger
 and donor information from Vireo to create a SNPData object.
 }
 \examples{
 \dontrun{
+# Import with VDJ and Vireo data
 snp_data <- import_cellsnp(
   cellsnp_dir = "path/to/cellsnp_output",
+  gene_annotation = gene_anno_df,
   vdj_file = "path/to/filtered_contig_annotations.csv",
+  vireo_file = "path/to/donors.tsv"
+)
+
+# Import without VDJ data (no clonotype information)
+snp_data <- import_cellsnp(
+  cellsnp_dir = "path/to/cellsnp_output",
   gene_annotation = gene_anno_df
 )
 }

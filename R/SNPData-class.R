@@ -274,6 +274,47 @@ setMethod("get_sample_info", signature(x = "SNPData"), function(x) {
     get_barcode_info(x)
 })
 
+# Setters
+#' @exportMethod barcode_info<-
+#' @rdname SNPData-class
+setGeneric("barcode_info<-", function(x, value) standardGeneric("barcode_info<-"))
+#' @exportMethod barcode_info<-
+#' @rdname SNPData-class
+setReplaceMethod("barcode_info", signature(x = "SNPData", value = "data.frame"), function(x, value) {
+    # Validate dimensions
+    if (nrow(value) != ncol(x@ref_count)) {
+        stop("Number of rows in barcode_info must match number of columns in count matrices")
+    }
+    # Validate row names match column names of matrices
+    if (!is.null(rownames(value)) && !is.null(colnames(x@ref_count))) {
+        if (!identical(rownames(value), colnames(x@ref_count))) {
+            stop("Row names of barcode_info must match column names of count matrices")
+        }
+    }
+    x@barcode_info <- value
+    x
+})
+
+#' @exportMethod snp_info<-
+#' @rdname SNPData-class
+setGeneric("snp_info<-", function(x, value) standardGeneric("snp_info<-"))
+#' @exportMethod snp_info<-
+#' @rdname SNPData-class
+setReplaceMethod("snp_info", signature(x = "SNPData", value = "data.frame"), function(x, value) {
+    # Validate dimensions
+    if (nrow(value) != nrow(x@ref_count)) {
+        stop("Number of rows in snp_info must match number of rows in count matrices")
+    }
+    # Validate row names match row names of matrices
+    if (!is.null(rownames(value)) && !is.null(rownames(x@ref_count))) {
+        if (!identical(rownames(value), rownames(x@ref_count))) {
+            stop("Row names of snp_info must match row names of count matrices")
+        }
+    }
+    x@snp_info <- value
+    x
+})
+
 # Dimensions
 #' Get dimensions of a SNPData object
 #'
