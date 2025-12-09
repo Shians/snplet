@@ -12,7 +12,11 @@ setMethod("to_expr_matrix", signature(x = "SNPData"), function(x, level = c("bar
     barcode_info <- get_barcode_info(x)
 
     if (level != "barcode" && !level %in% colnames(barcode_info)) {
-        stop("No ", level, " column in barcode_info.")
+        if (level == "clonotype") {
+            stop("Clonotype information not available. Add clonotype data using add_barcode_metadata() or import_cellsnp() with vdj_file parameter.")
+        } else {
+            stop("No ", level, " column in barcode_info.")
+        }
     }
 
     if (level == "barcode") {
@@ -23,7 +27,11 @@ setMethod("to_expr_matrix", signature(x = "SNPData"), function(x, level = c("bar
         colnames(mat) <- colnames(ref)
         return(mat)
     } else if (level == "clonotype") {
-        clono <- get_barcode_info(x)$clonotype
+        clono <- barcode_info$clonotype
+        # Check if all clonotype values are NA
+        if (all(is.na(clono))) {
+            stop("All clonotype values are NA. Cannot perform clonotype-level aggregation. Add clonotype data using add_barcode_metadata() or import_cellsnp() with vdj_file parameter.")
+        }
         ref <- groupedRowSums(ref_count(x), clono)
         alt <- groupedRowSums(alt_count(x), clono)
         mat <- sign(ref - alt) * log1p(abs(ref - alt))
@@ -31,7 +39,7 @@ setMethod("to_expr_matrix", signature(x = "SNPData"), function(x, level = c("bar
         colnames(mat) <- colnames(ref)
         return(mat)
     } else if (level == "donor") {
-        donor <- get_barcode_info(x)$donor
+        donor <- barcode_info$donor
         ref <- groupedRowSums(ref_count(x), donor)
         alt <- groupedRowSums(alt_count(x), donor)
         mat <- sign(ref - alt) * log1p(abs(ref - alt))

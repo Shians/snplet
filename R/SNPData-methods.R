@@ -138,15 +138,26 @@ setMethod(
     function(x, test_maf = TRUE) {
         logger::log_info("Calculating clonotype level counts")
 
+        # Check if clonotype column exists
+        barcode_info <- get_barcode_info(x)
+        if (!"clonotype" %in% colnames(barcode_info)) {
+            stop("Clonotype information not available. Add clonotype data using add_barcode_metadata() or import_cellsnp() with vdj_file parameter.")
+        }
+
+        # Check if all clonotype values are NA
+        if (all(is.na(barcode_info$clonotype))) {
+            stop("All clonotype values are NA. Cannot perform clonotype-level aggregation. Add clonotype data using add_barcode_metadata() or import_cellsnp() with vdj_file parameter.")
+        }
+
         logger::log_info("Extracting reference counts")
-        ref_count_grouped <- groupedRowSums(ref_count(x), get_barcode_info(x)$clonotype)
+        ref_count_grouped <- groupedRowSums(ref_count(x), barcode_info$clonotype)
         ref_count_df <- ref_count_grouped %>%
             tibble::as_tibble() %>%
             dplyr::mutate(snp_id = rownames(ref_count_grouped), .before = 1) %>%
             tidyr::pivot_longer(contains("clonotype"), names_to = "clonotype", values_to = "ref_count")
 
         logger::log_info("Extracting alternate counts")
-        alt_count_grouped <- groupedRowSums(alt_count(x), get_barcode_info(x)$clonotype)
+        alt_count_grouped <- groupedRowSums(alt_count(x), barcode_info$clonotype)
         alt_count_df <- alt_count_grouped %>%
             tibble::as_tibble() %>%
             dplyr::mutate(snp_id = rownames(alt_count_grouped), .before = 1) %>%
