@@ -164,7 +164,7 @@ setMethod(
             tidyr::pivot_longer(contains("clonotype"), names_to = "clonotype", values_to = "alt_count")
 
         logger::log_info("Processing reference and alternate counts")
-        most_likely_donor <- get_barcode_info(x) %>%
+        most_likely_donor <- barcode_info %>%
             dplyr::filter(!is.na(clonotype) & !is.na(donor)) %>%
             dplyr::select(clonotype, donor) %>%
             dplyr::count(donor, clonotype) %>%
