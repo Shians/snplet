@@ -193,8 +193,13 @@ read_vcf_base <- function(vcf_file) {
         )
     )
 
-    # Generate SNP IDs
-    vcf_data$snp_id <- paste0("snp_", seq_len(nrow(vcf_data)))
+    # Generate standardized SNP IDs
+    vcf_data$snp_id <- make_snp_id(
+        vcf_data$chrom,
+        vcf_data$pos,
+        vcf_data$ref,
+        vcf_data$alt
+    )
 
     # Reorder columns to have snp_id first
     vcf_data <- vcf_data[, c("snp_id", names(vcf_data)[names(vcf_data) != "snp_id"])]
