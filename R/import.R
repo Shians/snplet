@@ -1,31 +1,39 @@
 #' Import cellSNP data and create a SNPData object
 #'
-#' This function imports data from cellSNP-lite output, VDJ annotations from cellranger,
+#' This function imports data from cellSNP-lite output, with optional VDJ annotations from cellranger
 #' and donor information from Vireo to create a SNPData object.
 #'
 #' @param cellsnp_dir Directory containing cellSNP-lite output files
-#' @param vdj_file Path to filtered_contig_annotations.csv from cellranger VDJ
+#' @param vdj_file Path to filtered_contig_annotations.csv from cellranger VDJ (optional, default: NULL)
 #' @param gene_annotation Data frame with gene annotations for SNPs (must have same number of rows as SNP matrices)
-#' @param vireo_file Path to donors.tsv file from Vireo (optional, default: NA)
-#' @param barcode_column Name of the column in vdj_file that contains cell barcodes
-#' @param clonotype_column Name of the column in vdj_file that contains clonotype information
+#' @param vireo_file Path to donors.tsv file from Vireo (optional, default: NULL)
+#' @param barcode_column Name of the column in vdj_file that contains cell barcodes (only used if vdj_file provided)
+#' @param clonotype_column Name of the column in vdj_file that contains clonotype information (only used if vdj_file provided)
 #'
 #' @return A SNPData object
 #' @export
 #'
 #' @examples
 #' \dontrun{
+#' # Import with VDJ and Vireo data
 #' snp_data <- import_cellsnp(
 #'   cellsnp_dir = "path/to/cellsnp_output",
 #'   vdj_file = "path/to/filtered_contig_annotations.csv",
+#'   gene_annotation = gene_anno_df,
+#'   vireo_file = "path/to/donors.tsv"
+#' )
+#'
+#' # Import without VDJ data (no clonotype information)
+#' snp_data <- import_cellsnp(
+#'   cellsnp_dir = "path/to/cellsnp_output",
 #'   gene_annotation = gene_anno_df
 #' )
 #' }
 import_cellsnp <- function(
     cellsnp_dir,
-    vdj_file,
+    vdj_file = NULL,
     gene_annotation,
-    vireo_file = NA,
+    vireo_file = NULL,
     barcode_column = "barcode",
     clonotype_column = "raw_clonotype_id"
 ) {
@@ -48,11 +56,14 @@ import_cellsnp <- function(
     base_file <- fs::path(cellsnp_dir, "cellSNP.base.vcf.gz")
     samples_file <- fs::path(cellsnp_dir, "cellSNP.samples.tsv")
 
-    for (file in c(dp_file, ad_file, oth_file, base_file, vdj_file)) {
+    for (file in c(dp_file, ad_file, oth_file, base_file)) {
         check_file(file)
     }
-    # Only check vireo_file if not NA
-    if (!is.na(vireo_file)) {
+    # Check optional files if provided
+    if (!is.null(vdj_file)) {
+        check_file(vdj_file)
+    }
+    if (!is.null(vireo_file)) {
         check_file(vireo_file)
     }
 
@@ -105,7 +116,7 @@ import_cellsnp <- function(
         )
 
     # Read donor information if provided, else create dummy donor info
-    if (!is.na(vireo_file)) {
+    if (!is.null(vireo_file)) {
         donor_info <- readr::read_tsv(
             vireo_file,
             col_types = readr::cols(.default = readr::col_character())
@@ -116,14 +127,18 @@ import_cellsnp <- function(
             dplyr::mutate(donor = "donor0")
     }
 
-    # Read VDJ clonotype information
-    vdj_info <- readr::read_csv(
-        vdj_file,
-        col_types = readr::cols(.default = readr::col_character())
-    ) %>%
-        dplyr::mutate(
-            barcode = stringr::str_remove(barcode, "-[0-9]+$") # Remove suffix if present
-        )
+    # Read VDJ clonotype information if provided
+    if (!is.null(vdj_file)) {
+        vdj_info <- readr::read_csv(
+            vdj_file,
+            col_types = readr::cols(.default = readr::col_character())
+        ) %>%
+            dplyr::mutate(
+                barcode = stringr::str_remove(barcode, "-[0-9]+$") # Remove suffix if present
+            )
+    } else {
+        vdj_info <- NULL
+    }
 
     # Merge donor and clonotype information
     barcode_info <- merge_cell_annotations(
@@ -190,13 +205,13 @@ read_vcf_base <- function(vcf_file) {
 #' Merge donor and clonotype information
 #'
 #' @param donor_info Data frame with donor information from Vireo
-#' @param vdj_info Data frame with VDJ information from cellranger
-#' @param barcode_column Name of the column in vdj_info containing cell barcodes
-#' @param clonotype_column Name of the column in vdj_info containing clonotype information
+#' @param vdj_info Data frame with VDJ information from cellranger (NULL if not provided)
+#' @param barcode_column Name of the column in vdj_info containing cell barcodes (only used if vdj_info provided)
+#' @param clonotype_column Name of the column in vdj_info containing clonotype information (only used if vdj_info provided)
 #'
 #' @return Data frame with merged cell annotations
 #' @keywords internal
-merge_cell_annotations <- function(donor_info, vdj_info, barcode_column, clonotype_column) {
+merge_cell_annotations <- function(donor_info, vdj_info = NULL, barcode_column = NULL, clonotype_column = NULL) {
     # Standardize column names
     if ("cell" %in% colnames(donor_info)) {
         donor_info <- donor_info %>%
@@ -209,6 +224,18 @@ merge_cell_annotations <- function(donor_info, vdj_info, barcode_column, clonoty
     if ("donor_id" %in% colnames(donor_info)) {
         donor_info <- donor_info %>%
             dplyr::rename(donor = donor_id)
+    }
+
+    # If VDJ info not provided, create barcode_info without clonotype
+    if (is.null(vdj_info)) {
+        barcode_info <- donor_info %>%
+            dplyr::mutate(
+                cell_id = paste0("cell_", seq_len(dplyr::n())),
+                clonotype = NA_character_
+            ) %>%
+            dplyr::select(cell_id, barcode, donor, clonotype, everything())
+
+        return(barcode_info)
     }
 
     # Ensure barcode_column exists in vdj_info
