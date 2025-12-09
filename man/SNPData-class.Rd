@@ -18,6 +18,10 @@
 \alias{get_barcode_info,SNPData-method}
 \alias{get_sample_info}
 \alias{get_sample_info,SNPData-method}
+\alias{barcode_info<-}
+\alias{barcode_info<-,SNPData,data.frame-method}
+\alias{snp_info<-}
+\alias{snp_info<-,SNPData,data.frame-method}
 \alias{dim,SNPData-method}
 \alias{nrow,SNPData-method}
 \alias{ncol,SNPData-method}
@@ -57,6 +61,14 @@ get_barcode_info(x)
 get_sample_info(x)
 
 \S4method{get_sample_info}{SNPData}(x)
+
+barcode_info(x) <- value
+
+\S4method{barcode_info}{SNPData,data.frame}(x) <- value
+
+snp_info(x) <- value
+
+\S4method{snp_info}{SNPData,data.frame}(x) <- value
 
 \S4method{dim}{SNPData}(x)
 
