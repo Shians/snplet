@@ -245,8 +245,8 @@ test_that("import_cellsnp works with example data", {
     # Execute import
     snp_data <- import_cellsnp(
         cellsnp_dir = cellsnp_dir,
-        vdj_file = vdj_file,
         gene_annotation = gene_annotation,
+        vdj_file = vdj_file,
         vireo_file = vireo_file
     )
 
@@ -293,8 +293,8 @@ test_that("import_cellsnp validates gene_annotation input", {
     expect_error(
         import_cellsnp(
             cellsnp_dir = "dummy",
-            vdj_file = "dummy",
-            gene_annotation = invalid_gene_anno
+            gene_annotation = invalid_gene_anno,
+            vdj_file = "dummy"
         ),
         "gene_annotation is missing required columns"
     )
@@ -589,8 +589,8 @@ test_that("import with VDJ then export and re-import preserves clonotype", {
     # Import with VDJ
     snp_data_original <- import_cellsnp(
         cellsnp_dir = cellsnp_dir,
-        vdj_file = vdj_file,
         gene_annotation = gene_annotation,
+        vdj_file = vdj_file,
         vireo_file = vireo_file
     )
 
@@ -615,8 +615,8 @@ test_that("import with VDJ then export and re-import preserves clonotype", {
     # Re-import
     snp_data_reimported <- import_cellsnp(
         cellsnp_dir = out_dir,
-        vdj_file = vdj_exported,
         gene_annotation = gene_annotation,
+        vdj_file = vdj_exported,
         vireo_file = file.path(out_dir, "donor_ids.tsv")
     )
 

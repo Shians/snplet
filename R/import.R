@@ -4,8 +4,8 @@
 #' and donor information from Vireo to create a SNPData object.
 #'
 #' @param cellsnp_dir Directory containing cellSNP-lite output files
-#' @param vdj_file Path to filtered_contig_annotations.csv from cellranger VDJ (optional, default: NULL)
 #' @param gene_annotation Data frame with gene annotations for SNPs (must have same number of rows as SNP matrices)
+#' @param vdj_file Path to filtered_contig_annotations.csv from cellranger VDJ (optional, default: NULL)
 #' @param vireo_file Path to donors.tsv file from Vireo (optional, default: NULL)
 #' @param barcode_column Name of the column in vdj_file that contains cell barcodes (only used if vdj_file provided)
 #' @param clonotype_column Name of the column in vdj_file that contains clonotype information (only used if vdj_file provided)
@@ -18,8 +18,8 @@
 #' # Import with VDJ and Vireo data
 #' snp_data <- import_cellsnp(
 #'   cellsnp_dir = "path/to/cellsnp_output",
-#'   vdj_file = "path/to/filtered_contig_annotations.csv",
 #'   gene_annotation = gene_anno_df,
+#'   vdj_file = "path/to/filtered_contig_annotations.csv",
 #'   vireo_file = "path/to/donors.tsv"
 #' )
 #'
@@ -31,8 +31,8 @@
 #' }
 import_cellsnp <- function(
     cellsnp_dir,
-    vdj_file = NULL,
     gene_annotation,
+    vdj_file = NULL,
     vireo_file = NULL,
     barcode_column = "barcode",
     clonotype_column = "raw_clonotype_id"
@@ -300,8 +300,8 @@ merge_cell_annotations <- function(donor_info, vdj_info = NULL, barcode_column =
 get_example_snpdata <- function() {
     import_cellsnp(
         cellsnp_dir = system.file("extdata/example_snpdata", package = "snplet"),
+        gene_annotation = readr::read_tsv(system.file("extdata/example_gene_anno.tsv", package = "snplet"), show_col_types = FALSE),
         vdj_file = system.file("extdata/example_snpdata/filtered_contig_annotations.csv", package = "snplet"),
-        gene_annotation = readr::read_tsv(system.file("extdata/example_gene_anno.tsv", package = "snplet")),
         vireo_file = system.file("extdata/example_snpdata/donor_ids.tsv", package = "snplet")
     )
 }
