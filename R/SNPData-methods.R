@@ -716,55 +716,96 @@ add_snp_metadata <- function(x, metadata, join_by = "snp_id", overwrite = FALSE,
 #' @return A sparse Matrix with dimensions matching retained_rows x retained_cols
 #' @keywords internal
 .expand_subset_matrix <- function(mat, retained_rows, retained_cols, col_mapping = NULL) {
-    # Find overlap between matrix rownames and retained row IDs
-    rows_to_keep <- intersect(rownames(mat), retained_rows)
+    # Use hash-based lookup for faster matching with large vectors
+    retained_rows_set <- setNames(seq_along(retained_rows), retained_rows)
+    mat_rows <- rownames(mat)
+
+    # Find rows that exist in both mat and retained_rows
+    rows_in_both <- mat_rows %in% names(retained_rows_set)
+    rows_to_keep <- mat_rows[rows_in_both]
+    row_idx_in_mat <- which(rows_in_both)
+    row_idx_in_expanded <- retained_rows_set[rows_to_keep]
 
     if (is.null(col_mapping)) {
         # Original behavior: match by column names
-        cols_to_keep <- intersect(colnames(mat), retained_cols)
+        retained_cols_set <- setNames(seq_along(retained_cols), retained_cols)
+        mat_cols <- colnames(mat)
 
-        # Subset to kept rows/columns
-        mat_subset <- mat[rows_to_keep, cols_to_keep, drop = FALSE]
+        # Find columns that exist in both
+        cols_in_both <- mat_cols %in% names(retained_cols_set)
+        cols_to_keep <- mat_cols[cols_in_both]
+        col_idx_in_mat <- which(cols_in_both)
+        col_idx_in_expanded <- retained_cols_set[cols_to_keep]
 
-        # Create empty matrix with retained dimensions
-        expanded <- Matrix::Matrix(
-            0,
-            nrow = length(retained_rows),
-            ncol = length(retained_cols),
-            sparse = TRUE
-        )
+        # Subset efficiently
+        mat_subset <- mat[row_idx_in_mat, col_idx_in_mat, drop = FALSE]
+
+        # Build sparse matrix using triplet format (much faster)
+        if (nrow(mat_subset) > 0 && ncol(mat_subset) > 0) {
+            # Convert to triplet format (works for both sparse and dense matrices)
+            mat_T <- as(mat_subset, "TsparseMatrix")
+
+            # Remap indices (TsparseMatrix uses 0-based indexing, but slot access gives 1-based)
+            new_i <- row_idx_in_expanded[mat_T@i + 1]
+            new_j <- col_idx_in_expanded[mat_T@j + 1]
+
+            # Create sparse matrix from triplets
+            expanded <- Matrix::sparseMatrix(
+                i = new_i,
+                j = new_j,
+                x = mat_T@x,
+                dims = c(length(retained_rows), length(retained_cols))
+            )
+        } else {
+            # Empty matrix case
+            expanded <- Matrix::Matrix(
+                0,
+                nrow = length(retained_rows),
+                ncol = length(retained_cols),
+                sparse = TRUE
+            )
+        }
+
         rownames(expanded) <- retained_rows
         colnames(expanded) <- retained_cols
-
-        # Map subsetted data into expanded matrix
-        row_idx <- match(rows_to_keep, retained_rows)
-        col_idx <- match(cols_to_keep, retained_cols)
-
-        expanded[row_idx, col_idx] <- mat_subset
     } else {
         # Barcode-based behavior: use column mapping
-        # Subset to kept rows
-        mat_subset <- mat[rows_to_keep, , drop = FALSE]
+        # Only process columns that map to retained positions
+        valid_cols <- !is.na(col_mapping)
 
-        # Create empty matrix with retained dimensions
-        expanded <- Matrix::Matrix(
-            0,
-            nrow = length(retained_rows),
-            ncol = length(retained_cols),
-            sparse = TRUE
-        )
+        if (any(valid_cols) && length(rows_to_keep) > 0) {
+            # Subset rows and valid columns
+            col_idx_in_mat <- which(valid_cols)
+            col_idx_in_expanded <- col_mapping[valid_cols]
+
+            mat_subset <- mat[row_idx_in_mat, col_idx_in_mat, drop = FALSE]
+
+            # Convert to triplet format for efficient sparse matrix construction
+            mat_T <- as(mat_subset, "TsparseMatrix")
+
+            # Remap indices (TsparseMatrix uses 0-based indexing, but slot access gives 1-based)
+            new_i <- row_idx_in_expanded[mat_T@i + 1]
+            new_j <- col_idx_in_expanded[mat_T@j + 1]
+
+            # Create sparse matrix from triplets
+            expanded <- Matrix::sparseMatrix(
+                i = new_i,
+                j = new_j,
+                x = mat_T@x,
+                dims = c(length(retained_rows), length(retained_cols))
+            )
+        } else {
+            # Empty matrix case
+            expanded <- Matrix::Matrix(
+                0,
+                nrow = length(retained_rows),
+                ncol = length(retained_cols),
+                sparse = TRUE
+            )
+        }
+
         rownames(expanded) <- retained_rows
         colnames(expanded) <- retained_cols
-
-        # Map rows
-        row_idx <- match(rows_to_keep, retained_rows)
-
-        # Map columns using the barcode mapping
-        # Only include columns where col_mapping is not NA (barcode exists in retained set)
-        valid_cols <- !is.na(col_mapping)
-        if (any(valid_cols)) {
-            expanded[row_idx, col_mapping[valid_cols]] <- mat_subset[, valid_cols, drop = FALSE]
-        }
     }
 
     return(expanded)
