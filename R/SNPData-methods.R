@@ -157,14 +157,14 @@ clonotype_count_df_impl <- function(x, test_maf = TRUE) {
     ref_count_df <- ref_count_grouped %>%
         tibble::as_tibble() %>%
         dplyr::mutate(snp_id = rownames(ref_count_grouped), .before = 1) %>%
-        tidyr::pivot_longer(contains("clonotype"), names_to = "clonotype", values_to = "ref_count")
+        tidyr::pivot_longer(-snp_id, names_to = "clonotype", values_to = "ref_count")
 
     logger::log_info("Extracting alternate counts")
     alt_count_grouped <- groupedRowSums(alt_count(x), barcode_info$clonotype)
     alt_count_df <- alt_count_grouped %>%
         tibble::as_tibble() %>%
         dplyr::mutate(snp_id = rownames(alt_count_grouped), .before = 1) %>%
-        tidyr::pivot_longer(contains("clonotype"), names_to = "clonotype", values_to = "alt_count")
+        tidyr::pivot_longer(-snp_id, names_to = "clonotype", values_to = "alt_count")
 
     logger::log_info("Processing reference and alternate counts")
     most_likely_donor <- barcode_info %>%
