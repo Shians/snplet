@@ -128,6 +128,42 @@ setMethod(
             }
         }
 
+        # Remove duplicate SNP entries while keeping first occurrence
+        if (any(duplicated(snp_info$snp_id))) {
+            # Report duplicate SNP IDs with their row positions
+            dup_positions <- which(duplicated(snp_info$snp_id))
+            dup_labels <- paste0(
+                snp_info$snp_id[dup_positions],
+                " (row ",
+                dup_positions,
+                ")"
+            )
+            dup_snps_msg <- paste(head(dup_labels, 5), collapse = ", ")
+
+            # If more than 5 duplicates, indicate how many more exist
+            if (length(dup_positions) > 5) {
+                dup_snps_msg <- paste0(
+                    dup_snps_msg,
+                    ", ... (",
+                    length(dup_positions),
+                    " duplicates)"
+                )
+            }
+
+            warning(
+                sprintf(
+                    "Duplicate SNP IDs detected (%s). Keeping first occurrence and dropping duplicates.",
+                    dup_snps_msg
+                ),
+                call. = FALSE
+            )
+            keep_snps <- !duplicated(snp_info$snp_id)
+            ref_count <- ref_count[keep_snps, , drop = FALSE]
+            alt_count <- alt_count[keep_snps, , drop = FALSE]
+            oth_count <- oth_count[keep_snps, , drop = FALSE]
+            snp_info <- snp_info[keep_snps, , drop = FALSE]
+        }
+
         # assign cell_ids if none exist
         if (!"cell_id" %in% colnames(barcode_info)) {
             barcode_info$cell_id <- paste0("cell_", seq_len(nrow(barcode_info)))
