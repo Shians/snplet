@@ -89,6 +89,74 @@ test_that("SNPData count data frame methods work correctly", {
     expect_true(all(expected_clonotype_cols %in% colnames(clonotype_df)))
 })
 
+test_that("SNPData constructor drops duplicate SNP IDs", {
+    dup_alt_count <- Matrix::Matrix(
+        matrix(c(1, 2, 3, 4, 5, 6), nrow = 3, ncol = 2, byrow = TRUE)
+    )
+    dup_ref_count <- Matrix::Matrix(
+        matrix(c(5, 6, 7, 8, 9, 10), nrow = 3, ncol = 2, byrow = TRUE)
+    )
+    dup_snp_info <- data.frame(
+        snp_id = c("dup_snp", "dup_snp", "unique_snp"),
+        pos = c(100, 101, 200),
+        stringsAsFactors = FALSE
+    )
+
+    # Construct SNPData to trigger deduplication
+    expect_warning(
+        snp_dup <- SNPData(
+            alt_count = dup_alt_count,
+            ref_count = dup_ref_count,
+            snp_info = dup_snp_info,
+            barcode_info = test_barcode_info
+        ),
+        regexp = "Duplicate SNP IDs detected"
+    )
+
+    # Verify correct number of SNPs after deduplication
+    expect_equal(nrow(snp_dup), 2)
+    
+    # Verify correct SNP IDs are retained
+    expect_equal(
+        get_snp_info(snp_dup)$snp_id,
+        c("dup_snp", "unique_snp")
+    )
+    
+    # Verify row names are updated
+    expect_equal(
+        rownames(ref_count(snp_dup)),
+        c("dup_snp", "unique_snp")
+    )
+    
+    # Verify which duplicate was kept (should be first occurrence with pos=100)
+    expect_equal(get_snp_info(snp_dup)$pos, c(100, 200))
+    
+    # Verify count matrices match the kept SNPs
+    # First row should be from first dup_snp (values 1, 2 for alt)
+    expect_equal(
+        as.vector(alt_count(snp_dup)[1,]),
+        c(1, 2)
+    )
+    
+    # First row should be from first dup_snp (values 5, 6 for ref)
+    expect_equal(
+        as.vector(ref_count(snp_dup)[1,]),
+        c(5, 6)
+    )
+    
+    # Second row should be unique_snp (values 5, 6 for alt)
+    expect_equal(
+        as.vector(alt_count(snp_dup)[2,]),
+        c(5, 6)
+    )
+    
+    # Second row should be unique_snp (values 9, 10 for ref)
+    expect_equal(
+        as.vector(ref_count(snp_dup)[2,]),
+        c(9, 10)
+    )
+})
+
 test_that("filter_snps and filter_barcodes validate column names", {
     # Setup
     snp_data <- SNPData(
