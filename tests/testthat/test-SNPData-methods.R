@@ -1,8 +1,3 @@
-# ==============================================================================
-# Test Suite: SNPData Methods
-# Description: Tests for SNPData methods including filtering and data frame conversion
-# ==============================================================================
-
 library(testthat)
 library(Matrix)
 
@@ -782,7 +777,16 @@ test_that("clonotype functions work after updating clonotype with overwrite=TRUE
     expect_true(is.matrix(expr_mat))
 })
 
-test_that("merge_snpdata combines counts and metadata correctly", {
+# ------------------------------------------------------------------------------
+# Test Data Setup - merge_snpdata
+# ------------------------------------------------------------------------------
+
+# Create test data for merge_snpdata tests
+# x has: snpA, snpB and cell1, cell2
+# y has: snpB, snpC and cell2, cell3
+# snpB and cell2 overlap between x and y
+
+create_merge_test_data <- function() {
     alt_x <- Matrix::Matrix(
         matrix(
             c(
@@ -862,48 +866,339 @@ test_that("merge_snpdata combines counts and metadata correctly", {
         barcode_info = barcode_info_y
     )
 
+    list(x = x, y = y)
+}
+
+test_that("merge_snpdata union/union retains all SNPs and cells", {
+    data <- create_merge_test_data()
+    x <- data$x
+    y <- data$y
+
     merged <- merge_snpdata(x, y, snp_join = "union", cell_join = "union")
 
+    # Verify all SNPs from both objects are retained
     expect_equal(rownames(merged), c("snpA", "snpB", "snpC"))
+    # Verify all cells from both objects are retained
     expect_equal(colnames(merged), c("cell1", "cell2", "cell3"))
 
+    # Verify ref counts are added correctly for overlapping entries
+    # x: snpA/cell1=3, snpA/cell2=1, snpB/cell1=0, snpB/cell2=1
+    # y: snpB/cell2=0, snpB/cell3=1, snpC/cell2=2, snpC/cell3=1
+    # Merged: snpB/cell2 = 1+0 = 1
     expected_ref <- Matrix::Matrix(
         matrix(
             c(
-                3, 1, 0, # snpA
-                0, 1, 1, # snpB
-                0, 2, 1  # snpC
+                3, 1, 0, # snpA: from x only
+                0, 1, 1, # snpB: cell1 from x, cell2 from x+y (1+0), cell3 from y
+                0, 2, 1  # snpC: from y only
             ),
             nrow = 3,
             ncol = 3,
             byrow = TRUE,
             dimnames = list(c("snpA", "snpB", "snpC"), c("cell1", "cell2", "cell3"))
+        )
+    )
+    # Verify alt counts are added correctly for overlapping entries
+    # x: snpA/cell1=1, snpA/cell2=0, snpB/cell1=0, snpB/cell2=2
+    # y: snpB/cell2=1, snpB/cell3=2, snpC/cell2=0, snpC/cell3=1
+    # Merged: snpB/cell2 = 2+1 = 3
+    expected_alt <- Matrix::Matrix(
+        matrix(
+            c(
+                1, 0, 0, # snpA: from x only
+                0, 3, 2, # snpB: cell1 from x, cell2 from x+y (2+1), cell3 from y
+                0, 0, 1  # snpC: from y only
+            ),
+            nrow = 3,
+            ncol = 3,
+            byrow = TRUE,
+            dimnames = list(c("snpA", "snpB", "snpC"), c("cell1", "cell2", "cell3"))
+        )
+    )
+    # Check ref count matrix matches expected
+    expect_equal(as.matrix(ref_count(merged)), as.matrix(expected_ref))
+    # Check alt count matrix matches expected
+    expect_equal(as.matrix(alt_count(merged)), as.matrix(expected_alt))
+})
+
+test_that("merge_snpdata union/union merges metadata correctly", {
+    data <- create_merge_test_data()
+    x <- data$x
+    y <- data$y
+
+    merged <- merge_snpdata(x, y, snp_join = "union", cell_join = "union")
+
+    merged_snp_info <- get_snp_info(merged)
+    merged_barcode_info <- get_barcode_info(merged)
+
+    # Verify SNP metadata is merged with x taking priority for conflicts
+    expect_equal(merged_snp_info$gene, c("geneA", "geneB_x", "geneC"))
+    # Verify coverage is recalculated correctly (sum of all counts per SNP)
+    # snpA: 3+1+1+0 = 5, snpB: 0+1+1+0+3+2 = 7, snpC: 0+2+1+0+0+1 = 4
+    expect_equal(unname(merged_snp_info$coverage), c(5, 7, 4))
+    # Verify non_zero_samples is recalculated correctly (cells with non-zero coverage)
+    # snpA: cell1, cell2 (2 cells), snpB: cell2, cell3 (2 cells), snpC: cell2, cell3 (2 cells)
+    expect_equal(unname(merged_snp_info$non_zero_samples), c(2, 2, 2))
+
+    # Verify barcode metadata is merged with x taking priority for conflicts
+    expect_equal(merged_barcode_info$donor, c("d1", "d2", "d3"))
+    # Verify library_size is recalculated correctly (sum of all counts per cell)
+    # cell1: 3+1+0+0 = 4, cell2: 1+0+1+3+2+0 = 7, cell3: 0+0+1+2+1+1 = 5
+    expect_equal(unname(merged_barcode_info$library_size), c(4, 7, 5))
+    # Verify non_zero_snps is recalculated correctly (SNPs with non-zero coverage)
+    # cell1: snpA (1), cell2: snpA, snpB, snpC (3), cell3: snpB, snpC (2)
+    expect_equal(unname(merged_barcode_info$non_zero_snps), c(1, 3, 2))
+})
+
+test_that("merge_snpdata intersect/intersect retains only overlapping SNPs and cells", {
+    data <- create_merge_test_data()
+    x <- data$x
+    y <- data$y
+
+    merged <- merge_snpdata(x, y, snp_join = "intersect", cell_join = "intersect")
+
+    # Verify only overlapping SNP (snpB) is retained
+    expect_equal(rownames(merged), "snpB")
+    # Verify only overlapping cell (cell2) is retained
+    expect_equal(colnames(merged), "cell2")
+
+    # Verify counts for snpB/cell2 are summed from both objects
+    # x: snpB/cell2 has ref=1, alt=2
+    # y: snpB/cell2 has ref=0, alt=1
+    # Expected: ref=1, alt=3
+    expect_equal(as.vector(ref_count(merged)), 1)
+    expect_equal(as.vector(alt_count(merged)), 3)
+})
+
+test_that("merge_snpdata intersect/intersect merges metadata correctly", {
+    data <- create_merge_test_data()
+    x <- data$x
+    y <- data$y
+
+    merged <- merge_snpdata(x, y, snp_join = "intersect", cell_join = "intersect")
+
+    merged_snp_info <- get_snp_info(merged)
+    merged_barcode_info <- get_barcode_info(merged)
+
+    # Verify SNP metadata for snpB uses x value for conflict
+    expect_equal(merged_snp_info$gene, "geneB_x")
+    # Verify coverage is recalculated
+    expect_equal(unname(merged_snp_info$coverage), 4)
+    # Verify non_zero_samples is recalculated
+    expect_equal(unname(merged_snp_info$non_zero_samples), 1)
+
+    # Verify barcode metadata for cell2 uses x value for conflict
+    expect_equal(merged_barcode_info$donor, "d2")
+    # Verify library_size is recalculated
+    expect_equal(unname(merged_barcode_info$library_size), 4)
+    # Verify non_zero_snps is recalculated
+    expect_equal(unname(merged_barcode_info$non_zero_snps), 1)
+})
+
+test_that("merge_snpdata left/left retains all SNPs and cells from x only", {
+    data <- create_merge_test_data()
+    x <- data$x
+    y <- data$y
+
+    merged <- merge_snpdata(x, y, snp_join = "left", cell_join = "left")
+
+    # Verify only SNPs from x are retained (snpA, snpB)
+    expect_equal(rownames(merged), c("snpA", "snpB"))
+    # Verify only cells from x are retained (cell1, cell2)
+    expect_equal(colnames(merged), c("cell1", "cell2"))
+
+    # Verify counts: snpB/cell2 should be summed, others from x only
+    # x: snpA/cell1=3, snpA/cell2=1, snpB/cell1=0, snpB/cell2=1
+    # y: snpB/cell2=0 (overlaps with x)
+    # Merged: snpB/cell2 = 1+0 = 1
+    expected_ref <- Matrix::Matrix(
+        matrix(
+            c(
+                3, 1, # snpA: from x only
+                0, 1  # snpB: cell1 from x, cell2 from x+y (1+0)
+            ),
+            nrow = 2,
+            ncol = 2,
+            byrow = TRUE,
+            dimnames = list(c("snpA", "snpB"), c("cell1", "cell2"))
         )
     )
     expected_alt <- Matrix::Matrix(
         matrix(
             c(
-                1, 0, 0, # snpA
-                0, 3, 2, # snpB
-                0, 0, 1  # snpC
+                1, 0, # snpA: from x only
+                0, 3  # snpB: cell1 from x, cell2 from x+y (2+1)
             ),
-            nrow = 3,
-            ncol = 3,
+            nrow = 2,
+            ncol = 2,
             byrow = TRUE,
-            dimnames = list(c("snpA", "snpB", "snpC"), c("cell1", "cell2", "cell3"))
+            dimnames = list(c("snpA", "snpB"), c("cell1", "cell2"))
         )
     )
+    # Check ref count matrix matches expected
     expect_equal(as.matrix(ref_count(merged)), as.matrix(expected_ref))
+    # Check alt count matrix matches expected
     expect_equal(as.matrix(alt_count(merged)), as.matrix(expected_alt))
+})
+
+test_that("merge_snpdata left/left merges metadata correctly", {
+    data <- create_merge_test_data()
+    x <- data$x
+    y <- data$y
+
+    merged <- merge_snpdata(x, y, snp_join = "left", cell_join = "left")
 
     merged_snp_info <- get_snp_info(merged)
     merged_barcode_info <- get_barcode_info(merged)
 
-    expect_equal(merged_snp_info$gene, c("geneA", "geneB_x", "geneC"))
-    expect_equal(unname(merged_snp_info$coverage), c(5, 7, 4))
-    expect_equal(unname(merged_snp_info$non_zero_samples), c(2, 2, 2))
+    # Verify SNP metadata contains only x SNPs
+    expect_equal(merged_snp_info$snp_id, c("snpA", "snpB"))
+    # Verify gene metadata for snpB uses x value
+    expect_equal(merged_snp_info$gene, c("geneA", "geneB_x"))
 
-    expect_equal(merged_barcode_info$donor, c("d1", "d2", "d3"))
-    expect_equal(unname(merged_barcode_info$library_size), c(4, 7, 5))
-    expect_equal(unname(merged_barcode_info$non_zero_snps), c(1, 3, 2))
+    # Verify barcode metadata contains only x cells
+    expect_equal(merged_barcode_info$cell_id, c("cell1", "cell2"))
+    # Verify donor metadata uses x values
+    expect_equal(merged_barcode_info$donor, c("d1", "d2"))
+})
+
+test_that("merge_snpdata right/right retains all SNPs and cells from y only", {
+    data <- create_merge_test_data()
+    x <- data$x
+    y <- data$y
+
+    merged <- merge_snpdata(x, y, snp_join = "right", cell_join = "right")
+
+    # Verify only SNPs from y are retained (snpB, snpC)
+    expect_equal(rownames(merged), c("snpB", "snpC"))
+    # Verify only cells from y are retained (cell2, cell3)
+    expect_equal(colnames(merged), c("cell2", "cell3"))
+
+    # Verify counts: snpB/cell2 should be summed, others from y only
+    # x: snpB/cell2=1 (ref), snpB/cell2=2 (alt)
+    # y: snpB/cell2=0 (ref), snpB/cell2=1 (alt), snpB/cell3=1 (ref), snpB/cell3=2 (alt)
+    #    snpC/cell2=2 (ref), snpC/cell2=0 (alt), snpC/cell3=1 (ref), snpC/cell3=1 (alt)
+    # Merged: snpB/cell2 ref=1+0=1, alt=2+1=3
+    expected_ref <- Matrix::Matrix(
+        matrix(
+            c(
+                1, 1, # snpB: cell2 from x+y (1+0), cell3 from y
+                2, 1  # snpC: from y only
+            ),
+            nrow = 2,
+            ncol = 2,
+            byrow = TRUE,
+            dimnames = list(c("snpB", "snpC"), c("cell2", "cell3"))
+        )
+    )
+    expected_alt <- Matrix::Matrix(
+        matrix(
+            c(
+                3, 2, # snpB: cell2 from x+y (2+1), cell3 from y
+                0, 1  # snpC: from y only
+            ),
+            nrow = 2,
+            ncol = 2,
+            byrow = TRUE,
+            dimnames = list(c("snpB", "snpC"), c("cell2", "cell3"))
+        )
+    )
+    # Check ref count matrix matches expected
+    expect_equal(as.matrix(ref_count(merged)), as.matrix(expected_ref))
+    # Check alt count matrix matches expected
+    expect_equal(as.matrix(alt_count(merged)), as.matrix(expected_alt))
+})
+
+test_that("merge_snpdata right/right merges metadata correctly", {
+    data <- create_merge_test_data()
+    x <- data$x
+    y <- data$y
+
+    merged <- merge_snpdata(x, y, snp_join = "right", cell_join = "right")
+
+    merged_snp_info <- get_snp_info(merged)
+    merged_barcode_info <- get_barcode_info(merged)
+
+    # Verify SNP metadata contains only y SNPs
+    expect_equal(merged_snp_info$snp_id, c("snpB", "snpC"))
+    # Verify gene metadata: snpB should use x value (priority), snpC from y
+    expect_equal(merged_snp_info$gene, c("geneB_x", "geneC"))
+
+    # Verify barcode metadata contains only y cells
+    expect_equal(merged_barcode_info$cell_id, c("cell2", "cell3"))
+    # Verify donor metadata: cell2 should use x value (priority), cell3 from y
+    expect_equal(merged_barcode_info$donor, c("d2", "d3"))
+})
+
+test_that("merge_snpdata union/intersect retains all SNPs but only overlapping cells", {
+    data <- create_merge_test_data()
+    x <- data$x
+    y <- data$y
+
+    merged <- merge_snpdata(x, y, snp_join = "union", cell_join = "intersect")
+
+    # Verify all SNPs are retained
+    expect_equal(rownames(merged), c("snpA", "snpB", "snpC"))
+    # Verify only overlapping cell is retained
+    expect_equal(colnames(merged), "cell2")
+
+    # Verify counts for cell2 are summed where both objects have data
+    # x: snpA/cell2=1 (ref), snpB/cell2=1 (ref)
+    # y: snpB/cell2=0 (ref), snpC/cell2=2 (ref)
+    expect_equal(as.vector(ref_count(merged)[1, ]), 1) # snpA/cell2: from x
+    expect_equal(as.vector(ref_count(merged)[2, ]), 1) # snpB/cell2: from x+y (1+0)
+    expect_equal(as.vector(ref_count(merged)[3, ]), 2) # snpC/cell2: from y
+})
+
+test_that("merge_snpdata intersect/union retains only overlapping SNPs but all cells", {
+    data <- create_merge_test_data()
+    x <- data$x
+    y <- data$y
+
+    merged <- merge_snpdata(x, y, snp_join = "intersect", cell_join = "union")
+
+    # Verify only overlapping SNP is retained
+    expect_equal(rownames(merged), "snpB")
+    # Verify all cells are retained
+    expect_equal(colnames(merged), c("cell1", "cell2", "cell3"))
+
+    # Verify counts for snpB across all cells
+    # x: snpB/cell1=0 (ref), snpB/cell2=1 (ref)
+    # y: snpB/cell2=0 (ref), snpB/cell3=1 (ref)
+    expect_equal(as.vector(ref_count(merged)[1, ]), c(0, 1, 1)) # snpB: cell1 from x, cell2 from x+y (1+0), cell3 from y
+    # x: snpB/cell1=0 (alt), snpB/cell2=2 (alt)
+    # y: snpB/cell2=1 (alt), snpB/cell3=2 (alt)
+    expect_equal(as.vector(alt_count(merged)[1, ]), c(0, 3, 2)) # snpB: cell1 from x, cell2 from x+y (2+1), cell3 from y
+})
+
+test_that("merge_snpdata left/intersect retains x SNPs but only overlapping cells", {
+    data <- create_merge_test_data()
+    x <- data$x
+    y <- data$y
+
+    merged <- merge_snpdata(x, y, snp_join = "left", cell_join = "intersect")
+
+    # Verify only SNPs from x are retained
+    expect_equal(rownames(merged), c("snpA", "snpB"))
+    # Verify only overlapping cell is retained
+    expect_equal(colnames(merged), "cell2")
+
+    # Verify dimensions match expected
+    expect_equal(dim(merged), c(2, 1))
+})
+
+test_that("merge_snpdata intersect/right retains only overlapping SNPs but y cells", {
+    data <- create_merge_test_data()
+    x <- data$x
+    y <- data$y
+
+    merged <- merge_snpdata(x, y, snp_join = "intersect", cell_join = "right")
+
+    # Verify only overlapping SNP is retained
+    expect_equal(rownames(merged), "snpB")
+    # Verify only cells from y are retained
+    expect_equal(colnames(merged), c("cell2", "cell3"))
+
+    # Verify dimensions match expected
+    expect_equal(dim(merged), c(1, 2))
 })

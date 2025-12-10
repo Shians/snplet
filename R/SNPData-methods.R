@@ -712,31 +712,60 @@ add_snp_metadata <- function(x, metadata, join_by = "snp_id", overwrite = FALSE,
 #' @param mat A sparse Matrix
 #' @param retained_rows Character vector of row names to retain
 #' @param retained_cols Character vector of column names to retain
+#' @param col_mapping Optional integer vector mapping original column indices to new positions
 #' @return A sparse Matrix with dimensions matching retained_rows x retained_cols
 #' @keywords internal
-.expand_subset_matrix <- function(mat, retained_rows, retained_cols) {
-    # Find overlap between matrix rownames/colnames and retained IDs
+.expand_subset_matrix <- function(mat, retained_rows, retained_cols, col_mapping = NULL) {
+    # Find overlap between matrix rownames and retained row IDs
     rows_to_keep <- intersect(rownames(mat), retained_rows)
-    cols_to_keep <- intersect(colnames(mat), retained_cols)
 
-    # Subset to kept rows/columns
-    mat_subset <- mat[rows_to_keep, cols_to_keep, drop = FALSE]
+    if (is.null(col_mapping)) {
+        # Original behavior: match by column names
+        cols_to_keep <- intersect(colnames(mat), retained_cols)
 
-    # Create empty matrix with retained dimensions
-    expanded <- Matrix::Matrix(
-        0,
-        nrow = length(retained_rows),
-        ncol = length(retained_cols),
-        sparse = TRUE
-    )
-    rownames(expanded) <- retained_rows
-    colnames(expanded) <- retained_cols
+        # Subset to kept rows/columns
+        mat_subset <- mat[rows_to_keep, cols_to_keep, drop = FALSE]
 
-    # Map subsetted data into expanded matrix
-    row_idx <- match(rows_to_keep, retained_rows)
-    col_idx <- match(cols_to_keep, retained_cols)
+        # Create empty matrix with retained dimensions
+        expanded <- Matrix::Matrix(
+            0,
+            nrow = length(retained_rows),
+            ncol = length(retained_cols),
+            sparse = TRUE
+        )
+        rownames(expanded) <- retained_rows
+        colnames(expanded) <- retained_cols
 
-    expanded[row_idx, col_idx] <- mat_subset
+        # Map subsetted data into expanded matrix
+        row_idx <- match(rows_to_keep, retained_rows)
+        col_idx <- match(cols_to_keep, retained_cols)
+
+        expanded[row_idx, col_idx] <- mat_subset
+    } else {
+        # Barcode-based behavior: use column mapping
+        # Subset to kept rows
+        mat_subset <- mat[rows_to_keep, , drop = FALSE]
+
+        # Create empty matrix with retained dimensions
+        expanded <- Matrix::Matrix(
+            0,
+            nrow = length(retained_rows),
+            ncol = length(retained_cols),
+            sparse = TRUE
+        )
+        rownames(expanded) <- retained_rows
+        colnames(expanded) <- retained_cols
+
+        # Map rows
+        row_idx <- match(rows_to_keep, retained_rows)
+
+        # Map columns using the barcode mapping
+        # Only include columns where col_mapping is not NA (barcode exists in retained set)
+        valid_cols <- !is.na(col_mapping)
+        if (any(valid_cols)) {
+            expanded[row_idx, col_mapping[valid_cols]] <- mat_subset[, valid_cols, drop = FALSE]
+        }
+    }
 
     return(expanded)
 }
@@ -786,7 +815,7 @@ add_snp_metadata <- function(x, metadata, join_by = "snp_id", overwrite = FALSE,
 #' Merge barcode metadata according to join strategy
 #'
 #' @keywords internal
-.merge_barcode_info <- function(x, y, cell_ids_retained, cell_join) {
+.merge_barcode_info <- function(x, y, barcodes_retained, cell_join) {
     join_fun <- switch(
         cell_join,
         "union" = dplyr::full_join,
@@ -799,10 +828,17 @@ add_snp_metadata <- function(x, metadata, join_by = "snp_id", overwrite = FALSE,
     barcode_info_x <- x@barcode_info %>% dplyr::select(-dplyr::any_of(auto_cols))
     barcode_info_y <- y@barcode_info %>% dplyr::select(-dplyr::any_of(auto_cols))
 
+    # Check if barcode column exists in both objects
+    has_barcode_x <- "barcode" %in% colnames(barcode_info_x)
+    has_barcode_y <- "barcode" %in% colnames(barcode_info_y)
+
+    # Determine join key: use barcode if available, otherwise fall back to cell_id
+    join_by <- if (has_barcode_x && has_barcode_y) "barcode" else "cell_id"
+
     merged <- join_fun(
         barcode_info_x,
         barcode_info_y,
-        by = "cell_id",
+        by = join_by,
         suffix = c(".x", ".y")
     )
 
@@ -815,12 +851,20 @@ add_snp_metadata <- function(x, metadata, join_by = "snp_id", overwrite = FALSE,
         merged[[y_col]] <- NULL
     }
 
-    merged <- merged[merged$cell_id %in% cell_ids_retained, , drop = FALSE]
-    order_idx <- match(cell_ids_retained, merged$cell_id)
+    # Filter and order by barcodes_retained
+    # Use the appropriate column for filtering
+    filter_col <- if (join_by == "barcode") "barcode" else "cell_id"
+    merged <- merged[merged[[filter_col]] %in% barcodes_retained, , drop = FALSE]
+    order_idx <- match(barcodes_retained, merged[[filter_col]])
     if (any(is.na(order_idx))) {
-        stop("Some cell_ids could not be matched during merge_barcode_info()")
+        stop(paste0("Some ", filter_col, "s could not be matched during merge_barcode_info()"))
     }
     merged <- merged[order_idx, , drop = FALSE]
+
+    # Regenerate cell_id as sequential identifiers if we joined by barcode
+    if (join_by == "barcode") {
+        merged$cell_id <- paste0("cell_", seq_len(nrow(merged)))
+    }
 
     tibble::as_tibble(merged)
 }
@@ -855,6 +899,15 @@ add_snp_metadata <- function(x, metadata, join_by = "snp_id", overwrite = FALSE,
 #' in both objects, counts are summed element-wise. For positions present in
 #' only one object (but retained by the join strategy), counts are kept with
 #' zero-filling for the missing dimension.
+#'
+#' **Cell Merging Strategy:**
+#' When both SNPData objects contain a \code{barcode} column in their
+#' \code{barcode_info}, cells are matched and merged by their cell barcodes
+#' rather than by \code{cell_id}. This allows proper merging of data from the
+#' same physical cells across datasets, even if they have different internal
+#' \code{cell_id} values. For cells with the same barcode, counts are summed.
+#' If the \code{barcode} column is absent from either object, the function falls
+#' back to merging by \code{cell_id}.
 #'
 #' Metadata is merged using the corresponding dplyr join function. For overlapping
 #' SNPs or cells with conflicting metadata, values from x take priority. Auto-
@@ -926,6 +979,51 @@ merge_snpdata <- function(
     cell_ids_x <- colnames(x@ref_count)
     cell_ids_y <- colnames(y@ref_count)
 
+    # Check if barcode column exists in both objects
+    has_barcode_x <- "barcode" %in% colnames(x@barcode_info)
+    has_barcode_y <- "barcode" %in% colnames(y@barcode_info)
+
+    # Use barcodes for merging if available, otherwise fall back to cell_ids
+    if (has_barcode_x && has_barcode_y) {
+        # Extract barcodes from barcode_info
+        barcodes_x <- x@barcode_info$barcode
+        barcodes_y <- y@barcode_info$barcode
+
+        # Create mapping from barcode to original cell_id (colnames)
+        barcode_to_colname_x <- setNames(cell_ids_x, barcodes_x)
+        barcode_to_colname_y <- setNames(cell_ids_y, barcodes_y)
+
+        # Determine which barcodes to retain based on cell_join strategy
+        barcodes_retained <- switch(
+            cell_join,
+            "union" = union(barcodes_x, barcodes_y),
+            "intersect" = intersect(barcodes_x, barcodes_y),
+            "left" = barcodes_x,
+            "right" = barcodes_y
+        )
+
+        # Create mapping from original column names to retained barcode positions
+        # This will be used to reorganize the matrices
+        col_mapping_x <- match(barcodes_x, barcodes_retained)
+        col_mapping_y <- match(barcodes_y, barcodes_retained)
+
+        # Create new cell_ids for the retained barcodes
+        cell_ids_retained <- paste0("cell_", seq_along(barcodes_retained))
+    } else {
+        # Fall back to using cell_ids from column names
+        cell_ids_retained <- switch(
+            cell_join,
+            "union" = union(cell_ids_x, cell_ids_y),
+            "intersect" = intersect(cell_ids_x, cell_ids_y),
+            "left" = cell_ids_x,
+            "right" = cell_ids_y
+        )
+
+        barcodes_retained <- cell_ids_retained
+        col_mapping_x <- NULL
+        col_mapping_y <- NULL
+    }
+
     # Determine which SNPs to retain based on snp_join strategy
     snp_ids_retained <- switch(
         snp_join,
@@ -933,15 +1031,6 @@ merge_snpdata <- function(
         "intersect" = intersect(snp_ids_x, snp_ids_y),
         "left" = snp_ids_x,
         "right" = snp_ids_y
-    )
-
-    # Determine which cells to retain based on cell_join strategy
-    cell_ids_retained <- switch(
-        cell_join,
-        "union" = union(cell_ids_x, cell_ids_y),
-        "intersect" = intersect(cell_ids_x, cell_ids_y),
-        "left" = cell_ids_x,
-        "right" = cell_ids_y
     )
 
     # Handle edge case: empty result
@@ -959,13 +1048,13 @@ merge_snpdata <- function(
     cell_from_y <- intersect(cell_ids_retained, cell_ids_y)
 
     # Expand all matrices to retained dimensions
-    ref_x_exp <- .expand_subset_matrix(x@ref_count, snp_ids_retained, cell_ids_retained)
-    alt_x_exp <- .expand_subset_matrix(x@alt_count, snp_ids_retained, cell_ids_retained)
-    oth_x_exp <- .expand_subset_matrix(x@oth_count, snp_ids_retained, cell_ids_retained)
+    ref_x_exp <- .expand_subset_matrix(x@ref_count, snp_ids_retained, cell_ids_retained, col_mapping_x)
+    alt_x_exp <- .expand_subset_matrix(x@alt_count, snp_ids_retained, cell_ids_retained, col_mapping_x)
+    oth_x_exp <- .expand_subset_matrix(x@oth_count, snp_ids_retained, cell_ids_retained, col_mapping_x)
 
-    ref_y_exp <- .expand_subset_matrix(y@ref_count, snp_ids_retained, cell_ids_retained)
-    alt_y_exp <- .expand_subset_matrix(y@alt_count, snp_ids_retained, cell_ids_retained)
-    oth_y_exp <- .expand_subset_matrix(y@oth_count, snp_ids_retained, cell_ids_retained)
+    ref_y_exp <- .expand_subset_matrix(y@ref_count, snp_ids_retained, cell_ids_retained, col_mapping_y)
+    alt_y_exp <- .expand_subset_matrix(y@alt_count, snp_ids_retained, cell_ids_retained, col_mapping_y)
+    oth_y_exp <- .expand_subset_matrix(y@oth_count, snp_ids_retained, cell_ids_retained, col_mapping_y)
 
     # Merge by addition
     ref_merged <- ref_x_exp + ref_y_exp
@@ -974,7 +1063,7 @@ merge_snpdata <- function(
 
     # Merge metadata using helper functions
     snp_info_merged <- .merge_snp_info(x, y, snp_ids_retained, snp_join)
-    barcode_info_merged <- .merge_barcode_info(x, y, cell_ids_retained, cell_join)
+    barcode_info_merged <- .merge_barcode_info(x, y, barcodes_retained, cell_join)
 
     # Create new SNPData object
     # The initialize method will automatically compute:

@@ -22,6 +22,6 @@
 #' @importFrom furrr future_map2_dbl
 #' @importFrom R.utils gzip
 #' @importFrom grid unit
-#' @importFrom stats median quantile p.adjust
+#' @importFrom stats median quantile p.adjust setNames
 #' @importFrom utils head
 NULL

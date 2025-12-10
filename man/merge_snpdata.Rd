@@ -46,6 +46,15 @@ in both objects, counts are summed element-wise. For positions present in
 only one object (but retained by the join strategy), counts are kept with
 zero-filling for the missing dimension.
 
+**Cell Merging Strategy:**
+When both SNPData objects contain a \code{barcode} column in their
+\code{barcode_info}, cells are matched and merged by their cell barcodes
+rather than by \code{cell_id}. This allows proper merging of data from the
+same physical cells across datasets, even if they have different internal
+\code{cell_id} values. For cells with the same barcode, counts are summed.
+If the \code{barcode} column is absent from either object, the function falls
+back to merging by \code{cell_id}.
+
 Metadata is merged using the corresponding dplyr join function. For overlapping
 SNPs or cells with conflicting metadata, values from x take priority. Auto-
 computed columns (coverage, non_zero_samples, library_size, non_zero_snps)

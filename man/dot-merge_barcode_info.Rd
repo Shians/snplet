@@ -4,7 +4,7 @@
 \alias{.merge_barcode_info}
 \title{Merge barcode metadata according to join strategy}
 \usage{
-.merge_barcode_info(x, y, cell_ids_retained, cell_join)
+.merge_barcode_info(x, y, barcodes_retained, cell_join)
 }
 \description{
 Merge barcode metadata according to join strategy

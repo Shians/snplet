@@ -4,7 +4,7 @@
 \alias{.expand_subset_matrix}
 \title{Expand and subset a sparse matrix to new dimensions}
 \usage{
-.expand_subset_matrix(mat, retained_rows, retained_cols)
+.expand_subset_matrix(mat, retained_rows, retained_cols, col_mapping = NULL)
 }
 \arguments{
 \item{mat}{A sparse Matrix}
@@ -12,6 +12,8 @@
 \item{retained_rows}{Character vector of row names to retain}
 
 \item{retained_cols}{Character vector of column names to retain}
+
+\item{col_mapping}{Optional integer vector mapping original column indices to new positions}
 }
 \value{
 A sparse Matrix with dimensions matching retained_rows x retained_cols
