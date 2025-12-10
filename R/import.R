@@ -99,10 +99,13 @@ import_cellsnp <- function(
     )
 
     # Merge SNPs with gene annotations
-    snp_info <- plyranges::join_overlap_left(snps_gr, gene_anno_gr) %>%
+    snp_info_joined <- plyranges::join_overlap_left(snps_gr, gene_anno_gr) %>%
         tibble::as_tibble() %>%
         dplyr::rename(chrom = seqnames, pos = start) %>%
-        dplyr::select(snp_id, chrom, pos, ref, alt, gene_name) %>%
+        dplyr::select(snp_id, chrom, pos, ref, alt, gene_name)
+
+    # Aggregate gene names for SNPs that overlap multiple genes
+    snp_info <- snp_info_joined %>%
         dplyr::summarise(
             chrom = dplyr::first(chrom),
             pos = dplyr::first(pos),
@@ -114,6 +117,20 @@ import_cellsnp <- function(
         dplyr::mutate(
             gene_name = dplyr::if_else(gene_name == "NA", NA_character_, gene_name)
         )
+
+    # Match snp_info to original VCF order and subset matrices accordingly
+    # This handles cases where join_overlap_left created duplicates
+    snp_match_idx <- match(snp_vcf_data$snp_id, snp_info$snp_id)
+    keep_rows <- !is.na(snp_match_idx)
+
+    # Subset matrices and VCF data to match deduplicated SNP info
+    coverage <- coverage[keep_rows, , drop = FALSE]
+    alt_count <- alt_count[keep_rows, , drop = FALSE]
+    oth_count <- oth_count[keep_rows, , drop = FALSE]
+    ref_count <- ref_count[keep_rows, , drop = FALSE]
+
+    # Reorder snp_info to match the original VCF order (after filtering)
+    snp_info <- snp_info[snp_match_idx[keep_rows], , drop = FALSE]
 
     # Read donor information if provided, else create dummy donor info
     if (!is.null(vireo_file)) {
