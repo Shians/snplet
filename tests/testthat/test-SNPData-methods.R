@@ -1276,17 +1276,17 @@ test_that("donor_het_status_df reports het/hom status with tested flag", {
         minor_allele_prop = 0.1
     )
 
-    expect_true(all(c("snp_id", "donor", "status", "tested") %in% colnames(status_df)))
+    expect_true(all(c("snp_id", "donor", "zygosity", "tested") %in% colnames(status_df)))
 
     snp1_d1 <- status_df %>% dplyr::filter(snp_id == "snp1", donor == "donor1")
-    expect_equal(snp1_d1$status, "het")
+    expect_equal(snp1_d1$zygosity, "het")
     expect_true(snp1_d1$tested)
 
     snp2_d1 <- status_df %>% dplyr::filter(snp_id == "snp2", donor == "donor1")
-    expect_equal(snp2_d1$status, "hom")
+    expect_equal(snp2_d1$zygosity, "hom")
     expect_true(snp2_d1$tested)
 
     snp4_d1 <- status_df %>% dplyr::filter(snp_id == "snp4", donor == "donor1")
-    expect_equal(snp4_d1$status, "hom")
+    expect_equal(snp4_d1$zygosity, "unknown")
     expect_false(snp4_d1$tested)
 })
