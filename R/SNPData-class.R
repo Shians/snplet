@@ -93,110 +93,33 @@ setMethod(
         snp_info,
         barcode_info
     ) {
-        # validate dimension compatibility
-        stopifnot(nrow(alt_count) == nrow(ref_count))
-        stopifnot(ncol(alt_count) == ncol(ref_count))
-        # OTH matrix checks
-        if (!is.null(oth_count)) {
-            stopifnot(nrow(oth_count) == nrow(ref_count))
-            stopifnot(ncol(oth_count) == ncol(ref_count))
-        } else {
-            oth_count <- Matrix::Matrix(
-                0,
-                nrow = nrow(ref_count),
-                ncol = ncol(ref_count),
-                sparse = TRUE
-            )
-        }
+        oth_count <- .validate_count_dims(ref_count, alt_count, oth_count)
+        .validate_info_dims(ref_count, alt_count, snp_info, barcode_info)
 
-        stopifnot(ncol(alt_count) == nrow(barcode_info))
-        stopifnot(nrow(ref_count) == nrow(snp_info))
+        snp_info <- .assign_snp_ids(snp_info)
+        barcode_info <- .assign_cell_ids(barcode_info)
 
-        # assign snp_ids if none exist
-        if (!"snp_id" %in% colnames(snp_info)) {
-            # Check if we have the required columns to generate standardized IDs
-            if (all(c("chrom", "pos", "ref", "alt") %in% colnames(snp_info))) {
-                snp_info$snp_id <- make_snp_id(
-                    snp_info$chrom,
-                    snp_info$pos,
-                    snp_info$ref,
-                    snp_info$alt
-                )
-            } else {
-                # Fallback to sequential IDs if genomic coordinates not available
-                snp_info$snp_id <- paste0("snp_", seq_len(nrow(snp_info)))
-            }
-        }
-
-        # Remove duplicate SNP entries while keeping first occurrence
-        if (any(duplicated(snp_info$snp_id))) {
-            # Report duplicate SNP IDs with their row positions
-            dup_positions <- which(duplicated(snp_info$snp_id))
-            dup_labels <- paste0(
-                snp_info$snp_id[dup_positions],
-                " (row ",
-                dup_positions,
-                ")"
-            )
-            dup_snps_msg <- paste(head(dup_labels, 5), collapse = ", ")
-
-            # If more than 5 duplicates, indicate how many more exist
-            if (length(dup_positions) > 5) {
-                dup_snps_msg <- paste0(
-                    dup_snps_msg,
-                    ", ... (",
-                    length(dup_positions),
-                    " duplicates)"
-                )
-            }
-
-            warning(
-                sprintf(
-                    "Duplicate SNP IDs detected (%s). Keeping first occurrence and dropping duplicates.",
-                    dup_snps_msg
-                ),
-                call. = FALSE
-            )
-            keep_snps <- !duplicated(snp_info$snp_id)
-            ref_count <- ref_count[keep_snps, , drop = FALSE]
-            alt_count <- alt_count[keep_snps, , drop = FALSE]
-            oth_count <- oth_count[keep_snps, , drop = FALSE]
-            snp_info <- snp_info[keep_snps, , drop = FALSE]
-        }
-
-        # assign cell_ids if none exist
-        if (!"cell_id" %in% colnames(barcode_info)) {
-            barcode_info$cell_id <- paste0("cell_", seq_len(nrow(barcode_info)))
-        }
+        deduped <- .dedupe_snps(ref_count, alt_count, oth_count, snp_info)
+        ref_count <- deduped$ref_count
+        alt_count <- deduped$alt_count
+        oth_count <- deduped$oth_count
+        snp_info <- deduped$snp_info
 
         # convert to tibble
         snp_info <- tibble::as_tibble(snp_info)
         barcode_info <- tibble::as_tibble(barcode_info)
 
-        colnames(ref_count) <- barcode_info$cell_id
-        colnames(alt_count) <- barcode_info$cell_id
-        colnames(oth_count) <- barcode_info$cell_id
-        rownames(ref_count) <- snp_info$snp_id
-        rownames(alt_count) <- snp_info$snp_id
-        rownames(oth_count) <- snp_info$snp_id
+        dimmed <- .set_dimnames(ref_count, alt_count, oth_count, snp_info, barcode_info)
+        ref_count <- dimmed$ref_count
+        alt_count <- dimmed$alt_count
+        oth_count <- dimmed$oth_count
 
         .Object@ref_count <- ref_count
         .Object@alt_count <- alt_count
         .Object@oth_count <- oth_count
-        .Object@snp_info <- snp_info
-        .Object@barcode_info <- barcode_info
-
-        .Object@snp_info$coverage <- Matrix::rowSums(alt_count + ref_count)
-        .Object@snp_info$non_zero_samples <- Matrix::rowSums(
-            alt_count + ref_count > 0
-        )
-
-        .Object@barcode_info$library_size <- Matrix::colSums(
-            alt_count + ref_count
-        )
-        .Object@barcode_info$non_zero_snps <- Matrix::colSums(
-            alt_count + ref_count > 0
-        )
+        metrics <- .recompute_metrics(snp_info, barcode_info, ref_count, alt_count)
+        .Object@snp_info <- metrics$snp_info
+        .Object@barcode_info <- metrics$barcode_info
 
         .Object
     }
@@ -226,12 +149,6 @@ setMethod(
         oth_count <- x@oth_count[i, j, drop = FALSE]
         snp_info <- x@snp_info[i, ]
         barcode_info <- x@barcode_info[j, ]
-
-        snp_info$coverage <- Matrix::rowSums(alt_count + ref_count)
-        snp_info$non_zero_samples <- Matrix::rowSums(alt_count + ref_count > 0)
-
-        barcode_info$library_size <- Matrix::colSums(alt_count + ref_count)
-        barcode_info$non_zero_snps <- Matrix::colSums(alt_count + ref_count > 0)
 
         new(
             "SNPData",
