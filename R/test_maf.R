@@ -23,12 +23,10 @@ test_maf <- function(x, p = 0.10) {
     }
 
     minor_allele_count <- pmin(x$ref_count, x$alt_count)
+    total_count <- ceiling(x$total_count)
+    major_allele_count <- pmax(total_count - minor_allele_count, 0)
 
-    p_val <- furrr::future_map2_dbl(
-        minor_allele_count,
-        ceiling(x$total_count),
-        ~ binom.test(.x, .y, p, alternative = "greater")$p.value
-    )
+    p_val <- pbeta(p, minor_allele_count, major_allele_count + 1, lower.tail = TRUE)
 
     result <- x %>%
         dplyr::mutate(
