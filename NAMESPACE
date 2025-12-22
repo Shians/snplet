@@ -3,6 +3,7 @@
 export(add_barcode_metadata)
 export(add_snp_metadata)
 export(aggregate_count_df)
+export(assign_snp_genes)
 export(barcode_count_df)
 export(clonotype_count_df)
 export(donor_count_df)
