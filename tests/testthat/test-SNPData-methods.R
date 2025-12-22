@@ -1202,3 +1202,91 @@ test_that("merge_snpdata intersect/right retains only overlapping SNPs but y cel
     # Verify dimensions match expected
     expect_equal(dim(merged), c(1, 2))
 })
+
+# ==============================================================================
+# Test Suite: donor_het_status_df
+# Description: Tests for filtering heterozygous SNPs based on donor-level biallelic expression
+# ==============================================================================
+
+create_heterozygous_test_data <- function() {
+    # Create test data with known heterozygous/homozygous patterns
+    # snp1: heterozygous in donor1 (balanced ~50:50, alt=10, ref=10, total=20)
+    # snp2: homozygous in donor1 (highly skewed 2:18, alt=2, ref=18, total=20)
+    # snp3: heterozygous in both donors (balanced, alt=10, ref=10, total=20 each)
+    # snp4: low coverage in donor1 (total=3), heterozygous in donor2 (alt=10, ref=10, total=20)
+
+    alt_count <- Matrix::Matrix(
+        matrix(
+            c(
+                5, 1, 5, 1,  # cell1 (donor1): snp1, snp2, snp3, snp4
+                5, 1, 5, 2,  # cell2 (donor1)
+                5, 1, 5, 3,  # cell3 (donor2)
+                5, 1, 5, 4   # cell4 (donor2)
+            ),
+            nrow = 4,
+            ncol = 4,
+            byrow = FALSE
+        )
+    )
+
+    ref_count <- Matrix::Matrix(
+        matrix(
+            c(
+                5, 9, 5, 0,  # cell1 (donor1)
+                5, 9, 5, 1,  # cell2 (donor1)
+                5, 9, 5, 2,  # cell3 (donor2)
+                5, 9, 5, 3   # cell4 (donor2)
+            ),
+            nrow = 4,
+            ncol = 4,
+            byrow = FALSE
+        )
+    )
+
+    snp_info <- data.frame(
+        snp_id = c("snp1", "snp2", "snp3", "snp4"),
+        chrom = c("chr1", "chr1", "chr2", "chr2"),
+        pos = c(100, 200, 300, 400),
+        stringsAsFactors = FALSE
+    )
+
+    barcode_info <- data.frame(
+        cell_id = c("cell1", "cell2", "cell3", "cell4"),
+        donor = c("donor1", "donor1", "donor2", "donor2"),
+        stringsAsFactors = FALSE
+    )
+
+    SNPData(
+        alt_count = alt_count,
+        ref_count = ref_count,
+        snp_info = snp_info,
+        barcode_info = barcode_info
+    )
+}
+
+# ==============================================================================
+
+test_that("donor_het_status_df reports het/hom status with tested flag", {
+    snp_data <- create_heterozygous_test_data()
+
+    status_df <- donor_het_status_df(
+        snp_data,
+        min_total_count = 10,
+        p_value_threshold = 0.05,
+        minor_allele_prop = 0.1
+    )
+
+    expect_true(all(c("snp_id", "donor", "status", "tested") %in% colnames(status_df)))
+
+    snp1_d1 <- status_df %>% dplyr::filter(snp_id == "snp1", donor == "donor1")
+    expect_equal(snp1_d1$status, "het")
+    expect_true(snp1_d1$tested)
+
+    snp2_d1 <- status_df %>% dplyr::filter(snp_id == "snp2", donor == "donor1")
+    expect_equal(snp2_d1$status, "hom")
+    expect_true(snp2_d1$tested)
+
+    snp4_d1 <- status_df %>% dplyr::filter(snp_id == "snp4", donor == "donor1")
+    expect_equal(snp4_d1$status, "hom")
+    expect_false(snp4_d1$tested)
+})

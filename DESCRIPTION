@@ -30,6 +30,7 @@ Imports:
     logger,
     magrittr,
     plyranges,
+    purrr,
     R.utils,
     readr,
     rlang,

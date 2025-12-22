@@ -1,6 +1,6 @@
 #' @importFrom Matrix Matrix rowSums colSums readMM writeMM rowMeans sparseMatrix
 #' @importFrom dplyr mutate inner_join filter left_join select rename distinct
-#' @importFrom dplyr first summarise if_else count arrange desc slice any_of
+#' @importFrom dplyr first summarise if_else count arrange desc slice any_of pull
 #' @importFrom tidyr pivot_longer contains everything
 #' @importFrom tibble as_tibble
 #' @importFrom rlang enquos get_expr
@@ -20,8 +20,9 @@
 #' @importFrom plyranges as_granges join_overlap_left
 #' @importFrom fs path
 #' @importFrom furrr future_map2_dbl
+#' @importFrom purrr map2_dbl
 #' @importFrom R.utils gzip
 #' @importFrom grid unit
-#' @importFrom stats median quantile p.adjust setNames
+#' @importFrom stats median quantile p.adjust setNames binom.test
 #' @importFrom utils head
 NULL
