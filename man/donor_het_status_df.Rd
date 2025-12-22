@@ -29,7 +29,7 @@ donor_het_status_df(
 \item{minor_allele_prop}{Minor allele proportion used as the null threshold for monoallelic expression testing (default: 0.1).}
 }
 \value{
-A tibble with columns: snp_id, donor, ref_count, alt_count, total_count, minor_allele_count, p_val, adj_p_val, tested, zygosity
+A tibble with columns: snp_id, chrom, pos, donor, ref_count, alt_count, total_count, minor_allele_count, p_val, adj_p_val, tested, zygosity
 }
 \description{
 Returns a long-format data frame with heterozygosity status per SNP and donor.

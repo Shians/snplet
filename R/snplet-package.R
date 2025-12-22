@@ -19,10 +19,9 @@
 #' @importFrom readr read_tsv read_csv write_tsv write_csv cols col_character col_integer
 #' @importFrom plyranges as_granges join_overlap_left
 #' @importFrom fs path
-#' @importFrom furrr future_map2_dbl
 #' @importFrom purrr map2_dbl
 #' @importFrom R.utils gzip
 #' @importFrom grid unit
-#' @importFrom stats median quantile p.adjust setNames binom.test
+#' @importFrom stats median quantile p.adjust setNames
 #' @importFrom utils head
 NULL
