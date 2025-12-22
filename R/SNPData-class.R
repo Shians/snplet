@@ -333,11 +333,13 @@ setReplaceMethod("barcode_info", signature(x = "SNPData", value = "data.frame"),
     if (nrow(value) != ncol(x@ref_count)) {
         stop("Number of rows in barcode_info must match number of columns in count matrices")
     }
-    # Validate row names match column names of matrices
-    if (!is.null(rownames(value)) && !is.null(colnames(x@ref_count))) {
-        if (!identical(rownames(value), colnames(x@ref_count))) {
-            stop("Row names of barcode_info must match column names of count matrices")
-        }
+    # Validate required column exists
+    if (!"cell_id" %in% colnames(value)) {
+        stop("barcode_info must contain a 'cell_id' column")
+    }
+    # Validate cell_id matches column names of matrices
+    if (!identical(value$cell_id, colnames(x@ref_count))) {
+        stop("barcode_info$cell_id must match column names of count matrices")
     }
     x@barcode_info <- value
     x
@@ -353,11 +355,13 @@ setReplaceMethod("snp_info", signature(x = "SNPData", value = "data.frame"), fun
     if (nrow(value) != nrow(x@ref_count)) {
         stop("Number of rows in snp_info must match number of rows in count matrices")
     }
-    # Validate row names match row names of matrices
-    if (!is.null(rownames(value)) && !is.null(rownames(x@ref_count))) {
-        if (!identical(rownames(value), rownames(x@ref_count))) {
-            stop("Row names of snp_info must match row names of count matrices")
-        }
+    # Validate required column exists
+    if (!"snp_id" %in% colnames(value)) {
+        stop("snp_info must contain a 'snp_id' column")
+    }
+    # Validate snp_id matches row names of matrices
+    if (!identical(value$snp_id, rownames(x@ref_count))) {
+        stop("snp_info$snp_id must match row names of count matrices")
     }
     x@snp_info <- value
     x
