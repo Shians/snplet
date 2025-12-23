@@ -84,7 +84,7 @@ import_cellsnp <- function(
     )
 
     # Merge SNP info with gene annotation
-    snp_info_full <- assign_snp_genes(snp_vcf_data, gene_annotation) %>%
+    snp_info_full <- add_snp_gene_names(snp_vcf_data, gene_annotation) %>%
         dplyr::select(snp_id, chrom, pos, ref, alt, gene_name)
 
     # Identify first occurrence of each unique SNP in the original VCF

@@ -17,10 +17,10 @@
 #'     end = c(150, 550),
 #'     gene_name = c("GENE1", "GENE2")
 #' )
-#' assign_snp_genes(snp_df, gene_anno)
+#' add_snp_gene_names(snp_df, gene_anno)
 #'
 #' @export
-assign_snp_genes <- function(snp_df, gene_anno) {
+add_snp_gene_names <- function(snp_df, gene_anno) {
     required_snp_cols <- c("chrom", "pos")
     missing_snp_cols <- setdiff(required_snp_cols, colnames(snp_df))
     if (length(missing_snp_cols) > 0) {
