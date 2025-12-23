@@ -28,7 +28,7 @@
         # Build sparse matrix using triplet format (much faster)
         if (nrow(mat_subset) > 0 && ncol(mat_subset) > 0) {
             # Convert to triplet format (works for both sparse and dense matrices)
-            mat_T <- as(mat_subset, "TsparseMatrix")
+            mat_T <- methods::as(mat_subset, "TsparseMatrix")
 
             # Remap indices (TsparseMatrix uses 0-based indexing, but slot access gives 1-based)
             new_i <- row_idx_in_expanded[mat_T@i + 1]
@@ -66,7 +66,7 @@
             mat_subset <- mat[row_idx_in_mat, col_idx_in_mat, drop = FALSE]
 
             # Convert to triplet format for efficient sparse matrix construction
-            mat_T <- as(mat_subset, "TsparseMatrix")
+            mat_T <- methods::as(mat_subset, "TsparseMatrix")
 
             # Remap indices (TsparseMatrix uses 0-based indexing, but slot access gives 1-based)
             new_i <- row_idx_in_expanded[mat_T@i + 1]

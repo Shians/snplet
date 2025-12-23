@@ -8,7 +8,7 @@
 #' @importFrom logger log_info log_success log_warn
 #' @importFrom glue glue
 #' @importFrom stringr str_remove str_to_title
-#' @importFrom methods is new setClass setGeneric setMethod show
+#' @importFrom methods as is new setClass setGeneric setMethod show
 #' @importFrom BiocGenerics nrow ncol rownames colnames
 #' @importFrom magrittr %>%
 #' @importFrom ggplot2 ggplot aes geom_density scale_y_continuous scale_x_log10
@@ -23,6 +23,6 @@
 #' @importFrom purrr map2_dbl
 #' @importFrom R.utils gzip
 #' @importFrom grid unit
-#' @importFrom stats median quantile p.adjust setNames
+#' @importFrom stats median quantile p.adjust pbeta setNames
 #' @importFrom utils head
 NULL

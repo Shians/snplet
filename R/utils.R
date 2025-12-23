@@ -11,18 +11,22 @@ utils::globalVariables(c(
     "clonotype",
     "donor",
     "donor_id",
+    "end",
     "gene_name",
     "library_size",
     "maf",
     "minor_count",
+    "minor_allele_count",
     "n",
     "n_het_donors",
+    "p_val",
     "pos",
     "ref",
     "seqnames",
     "signif_snps_clonotype",
     "snp_id",
     "start",
+    "tested",
     "total_count"
 ))
 

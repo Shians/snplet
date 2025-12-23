@@ -26,7 +26,7 @@ test_maf <- function(x, p = 0.10) {
     total_count <- ceiling(x$total_count)
     major_allele_count <- pmax(total_count - minor_allele_count, 0)
 
-    p_val <- pbeta(p, minor_allele_count, major_allele_count + 1, lower.tail = TRUE)
+    p_val <- stats::pbeta(p, minor_allele_count, major_allele_count + 1, lower.tail = TRUE)
 
     result <- x %>%
         dplyr::mutate(

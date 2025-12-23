@@ -23,7 +23,6 @@ Imports:
     BiocGenerics,
     dplyr,
     fs,
-    furrr,
     ggplot2,
     ggrepel,
     glue,
