@@ -20,6 +20,7 @@ Depends:
     methods,
     Matrix
 Imports:
+    BiocGenerics,
     dplyr,
     fs,
     furrr,
@@ -47,3 +48,25 @@ biocViews: SingleCell, RNASeq, Genetics, SNP, GeneExpression, Transcriptomics, S
 URL: https://github.com/shiansu/snplet
 BugReports: https://github.com/shiansu/snplet/issues
 RoxygenNote: 7.3.2
+Collate:
+    'snplet-package.R'
+    'SNPData-helpers.R'
+    'SNPData-class.R'
+    'SNPData-aggregation.R'
+    'SNPData-filters.R'
+    'SNPData-metadata.R'
+    'SNPData-het.R'
+    'SNPData-merge-helpers.R'
+    'SNPData-merge.R'
+    'SNPData-import.R'
+    'SNPData-export.R'
+    'remove.R'
+    'to_expr_matrix.R'
+    'assign_snp_genes.R'
+    'plots.R'
+    'plotting.R'
+    'themes.R'
+    'test_maf.R'
+    'utils.R'
+    'VCFData-class.R'
+    'vcf_utils.R'
