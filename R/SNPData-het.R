@@ -89,6 +89,7 @@ donor_het_status_df_impl <- function(
 }
 
 #' @rdname donor_het_status_df
+#' @include SNPData-class.R
 setMethod(
     "donor_het_status_df",
     signature(x = "SNPData"),

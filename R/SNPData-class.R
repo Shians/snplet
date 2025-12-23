@@ -70,6 +70,7 @@
 #' }
 #'
 #' @exportClass SNPData
+#' @include SNPData-helpers.R
 #' @export
 setClass(
     "SNPData",

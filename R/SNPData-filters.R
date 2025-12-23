@@ -99,6 +99,7 @@ filter_snps_impl <- function(.data, ...) {
 }
 
 #' @rdname filter_snps
+#' @include SNPData-class.R
 setMethod(
     "filter_snps",
     signature(.data = "SNPData"),

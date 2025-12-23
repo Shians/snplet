@@ -58,6 +58,7 @@ barcode_count_df_impl <- function(x, test_maf = TRUE) {
 }
 
 #' @rdname barcode_count_df
+#' @include SNPData-class.R
 setMethod(
     "barcode_count_df",
     signature(x = "SNPData"),
