@@ -1,6 +1,6 @@
-#' @importFrom Matrix Matrix rowSums colSums readMM writeMM rowMeans
+#' @importFrom Matrix Matrix rowSums colSums readMM writeMM rowMeans sparseMatrix
 #' @importFrom dplyr mutate inner_join filter left_join select rename distinct
-#' @importFrom dplyr first summarise if_else count arrange desc slice any_of
+#' @importFrom dplyr first summarise if_else count arrange desc slice any_of pull
 #' @importFrom tidyr pivot_longer contains everything
 #' @importFrom tibble as_tibble
 #' @importFrom rlang enquos get_expr
@@ -8,7 +8,8 @@
 #' @importFrom logger log_info log_success log_warn
 #' @importFrom glue glue
 #' @importFrom stringr str_remove str_to_title
-#' @importFrom methods is new setClass setGeneric setMethod show
+#' @importFrom methods as is new setClass setGeneric setMethod show
+#' @importFrom BiocGenerics nrow ncol rownames colnames
 #' @importFrom magrittr %>%
 #' @importFrom ggplot2 ggplot aes geom_density scale_y_continuous scale_x_log10
 #' @importFrom ggplot2 geom_segment scale_x_continuous theme_void theme
@@ -19,9 +20,9 @@
 #' @importFrom readr read_tsv read_csv write_tsv write_csv cols col_character col_integer
 #' @importFrom plyranges as_granges join_overlap_left
 #' @importFrom fs path
-#' @importFrom furrr future_map2_dbl
+#' @importFrom purrr map2_dbl
 #' @importFrom R.utils gzip
 #' @importFrom grid unit
-#' @importFrom stats median quantile p.adjust
+#' @importFrom stats median quantile p.adjust pbeta setNames
 #' @importFrom utils head
 NULL

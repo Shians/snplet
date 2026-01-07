@@ -4,7 +4,7 @@
 #' and donor information from Vireo to create a SNPData object.
 #'
 #' @param cellsnp_dir Directory containing cellSNP-lite output files
-#' @param gene_annotation Data frame with gene annotations for SNPs (must have same number of rows as SNP matrices)
+#' @param gene_annotation Data frame with gene annotations (must contain chrom, start, end, gene_name)
 #' @param vdj_file Path to filtered_contig_annotations.csv from cellranger VDJ (optional, default: NULL)
 #' @param vireo_file Path to donors.tsv file from Vireo (optional, default: NULL)
 #' @param barcode_column Name of the column in vdj_file that contains cell barcodes (only used if vdj_file provided)
@@ -38,7 +38,7 @@ import_cellsnp <- function(
     clonotype_column = "raw_clonotype_id"
 ) {
     # Validate gene_annotation columns
-    required_gene_cols <- c("chrom", "gene_name")
+    required_gene_cols <- c("chrom", "start", "end", "gene_name")
     missing_cols <- setdiff(required_gene_cols, colnames(gene_annotation))
     if (length(missing_cols) > 0) {
         stop(
@@ -84,53 +84,20 @@ import_cellsnp <- function(
     )
 
     # Merge SNP info with gene annotation
-    # Create a GRanges object for SNPs
-    snps_gr <- plyranges::as_granges(
-        snp_vcf_data,
-        seqnames = chrom,
-        start = pos,
-        end = pos,
-    )
-
-    # Create a GRanges object for gene annotations
-    gene_anno_gr <- plyranges::as_granges(
-        gene_annotation,
-        seqnames = chrom
-    )
-
-    # Merge SNPs with gene annotations
-    snp_info_joined <- plyranges::join_overlap_left(snps_gr, gene_anno_gr) %>%
-        tibble::as_tibble() %>%
-        dplyr::rename(chrom = seqnames, pos = start) %>%
+    snp_info_full <- add_snp_gene_names(snp_vcf_data, gene_annotation) %>%
         dplyr::select(snp_id, chrom, pos, ref, alt, gene_name)
 
-    # Aggregate gene names for SNPs that overlap multiple genes
-    snp_info <- snp_info_joined %>%
-        dplyr::summarise(
-            chrom = dplyr::first(chrom),
-            pos = dplyr::first(pos),
-            ref = dplyr::first(ref),
-            alt = dplyr::first(alt),
-            gene_name = paste(unique(gene_name), collapse = ", "),
-            .by = snp_id
-        ) %>%
-        dplyr::mutate(
-            gene_name = dplyr::if_else(gene_name == "NA", NA_character_, gene_name)
-        )
+    # Identify first occurrence of each unique SNP in the original VCF
+    # This handles duplicates from both the VCF file and gene annotation overlaps
+    keep_rows <- !duplicated(snp_vcf_data$snp_id)
 
-    # Match snp_info to original VCF order and subset matrices accordingly
-    # This handles cases where join_overlap_left created duplicates
-    snp_match_idx <- match(snp_vcf_data$snp_id, snp_info$snp_id)
-    keep_rows <- !is.na(snp_match_idx)
-
-    # Subset matrices and VCF data to match deduplicated SNP info
+    # Subset matrices to match deduplicated SNP info
     coverage <- coverage[keep_rows, , drop = FALSE]
     alt_count <- alt_count[keep_rows, , drop = FALSE]
     oth_count <- oth_count[keep_rows, , drop = FALSE]
     ref_count <- ref_count[keep_rows, , drop = FALSE]
 
-    # Reorder snp_info to match the original VCF order (after filtering)
-    snp_info <- snp_info[snp_match_idx[keep_rows], , drop = FALSE]
+    snp_info <- snp_info_full[keep_rows, , drop = FALSE]
 
     # Read donor information if provided, else create dummy donor info
     if (!is.null(vireo_file)) {

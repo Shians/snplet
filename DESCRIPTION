@@ -1,7 +1,7 @@
 Package: snplet
 Type: Package
 Title: Package for handling SNP based allele-specific expression analysis
-Version: 0.3.13
+Version: 0.3.18
 Authors@R: c(
     person(
       "Shian", "Su",
@@ -20,9 +20,9 @@ Depends:
     methods,
     Matrix
 Imports:
+    BiocGenerics,
     dplyr,
     fs,
-    furrr,
     ggplot2,
     ggrepel,
     glue,
@@ -30,6 +30,7 @@ Imports:
     logger,
     magrittr,
     plyranges,
+    purrr,
     R.utils,
     readr,
     rlang,
@@ -46,3 +47,25 @@ biocViews: SingleCell, RNASeq, Genetics, SNP, GeneExpression, Transcriptomics, S
 URL: https://github.com/shiansu/snplet
 BugReports: https://github.com/shiansu/snplet/issues
 RoxygenNote: 7.3.2
+Collate: 
+    'SNPData-helpers.R'
+    'SNPData-class.R'
+    'SNPData-aggregation.R'
+    'SNPData-export.R'
+    'SNPData-filters.R'
+    'SNPData-het.R'
+    'SNPData-import.R'
+    'SNPData-merge-helpers.R'
+    'SNPData-merge.R'
+    'SNPData-metadata.R'
+    'VCFData-class.R'
+    'add_snp_gene_names.R'
+    'plots.R'
+    'plotting.R'
+    'remove.R'
+    'snplet-package.R'
+    'test_maf.R'
+    'themes.R'
+    'to_expr_matrix.R'
+    'utils.R'
+    'vcf_utils.R'

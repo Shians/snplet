@@ -7,6 +7,7 @@
 setGeneric("to_expr_matrix", function(x, level = c("barcode", "clonotype", "donor")) standardGeneric("to_expr_matrix"))
 
 #' @rdname to_expr_matrix
+#' @include SNPData-class.R
 setMethod("to_expr_matrix", signature(x = "SNPData"), function(x, level = c("barcode", "clonotype", "donor")) {
     level <- match.arg(level)
     barcode_info <- get_barcode_info(x)
