@@ -9,6 +9,7 @@ utils::globalVariables(c(
     "cell_id",
     "chrom",
     "clonotype",
+    "coverage",
     "donor",
     "donor_id",
     "end",

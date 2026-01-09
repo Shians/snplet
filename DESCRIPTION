@@ -21,6 +21,7 @@ Depends:
     Matrix
 Imports:
     BiocGenerics,
+    DelayedArray,
     dplyr,
     fs,
     ggplot2,
@@ -29,6 +30,7 @@ Imports:
     grid,
     logger,
     magrittr,
+    mclust,
     plyranges,
     purrr,
     R.utils,
@@ -60,6 +62,7 @@ Collate:
     'SNPData-metadata.R'
     'VCFData-class.R'
     'add_snp_gene_names.R'
+    'assign_inactive_x.R'
     'plots.R'
     'plotting.R'
     'remove.R'
