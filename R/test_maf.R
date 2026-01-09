@@ -26,6 +26,8 @@ test_maf <- function(x, p = 0.10) {
     total_count <- ceiling(x$total_count)
     major_allele_count <- pmax(total_count - minor_allele_count, 0)
 
+    # equivalent to binom.test(minor_allele_count, total_count, p, alternative = "greater")$p.value
+    # pbeta is vectorised and much faster for this test
     p_val <- stats::pbeta(p, minor_allele_count, major_allele_count + 1, lower.tail = TRUE)
 
     result <- x %>%
