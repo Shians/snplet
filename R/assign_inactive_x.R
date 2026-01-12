@@ -10,6 +10,10 @@
 #'   Only chrX SNPs with coverage >= this quantile are used for clustering.
 #' @param cell_quantile Quantile threshold for cell library size filtering (default 0.8).
 #'   Only cells with library size >= this quantile are used for training the model.
+#' @param max_snps Maximum number of SNPs to use for clustering (default 200).
+#'   If more SNPs pass the quantile filter, the top max_snps by coverage are selected.
+#' @param max_cells Maximum number of cells to use for training (default 1000).
+#'   If more cells pass the quantile filter, max_cells are randomly sampled.
 #'
 #' @return A SNPData object with added barcode metadata columns:
 #'   \itemize{
@@ -21,7 +25,9 @@
 #' The function follows these steps:
 #' \enumerate{
 #'   \item Filter to chrX SNPs with high coverage (>= snp_quantile)
+#'   \item Subsample to at most max_snps SNPs (highest coverage)
 #'   \item Filter to cells with high library size (>= cell_quantile)
+#'   \item Subsample to at most max_cells cells (random sampling)
 #'   \item Convert to expression matrix using sign(REF-ALT) * log1p(|REF-ALT|)
 #'   \item Cluster cells using hierarchical clustering (Ward's method) on correlation distance
 #'   \item Cut dendrogram into 2 clusters
@@ -45,13 +51,22 @@
 #'     snp_quantile = 0.95,
 #'     cell_quantile = 0.9
 #' )
+#'
+#' # Use fewer SNPs and cells for faster computation
+#' snpdata <- assign_inactive_x(
+#'     snpdata,
+#'     max_snps = 100,
+#'     max_cells = 500
+#' )
 #' }
 #'
 #' @export
 assign_inactive_x <- function(
     x,
     snp_quantile = 0.9,
-    cell_quantile = 0.8
+    cell_quantile = 0.8,
+    max_snps = 200,
+    max_cells = 1000
 ) {
     # Validate input object type
     if (!methods::is(x, "SNPData")) {
@@ -69,6 +84,16 @@ assign_inactive_x <- function(
     # Validate cell_quantile parameter range
     if (cell_quantile < 0 || cell_quantile > 1) {
         stop("cell_quantile must be between 0 and 1")
+    }
+
+    # Validate max_snps parameter
+    if (!is.numeric(max_snps) || max_snps < 2 || max_snps != as.integer(max_snps)) {
+        stop("max_snps must be an integer >= 2")
+    }
+
+    # Validate max_cells parameter
+    if (!is.numeric(max_cells) || max_cells < 3 || max_cells != as.integer(max_cells)) {
+        stop("max_cells must be an integer >= 3")
     }
 
     # Check for required chromosome annotation
@@ -93,6 +118,22 @@ assign_inactive_x <- function(
         threshold = logger::INFO
     )
 
+    # Subsample to at most max_snps SNPs (select highest coverage SNPs)
+    snp_info_subset <- get_snp_info(snp_subset)
+    if (nrow(snp_info_subset) > max_snps) {
+        top_snp_ids <- snp_info_subset %>%
+            dplyr::arrange(dplyr::desc(coverage)) %>%
+            dplyr::slice_head(n = max_snps) %>%
+            dplyr::pull(snp_id)
+
+        logger::with_log_threshold({
+            snp_subset <- snp_subset %>%
+                filter_snps(snp_id %in% top_snp_ids)
+            },
+            threshold = logger::INFO
+        )
+    }
+
     # Filter to high library size cells for training
     # These cells have sufficient reads to reliably estimate expression patterns
     logger::with_log_threshold({
@@ -101,6 +142,22 @@ assign_inactive_x <- function(
         },
         threshold = logger::INFO
     )
+
+    # Subsample to at most max_cells cells (random sampling)
+    barcode_info_subset <- get_barcode_info(high_cells)
+    if (nrow(barcode_info_subset) > max_cells) {
+        set.seed(42)
+        sampled_cell_ids <- barcode_info_subset %>%
+            dplyr::slice_sample(n = max_cells) %>%
+            dplyr::pull(cell_id)
+
+        logger::with_log_threshold({
+            high_cells <- high_cells %>%
+                filter_barcodes(cell_id %in% sampled_cell_ids)
+            },
+            threshold = logger::INFO
+        )
+    }
 
     # Convert ALT/REF counts to signed expression values
     # sign(REF-ALT) * log1p(|REF-ALT|) captures both direction and magnitude

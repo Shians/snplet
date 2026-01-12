@@ -4,7 +4,13 @@
 \alias{assign_inactive_x}
 \title{Assign Inactive X Chromosome}
 \usage{
-assign_inactive_x(x, snp_quantile = 0.9, cell_quantile = 0.8)
+assign_inactive_x(
+  x,
+  snp_quantile = 0.9,
+  cell_quantile = 0.8,
+  max_snps = 200,
+  max_cells = 1000
+)
 }
 \arguments{
 \item{x}{A SNPData object}
@@ -14,6 +20,12 @@ Only chrX SNPs with coverage >= this quantile are used for clustering.}
 
 \item{cell_quantile}{Quantile threshold for cell library size filtering (default 0.8).
 Only cells with library size >= this quantile are used for training the model.}
+
+\item{max_snps}{Maximum number of SNPs to use for clustering (default 200).
+If more SNPs pass the quantile filter, the top max_snps by coverage are selected.}
+
+\item{max_cells}{Maximum number of cells to use for training (default 1000).
+If more cells pass the quantile filter, max_cells are randomly sampled.}
 }
 \value{
 A SNPData object with added barcode metadata columns:
@@ -32,7 +44,9 @@ fits a Gaussian Mixture Model to classify all cells.
 The function follows these steps:
 \enumerate{
   \item Filter to chrX SNPs with high coverage (>= snp_quantile)
+  \item Subsample to at most max_snps SNPs (highest coverage)
   \item Filter to cells with high library size (>= cell_quantile)
+  \item Subsample to at most max_cells cells (random sampling)
   \item Convert to expression matrix using sign(REF-ALT) * log1p(|REF-ALT|)
   \item Cluster cells using hierarchical clustering (Ward's method) on correlation distance
   \item Cut dendrogram into 2 clusters
@@ -55,6 +69,13 @@ snpdata <- assign_inactive_x(
     snpdata,
     snp_quantile = 0.95,
     cell_quantile = 0.9
+)
+
+# Use fewer SNPs and cells for faster computation
+snpdata <- assign_inactive_x(
+    snpdata,
+    max_snps = 100,
+    max_cells = 500
 )
 }
 
