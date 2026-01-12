@@ -171,7 +171,10 @@ setMethod(
             snp_info = snp_info,
             barcode_info = barcode_info
         )
-        obj@chr_style <- x@chr_style
+        # Handle backwards compatibility with older SNPData objects
+        if (methods::.hasSlot(x, "chr_style")) {
+            obj@chr_style <- x@chr_style
+        }
         obj
     }
 )
@@ -259,7 +262,13 @@ setMethod("get_sample_info", signature(x = "SNPData"), function(x) {
 setGeneric("chr_style", function(x) standardGeneric("chr_style"))
 #' @exportMethod chr_style
 #' @rdname SNPData-class
-setMethod("chr_style", signature(x = "SNPData"), function(x) x@chr_style)
+setMethod("chr_style", signature(x = "SNPData"), function(x) {
+    # Handle backwards compatibility with older SNPData objects
+    if (!methods::.hasSlot(x, "chr_style")) {
+        return("unknown")
+    }
+    x@chr_style
+})
 
 # Setters
 #' @exportMethod barcode_info<-
@@ -350,7 +359,10 @@ setMethod(
             " samples",
             "\n"
         )
-        cat("Chromosome style:", object@chr_style, "\n")
+        # Handle backwards compatibility with older SNPData objects
+        if (methods::.hasSlot(object, "chr_style")) {
+            cat("Chromosome style:", object@chr_style, "\n")
+        }
         cat("SNP info:", "\n")
         print(object@snp_info)
         cat("Sample info:", "\n")

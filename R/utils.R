@@ -329,7 +329,8 @@ convert_chr_style <- function(chr_names, from_style = "auto", to_style = "ucsc")
         stop("Expected a SNPData object")
     }
 
-    style <- x@chr_style
+    # Use accessor method for backwards compatibility
+    style <- chr_style(x)
 
     if (style == "unknown") {
         stop(
