@@ -73,12 +73,12 @@ assign_inactive_x <- function(
 
     # Check for required chromosome annotation
     snp_info <- get_snp_info(x)
-    if (!"chr_canonical" %in% colnames(snp_info)) {
-        stop("snp_info must contain a 'chr_canonical' column. This should be automatically added during SNPData creation.")
+    if (!"chrom_canonical" %in% colnames(snp_info)) {
+        stop("snp_info must contain a 'chrom_canonical' column. This should be automatically added during SNPData creation.")
     }
 
     # Verify presence of chrX SNPs in the dataset
-    chrx_snps <- sum(snp_info$chr_canonical == "X", na.rm = TRUE)
+    chrx_snps <- sum(snp_info$chrom_canonical == "chrX", na.rm = TRUE)
     if (chrx_snps == 0) {
         stop("No chrX SNPs found in dataset")
     }
@@ -87,7 +87,7 @@ assign_inactive_x <- function(
     # These SNPs provide the most reliable signal for X inactivation patterns
     logger::with_log_threshold({
         snp_subset <- x %>%
-            filter_snps(chr_canonical == "X") %>%
+            filter_snps(chrom_canonical == "chrX") %>%
             filter_snps(coverage >= stats::quantile(coverage, snp_quantile))
         },
         threshold = logger::INFO
