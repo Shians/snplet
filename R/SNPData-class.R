@@ -20,6 +20,7 @@
 #' @slot oth_count A sparse Matrix containing other allele counts (SNPs x cells)
 #' @slot snp_info A data.frame containing SNP metadata with automatically computed coverage and non_zero_samples columns
 #' @slot barcode_info A data.frame containing cell/barcode metadata with automatically computed library_size and non_zero_snps columns
+#' @slot chr_style Character string indicating the chromosome naming style. One of: "numeric", "ucsc", "refseq_mouse", "genbank_mouse", "refseq_human", "genbank_human", or "unknown"
 #'
 #' @section Accessors:
 #' \describe{
@@ -29,6 +30,7 @@
 #'   \item{\code{get_snp_info(x)}}{Get SNP metadata data.frame}
 #'   \item{\code{get_barcode_info(x)}}{Get cell/barcode metadata data.frame}
 #'   \item{\code{get_sample_info(x)}}{Alias for get_barcode_info()}
+#'   \item{\code{chr_style(x)}}{Get chromosome naming style}
 #'   \item{\code{coverage(x)}}{Get total coverage matrix (ref + alt counts)}
 #' }
 #'
@@ -79,7 +81,8 @@ setClass(
         alt_count = "Matrix",
         oth_count = "Matrix",
         snp_info = "data.frame",
-        barcode_info = "data.frame"
+        barcode_info = "data.frame",
+        chr_style = "character"
     )
 )
 
@@ -110,6 +113,14 @@ setMethod(
         snp_info <- tibble::as_tibble(snp_info)
         barcode_info <- tibble::as_tibble(barcode_info)
 
+        # Detect chromosome style and add canonical chromosome column
+        if ("chrom" %in% colnames(snp_info)) {
+            chr_style <- detect_chr_style(snp_info$chrom)
+            snp_info$chr_canonical <- normalize_chr_names(snp_info$chrom, from_style = chr_style)
+        } else {
+            chr_style <- "unknown"
+        }
+
         dimmed <- .set_dimnames(ref_count, alt_count, oth_count, snp_info, barcode_info)
         ref_count <- dimmed$ref_count
         alt_count <- dimmed$alt_count
@@ -118,6 +129,7 @@ setMethod(
         .Object@ref_count <- ref_count
         .Object@alt_count <- alt_count
         .Object@oth_count <- oth_count
+        .Object@chr_style <- chr_style
         metrics <- .recompute_metrics(snp_info, barcode_info, ref_count, alt_count)
         .Object@snp_info <- metrics$snp_info
         .Object@barcode_info <- metrics$barcode_info
@@ -151,7 +163,7 @@ setMethod(
         snp_info <- x@snp_info[i, ]
         barcode_info <- x@barcode_info[j, ]
 
-        new(
+        obj <- new(
             "SNPData",
             alt_count = alt_count,
             ref_count = ref_count,
@@ -159,6 +171,8 @@ setMethod(
             snp_info = snp_info,
             barcode_info = barcode_info
         )
+        obj@chr_style <- x@chr_style
+        obj
     }
 )
 
@@ -239,6 +253,13 @@ setGeneric("get_sample_info", function(x) standardGeneric("get_sample_info"))
 setMethod("get_sample_info", signature(x = "SNPData"), function(x) {
     get_barcode_info(x)
 })
+
+#' @exportMethod chr_style
+#' @rdname SNPData-class
+setGeneric("chr_style", function(x) standardGeneric("chr_style"))
+#' @exportMethod chr_style
+#' @rdname SNPData-class
+setMethod("chr_style", signature(x = "SNPData"), function(x) x@chr_style)
 
 # Setters
 #' @exportMethod barcode_info<-
@@ -329,6 +350,7 @@ setMethod(
             " samples",
             "\n"
         )
+        cat("Chromosome style:", object@chr_style, "\n")
         cat("SNP info:", "\n")
         print(object@snp_info)
         cat("Sample info:", "\n")
