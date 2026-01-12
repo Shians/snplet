@@ -23,6 +23,8 @@
 #' @importFrom purrr map2_dbl
 #' @importFrom R.utils gzip
 #' @importFrom grid unit
-#' @importFrom stats median quantile p.adjust pbeta setNames
+#' @importFrom stats median quantile p.adjust pbeta setNames cor as.dist hclust cutree
 #' @importFrom utils head
+#' @importFrom DelayedArray colsum
+#' @importFrom mclust Mclust predict.Mclust
 NULL

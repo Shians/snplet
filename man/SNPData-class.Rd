@@ -18,6 +18,8 @@
 \alias{get_barcode_info,SNPData-method}
 \alias{get_sample_info}
 \alias{get_sample_info,SNPData-method}
+\alias{chr_style}
+\alias{chr_style,SNPData-method}
 \alias{barcode_info<-}
 \alias{barcode_info<-,SNPData,data.frame-method}
 \alias{snp_info<-}
@@ -61,6 +63,10 @@ get_barcode_info(x)
 get_sample_info(x)
 
 \S4method{get_sample_info}{SNPData}(x)
+
+chr_style(x)
+
+\S4method{chr_style}{SNPData}(x)
 
 barcode_info(x) <- value
 
@@ -129,6 +135,8 @@ cell/barcode metadata to support allele-specific expression analysis workflows.
 \item{\code{snp_info}}{A data.frame containing SNP metadata with automatically computed coverage and non_zero_samples columns}
 
 \item{\code{barcode_info}}{A data.frame containing cell/barcode metadata with automatically computed library_size and non_zero_snps columns}
+
+\item{\code{chr_style}}{Character string indicating the chromosome naming style. One of: "numeric", "ucsc", "refseq_mouse", "genbank_mouse", "refseq_human", "genbank_human", or "unknown"}
 }}
 
 \section{Accessors}{
@@ -140,6 +148,7 @@ cell/barcode metadata to support allele-specific expression analysis workflows.
   \item{\code{get_snp_info(x)}}{Get SNP metadata data.frame}
   \item{\code{get_barcode_info(x)}}{Get cell/barcode metadata data.frame}
   \item{\code{get_sample_info(x)}}{Alias for get_barcode_info()}
+  \item{\code{chr_style(x)}}{Get chromosome naming style}
   \item{\code{coverage(x)}}{Get total coverage matrix (ref + alt counts)}
 }
 }
