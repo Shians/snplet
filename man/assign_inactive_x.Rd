@@ -9,7 +9,9 @@ assign_inactive_x(
   snp_quantile = 0.9,
   cell_quantile = 0.8,
   max_snps = 200,
-  max_cells = 1000
+  max_cells = 1000,
+  min_total_count = 10,
+  het_p_value = 0.05
 )
 }
 \arguments{
@@ -26,6 +28,12 @@ If more SNPs pass the quantile filter, the top max_snps by coverage are selected
 
 \item{max_cells}{Maximum number of cells to use for training (default 1000).
 If more cells pass the quantile filter, max_cells are randomly sampled.}
+
+\item{min_total_count}{Minimum total read depth per donor for heterozygosity testing (default 10).
+Passed to donor_het_status_df for identifying heterozygous SNPs.}
+
+\item{het_p_value}{P-value threshold for heterozygosity testing (default 0.05).
+Passed to donor_het_status_df for identifying heterozygous SNPs.}
 }
 \value{
 A SNPData object with added barcode metadata columns:
@@ -44,6 +52,7 @@ fits a Gaussian Mixture Model to classify all cells.
 The function follows these steps:
 \enumerate{
   \item Filter to chrX SNPs with high coverage (>= snp_quantile)
+  \item Filter to heterozygous SNPs using donor_het_status_df
   \item Subsample to at most max_snps SNPs (highest coverage)
   \item Filter to cells with high library size (>= cell_quantile)
   \item Subsample to at most max_cells cells (random sampling)
@@ -54,6 +63,10 @@ The function follows these steps:
   \item Fit Gaussian Mixture Model on training scores
   \item Predict inactive X for all cells using the GMM
 }
+
+Note: This function requires donor information in barcode metadata, as it filters
+to heterozygous SNPs based on donor-level genotypes. Homozygous SNPs cannot be
+used for X inactivation analysis since they lack allele-specific signal.
 }
 \examples{
 \dontrun{
@@ -76,6 +89,13 @@ snpdata <- assign_inactive_x(
     snpdata,
     max_snps = 100,
     max_cells = 500
+)
+
+# Adjust heterozygosity testing parameters
+snpdata <- assign_inactive_x(
+    snpdata,
+    min_total_count = 20,
+    het_p_value = 0.01
 )
 }
 

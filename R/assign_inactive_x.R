@@ -14,6 +14,10 @@
 #'   If more SNPs pass the quantile filter, the top max_snps by coverage are selected.
 #' @param max_cells Maximum number of cells to use for training (default 1000).
 #'   If more cells pass the quantile filter, max_cells are randomly sampled.
+#' @param min_total_count Minimum total read depth per donor for heterozygosity testing (default 10).
+#'   Passed to donor_het_status_df for identifying heterozygous SNPs.
+#' @param het_p_value P-value threshold for heterozygosity testing (default 0.05).
+#'   Passed to donor_het_status_df for identifying heterozygous SNPs.
 #'
 #' @return A SNPData object with added barcode metadata columns:
 #'   \itemize{
@@ -25,6 +29,7 @@
 #' The function follows these steps:
 #' \enumerate{
 #'   \item Filter to chrX SNPs with high coverage (>= snp_quantile)
+#'   \item Filter to heterozygous SNPs using donor_het_status_df
 #'   \item Subsample to at most max_snps SNPs (highest coverage)
 #'   \item Filter to cells with high library size (>= cell_quantile)
 #'   \item Subsample to at most max_cells cells (random sampling)
@@ -35,6 +40,10 @@
 #'   \item Fit Gaussian Mixture Model on training scores
 #'   \item Predict inactive X for all cells using the GMM
 #' }
+#'
+#' Note: This function requires donor information in barcode metadata, as it filters
+#' to heterozygous SNPs based on donor-level genotypes. Homozygous SNPs cannot be
+#' used for X inactivation analysis since they lack allele-specific signal.
 #'
 #' @examples
 #' \dontrun{
@@ -58,6 +67,13 @@
 #'     max_snps = 100,
 #'     max_cells = 500
 #' )
+#'
+#' # Adjust heterozygosity testing parameters
+#' snpdata <- assign_inactive_x(
+#'     snpdata,
+#'     min_total_count = 20,
+#'     het_p_value = 0.01
+#' )
 #' }
 #'
 #' @export
@@ -66,7 +82,9 @@ assign_inactive_x <- function(
     snp_quantile = 0.9,
     cell_quantile = 0.8,
     max_snps = 200,
-    max_cells = 1000
+    max_cells = 1000,
+    min_total_count = 10,
+    het_p_value = 0.05
 ) {
     # Validate input object type
     if (!methods::is(x, "SNPData")) {
@@ -96,6 +114,16 @@ assign_inactive_x <- function(
         stop("max_cells must be an integer >= 3")
     }
 
+    # Validate min_total_count parameter
+    if (!is.numeric(min_total_count) || min_total_count < 1) {
+        stop("min_total_count must be a numeric value >= 1")
+    }
+
+    # Validate het_p_value parameter
+    if (!is.numeric(het_p_value) || het_p_value <= 0 || het_p_value > 1) {
+        stop("het_p_value must be between 0 and 1")
+    }
+
     # Check for required chromosome annotation
     snp_info <- get_snp_info(x)
     if (!"chrom_canonical" %in% colnames(snp_info)) {
@@ -108,12 +136,43 @@ assign_inactive_x <- function(
         stop("No chrX SNPs found in dataset")
     }
 
+    # Check for donor information (required for heterozygosity testing)
+    barcode_info <- get_barcode_info(x)
+    if (!"donor" %in% colnames(barcode_info)) {
+        stop("assign_inactive_x requires donor information in barcode metadata. Please add donor assignments using Vireo or similar tools.")
+    }
+
     # Filter to high-coverage chrX SNPs for clustering
     # These SNPs provide the most reliable signal for X inactivation patterns
     logger::with_log_threshold({
         snp_subset <- x %>%
             filter_snps(chrom_canonical == "chrX") %>%
             filter_snps(coverage >= stats::quantile(coverage, snp_quantile))
+        },
+        threshold = logger::INFO
+    )
+
+    # Filter to heterozygous SNPs (required for X inactivation analysis)
+    het_status <- donor_het_status_df(
+        snp_subset,
+        min_total_count = min_total_count,
+        p_value_threshold = het_p_value,
+        minor_allele_prop = 0.1
+    )
+
+    # Identify SNPs that are heterozygous in at least one donor
+    het_snp_ids <- het_status %>%
+        dplyr::filter(zygosity == "het") %>%
+        dplyr::pull(snp_id) %>%
+        unique()
+
+    if (length(het_snp_ids) == 0) {
+        stop("No heterozygous chrX SNPs found. Try adjusting het_p_value or min_total_count.")
+    }
+
+    logger::with_log_threshold({
+        snp_subset <- snp_subset %>%
+            filter_snps(snp_id %in% het_snp_ids)
         },
         threshold = logger::INFO
     )
