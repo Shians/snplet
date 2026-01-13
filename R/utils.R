@@ -8,7 +8,7 @@ utils::globalVariables(c(
     "cell",
     "cell_id",
     "chrom",
-    "chr_canonical",
+    "chrom_canonical",
     "clonotype",
     "coverage",
     "donor",
@@ -29,7 +29,8 @@ utils::globalVariables(c(
     "snp_id",
     "start",
     "tested",
-    "total_count"
+    "total_count",
+    "zygosity"
 ))
 
 percentile_summary <- function(x, percentiles = c(0.1, 0.25, 0.75, 0.9, 0.95, 0.99)) {

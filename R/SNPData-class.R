@@ -116,7 +116,7 @@ setMethod(
         # Detect chromosome style and add canonical chromosome column
         if ("chrom" %in% colnames(snp_info)) {
             chr_style <- detect_chr_style(snp_info$chrom)
-            snp_info$chr_canonical <- normalize_chr_names(snp_info$chrom, from_style = chr_style)
+            snp_info$chrom_canonical <- normalize_chr_names(snp_info$chrom, from_style = chr_style)
         } else {
             chr_style <- "unknown"
         }

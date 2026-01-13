@@ -269,11 +269,11 @@ test_that("SNPData detects and stores chr_style for numeric chromosomes", {
     # Check chr_style is detected as numeric
     expect_equal(chr_style(snp_data), "numeric")
 
-    # Check chr_canonical column is added
-    expect_true("chr_canonical" %in% colnames(get_snp_info(snp_data)))
+    # Check chrom_canonical column is added
+    expect_true("chrom_canonical" %in% colnames(get_snp_info(snp_data)))
 
-    # Verify chr_canonical is converted to UCSC
-    expect_equal(get_snp_info(snp_data)$chr_canonical, c("chr1", "chr2", "chr3", "chrX", "chrY", "chrM"))
+    # Verify chrom_canonical is converted to UCSC
+    expect_equal(get_snp_info(snp_data)$chrom_canonical, c("chr1", "chr2", "chr3", "chrX", "chrY", "chrM"))
 })
 
 test_that("SNPData detects and stores chr_style for UCSC chromosomes", {
@@ -293,9 +293,9 @@ test_that("SNPData detects and stores chr_style for UCSC chromosomes", {
     # Check chr_style is detected as UCSC
     expect_equal(chr_style(snp_data), "ucsc")
 
-    # Check chr_canonical is preserved (already UCSC)
+    # Check chrom_canonical is preserved (already UCSC)
     expect_equal(
-        get_snp_info(snp_data)$chr_canonical,
+        get_snp_info(snp_data)$chrom_canonical,
         c("chr1", "chr2", "chr3", "chrX", "chrY", "chrM")
     )
 })
@@ -322,9 +322,9 @@ test_that("SNPData handles unknown chromosome style", {
     # Check chr_style is unknown
     expect_equal(chr_style(snp_data), "unknown")
 
-    # Check chr_canonical preserves original names
+    # Check chrom_canonical preserves original names
     expect_equal(
-        get_snp_info(snp_data)$chr_canonical,
+        get_snp_info(snp_data)$chrom_canonical,
         snp_info$chrom
     )
 })

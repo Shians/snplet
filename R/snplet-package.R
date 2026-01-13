@@ -1,6 +1,7 @@
 #' @importFrom Matrix Matrix rowSums colSums readMM writeMM rowMeans sparseMatrix
 #' @importFrom dplyr mutate inner_join filter left_join select rename distinct
 #' @importFrom dplyr first summarise if_else count arrange desc slice any_of pull
+#' @importFrom dplyr slice_head slice_sample
 #' @importFrom tidyr pivot_longer contains everything
 #' @importFrom tibble as_tibble
 #' @importFrom rlang enquos get_expr
