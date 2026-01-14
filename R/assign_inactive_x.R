@@ -17,13 +17,17 @@
 #' @param max_snps Maximum number of SNPs to use for clustering (default 200).
 #'   If more SNPs pass the quantile filter, the top max_snps by coverage are selected.
 #'   Applied per donor.
-#' @param max_cells Maximum number of cells to use for training (default 1000).
-#'   If more cells pass the quantile filter, max_cells are randomly sampled.
-#'   Applied per donor.
+#' @param max_cells Maximum number of cells (or clonotypes if aggregate_by = "clonotype")
+#'   to use for training (default 1000). If more pass the quantile filter, the top
+#'   max_cells by library size are selected. Applied per donor.
 #' @param min_total_count Minimum total read depth per donor for heterozygosity testing (default 10).
 #'   Passed to donor_het_status_df for identifying heterozygous SNPs.
 #' @param het_p_value P-value threshold for heterozygosity testing (default 0.05).
 #'   Passed to donor_het_status_df for identifying heterozygous SNPs.
+#' @param aggregate_by Either "cell" (default) or "clonotype". When "clonotype",
+#'   counts are aggregated per clonotype using colsum() before assignment, and
+#'   clonotype-level assignments are then assigned back to individual cells.
+#'   Requires a "clonotype" column in barcode metadata.
 #'
 #' @return A SNPData object with added barcode metadata columns:
 #'   \itemize{
@@ -41,14 +45,25 @@
 #'     \item Identify heterozygous chrX SNPs for this donor using donor_het_status_df
 #'     \item Filter to high-coverage SNPs (>= snp_quantile) for this donor
 #'     \item Subsample to at most max_snps SNPs (highest coverage)
-#'     \item Filter to cells from this donor with high library size (>= cell_quantile)
-#'     \item Subsample to at most max_cells cells (random sampling)
-#'     \item Convert to expression matrix using sign(REF-ALT) * log1p(|REF-ALT|)
-#'     \item Cluster cells using hierarchical clustering (Ward's method) on correlation distance
+#'     \item When aggregate_by = "cell":
+#'       \itemize{
+#'         \item Filter to cells with high library size (>= cell_quantile)
+#'         \item Select top max_cells cells by library size
+#'         \item Convert to expression matrix using sign(REF-ALT) * log1p(|REF-ALT|)
+#'       }
+#'     \item When aggregate_by = "clonotype":
+#'       \itemize{
+#'         \item Aggregate counts by clonotype using colsum()
+#'         \item Filter to clonotypes with high total library size (>= cell_quantile)
+#'         \item Select top max_cells clonotypes by total library size
+#'         \item Convert aggregated counts to expression using sign(REF-ALT) * log1p(|REF-ALT|)
+#'       }
+#'     \item Cluster using hierarchical clustering (Ward's method) on correlation distance
 #'     \item Cut dendrogram into 2 clusters
-#'     \item Calculate cluster assignment scores for all cells from this donor
+#'     \item Calculate cluster assignment scores
 #'     \item Fit Gaussian Mixture Model on training scores
-#'     \item Predict inactive X for all cells from this donor using the GMM
+#'     \item Predict inactive X using the GMM
+#'     \item When aggregate_by = "clonotype": Map clonotype predictions back to individual cells
 #'   }
 #' }
 #'
@@ -71,6 +86,12 @@
 #'     snpdata,
 #'     snp_quantile = 0.95,
 #'     cell_quantile = 0.9
+#' )
+#'
+#' # Assign by clonotype instead of individual cells
+#' snpdata <- assign_inactive_x(
+#'     snpdata,
+#'     aggregate_by = "clonotype"
 #' )
 #'
 #' # Use fewer SNPs and cells for faster computation
@@ -96,12 +117,16 @@ assign_inactive_x <- function(
     max_snps = 200,
     max_cells = 1000,
     min_total_count = 10,
-    het_p_value = 0.05
+    het_p_value = 0.05,
+    aggregate_by = c("cell", "clonotype")
 ) {
     # Validate input object type
     if (!methods::is(x, "SNPData")) {
         stop("assign_inactive_x expects a SNPData object")
     }
+
+    # Validate aggregate_by parameter
+    aggregate_by <- match.arg(aggregate_by)
 
     # Validate that chromosome style is known
     .validate_chr_style(x, "assign_inactive_x")
@@ -154,6 +179,11 @@ assign_inactive_x <- function(
         stop("assign_inactive_x requires donor information in barcode metadata. Please add donor assignments using Vireo or similar tools.")
     }
 
+    # Check for clonotype information if aggregating by clonotype
+    if (aggregate_by == "clonotype" && !"clonotype" %in% colnames(barcode_info)) {
+        stop("aggregate_by = 'clonotype' requires a 'clonotype' column in barcode metadata")
+    }
+
     # Remove doublets and unassigned cells before processing
     n_cells_before <- nrow(barcode_info)
     logger::with_log_threshold({
@@ -197,7 +227,8 @@ assign_inactive_x <- function(
                 max_snps = max_snps,
                 max_cells = max_cells,
                 min_total_count = min_total_count,
-                het_p_value = het_p_value
+                het_p_value = het_p_value,
+                aggregate_by = aggregate_by
             ),
             error = function(e) {
                 logger::log_warn("Failed to process donor {donor_id}: {e$message}")
@@ -270,6 +301,7 @@ assign_inactive_x <- function(
 #' @param max_cells Maximum number of cells to use
 #' @param min_total_count Minimum total count for heterozygosity testing
 #' @param het_p_value P-value threshold for heterozygosity testing
+#' @param aggregate_by Either "cell" or "clonotype" for aggregation level
 #'
 #' @return A tibble with cell_id, inactive_x, and inactive_x_prob columns
 #' @keywords internal
@@ -281,7 +313,8 @@ assign_inactive_x <- function(
     max_snps,
     max_cells,
     min_total_count,
-    het_p_value
+    het_p_value,
+    aggregate_by
 ) {
     # Filter to cells from this donor
     logger::with_log_threshold({
@@ -354,36 +387,99 @@ assign_inactive_x <- function(
         )
     }
 
-    # Filter to high library size cells for training
-    barcode_lib_size <- get_barcode_info(snp_subset)$library_size
-    lib_size_threshold <- stats::quantile(barcode_lib_size, cell_quantile)
+    # Handle aggregation by cell or clonotype
+    if (aggregate_by == "clonotype") {
+        # Get barcode info to extract clonotype mapping
+        barcode_info_subset <- get_barcode_info(snp_subset)
 
-    logger::with_log_threshold({
-        high_cells <- snp_subset %>%
-            filter_barcodes(library_size >= lib_size_threshold)
-        },
-        threshold = logger::INFO
-    )
+        # Filter to high library size clonotypes for training
+        clonotype_lib_size <- barcode_info_subset %>%
+            dplyr::group_by(clonotype) %>%
+            dplyr::summarise(total_library_size = sum(library_size, na.rm = TRUE), .groups = "drop")
 
-    # Subsample to at most max_cells cells (random sampling)
-    barcode_info_subset <- get_barcode_info(high_cells)
-    if (nrow(barcode_info_subset) > max_cells) {
-        set.seed(42)
-        sampled_cell_ids <- barcode_info_subset %>%
-            dplyr::slice_sample(n = max_cells) %>%
-            dplyr::pull(cell_id)
+        lib_size_threshold <- stats::quantile(clonotype_lib_size$total_library_size, cell_quantile)
+
+        high_clonotypes <- clonotype_lib_size %>%
+            dplyr::filter(total_library_size >= lib_size_threshold) %>%
+            dplyr::pull(clonotype)
 
         logger::with_log_threshold({
-            high_cells <- high_cells %>%
-                filter_barcodes(cell_id %in% sampled_cell_ids)
+            high_cells <- snp_subset %>%
+                filter_barcodes(clonotype %in% high_clonotypes)
             },
             threshold = logger::INFO
         )
-    }
 
-    # Convert ALT/REF counts to signed expression values
-    expr_high <- snplet::to_expr_matrix(high_cells) %>%
-        as("matrix")
+        # Subsample to at most max_cells clonotypes (select highest library size)
+        if (length(high_clonotypes) > max_cells) {
+            top_clonotypes <- clonotype_lib_size %>%
+                dplyr::filter(clonotype %in% high_clonotypes) %>%
+                dplyr::arrange(dplyr::desc(total_library_size)) %>%
+                dplyr::slice_head(n = max_cells) %>%
+                dplyr::pull(clonotype)
+
+            logger::with_log_threshold({
+                high_cells <- high_cells %>%
+                    filter_barcodes(clonotype %in% top_clonotypes)
+                },
+                threshold = logger::INFO
+            )
+        }
+
+        # Convert to expression matrix and aggregate by clonotype
+        expr_per_cell <- snplet::to_expr_matrix(high_cells)
+
+        # Get clonotype mapping for aggregation
+        barcode_info_high <- get_barcode_info(high_cells)
+        clonotype_factor <- factor(barcode_info_high$clonotype)
+
+        # Aggregate REF and ALT counts by clonotype, then convert to expression
+        ref_counts <- ref_count(high_cells)
+        alt_counts <- alt_count(high_cells)
+
+        ref_by_clonotype <- DelayedArray::colsum(ref_counts, group = clonotype_factor)
+        alt_by_clonotype <- DelayedArray::colsum(alt_counts, group = clonotype_factor)
+
+        # Convert aggregated counts to expression values
+        expr_high <- sign(ref_by_clonotype - alt_by_clonotype) * log1p(abs(ref_by_clonotype - alt_by_clonotype))
+        expr_high <- as.matrix(expr_high)
+
+        # Store clonotype names as column names
+        colnames(expr_high) <- levels(clonotype_factor)
+
+    } else {
+        # Cell-level aggregation (original behavior)
+        # Filter to high library size cells for training
+        barcode_lib_size <- get_barcode_info(snp_subset)$library_size
+        lib_size_threshold <- stats::quantile(barcode_lib_size, cell_quantile)
+
+        logger::with_log_threshold({
+            high_cells <- snp_subset %>%
+                filter_barcodes(library_size >= lib_size_threshold)
+            },
+            threshold = logger::INFO
+        )
+
+        # Subsample to at most max_cells cells (select highest library size)
+        barcode_info_subset <- get_barcode_info(high_cells)
+        if (nrow(barcode_info_subset) > max_cells) {
+            top_cell_ids <- barcode_info_subset %>%
+                dplyr::arrange(dplyr::desc(library_size)) %>%
+                dplyr::slice_head(n = max_cells) %>%
+                dplyr::pull(cell_id)
+
+            logger::with_log_threshold({
+                high_cells <- high_cells %>%
+                    filter_barcodes(cell_id %in% top_cell_ids)
+                },
+                threshold = logger::INFO
+            )
+        }
+
+        # Convert ALT/REF counts to signed expression values
+        expr_high <- snplet::to_expr_matrix(high_cells) %>%
+            as("matrix")
+    }
 
     # Verify sufficient SNPs remain after filtering
     if (nrow(expr_high) < 2) {
@@ -395,7 +491,11 @@ assign_inactive_x <- function(
         stop(glue::glue("Donor {donor_id}: At least 3 cells required after filtering. Try lower cell_quantile."))
     }
 
-    logger::log_info("Donor {donor_id}: Using {nrow(expr_high)} SNPs and {ncol(expr_high)} cells for clustering")
+    if (aggregate_by == "clonotype") {
+        logger::log_info("Donor {donor_id}: Using {nrow(expr_high)} SNPs and {ncol(expr_high)} clonotypes for clustering")
+    } else {
+        logger::log_info("Donor {donor_id}: Using {nrow(expr_high)} SNPs and {ncol(expr_high)} cells for clustering")
+    }
 
     # Remove constant rows (SNPs) and columns (cells) before correlation
     filtered_result <- .remove_constant_rows_and_columns(expr_high)
@@ -477,22 +577,63 @@ assign_inactive_x <- function(
         threshold = logger::INFO
     )
 
-    # Convert all cells from this donor to expression values
-    expr_all <- snplet::to_expr_matrix(scored_data) %>%
-        as("matrix")
+    if (aggregate_by == "clonotype") {
+        # Aggregate by clonotype for prediction
+        barcode_info_all <- get_barcode_info(scored_data)
 
-    # Project all cells onto cluster centroids
-    all_scores <- t(assignment_score_matrix) %*% expr_all
+        # Get all clonotypes for this donor
+        clonotype_factor_all <- factor(barcode_info_all$clonotype)
 
-    # Use trained GMM to predict inactive X for all cells from this donor
-    preds <- mclust::predict.Mclust(gmm, all_scores[1, ])
+        # Aggregate REF and ALT counts by clonotype
+        ref_counts_all <- ref_count(scored_data)
+        alt_counts_all <- alt_count(scored_data)
 
-    # Package predictions as metadata
-    metadata <- tibble::tibble(
-        cell_id = colnames(expr_all),
-        inactive_x = paste0("X", preds$classification),
-        inactive_x_prob = pmax(preds$z[, 1], preds$z[, 2])
-    )
+        ref_by_clonotype_all <- DelayedArray::colsum(ref_counts_all, group = clonotype_factor_all)
+        alt_by_clonotype_all <- DelayedArray::colsum(alt_counts_all, group = clonotype_factor_all)
+
+        # Convert aggregated counts to expression values
+        expr_all <- sign(ref_by_clonotype_all - alt_by_clonotype_all) * log1p(abs(ref_by_clonotype_all - alt_by_clonotype_all))
+        expr_all <- as.matrix(expr_all)
+        colnames(expr_all) <- levels(clonotype_factor_all)
+
+        # Project all clonotypes onto cluster centroids
+        all_scores <- t(assignment_score_matrix) %*% expr_all
+
+        # Use trained GMM to predict inactive X for all clonotypes
+        preds <- mclust::predict.Mclust(gmm, all_scores[1, ])
+
+        # Create clonotype-level predictions
+        clonotype_metadata <- tibble::tibble(
+            clonotype = colnames(expr_all),
+            inactive_x = paste0("X", preds$classification),
+            inactive_x_prob = pmax(preds$z[, 1], preds$z[, 2])
+        )
+
+        # Map clonotype predictions back to cells
+        metadata <- barcode_info_all %>%
+            dplyr::select(cell_id, clonotype) %>%
+            dplyr::left_join(clonotype_metadata, by = "clonotype") %>%
+            dplyr::select(cell_id, inactive_x, inactive_x_prob)
+
+    } else {
+        # Cell-level prediction (original behavior)
+        # Convert all cells from this donor to expression values
+        expr_all <- snplet::to_expr_matrix(scored_data) %>%
+            as("matrix")
+
+        # Project all cells onto cluster centroids
+        all_scores <- t(assignment_score_matrix) %*% expr_all
+
+        # Use trained GMM to predict inactive X for all cells from this donor
+        preds <- mclust::predict.Mclust(gmm, all_scores[1, ])
+
+        # Package predictions as metadata
+        metadata <- tibble::tibble(
+            cell_id = colnames(expr_all),
+            inactive_x = paste0("X", preds$classification),
+            inactive_x_prob = pmax(preds$z[, 1], preds$z[, 2])
+        )
+    }
 
     logger::log_success("Donor {donor_id}: Successfully assigned inactive X for {nrow(metadata)} cells")
 
