@@ -12,7 +12,8 @@
   max_snps,
   max_cells,
   min_total_count,
-  het_p_value
+  het_p_value,
+  aggregate_by
 )
 }
 \arguments{
@@ -31,6 +32,8 @@
 \item{min_total_count}{Minimum total count for heterozygosity testing}
 
 \item{het_p_value}{P-value threshold for heterozygosity testing}
+
+\item{aggregate_by}{Either "cell" or "clonotype" for aggregation level}
 }
 \value{
 A tibble with cell_id, inactive_x, and inactive_x_prob columns

@@ -30,6 +30,7 @@ utils::globalVariables(c(
     "start",
     "tested",
     "total_count",
+    "total_library_size",
     "zygosity"
 ))
 
