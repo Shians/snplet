@@ -221,6 +221,45 @@ assign_inactive_x <- function(
     snplet::add_barcode_metadata(x, combined_metadata)
 }
 
+#' Remove constant rows and columns from a matrix
+#'
+#' Removes rows and columns with zero variance from a numeric matrix.
+#' This is useful for preparing data for correlation analysis or other
+#' statistical methods that fail with constant values.
+#'
+#' @param mat A numeric matrix
+#'
+#' @return A list with components:
+#'   \itemize{
+#'     \item matrix: The filtered matrix with constant rows/columns removed
+#'     \item n_constant_rows: Number of rows removed
+#'     \item n_constant_cols: Number of columns removed
+#'   }
+#'
+#' @keywords internal
+.remove_constant_rows_and_columns <- function(mat) {
+    # Calculate variance for rows and columns
+    row_variance <- apply(mat, 1, stats::var)
+    col_variance <- apply(mat, 2, stats::var)
+
+    # Identify non-constant rows and columns
+    non_constant_rows <- row_variance > 0 & !is.na(row_variance)
+    non_constant_cols <- col_variance > 0 & !is.na(col_variance)
+
+    # Count how many were removed
+    n_constant_rows <- sum(!non_constant_rows)
+    n_constant_cols <- sum(!non_constant_cols)
+
+    # Filter matrix
+    filtered_mat <- mat[non_constant_rows, non_constant_cols, drop = FALSE]
+
+    list(
+        matrix = filtered_mat,
+        n_constant_rows = n_constant_rows,
+        n_constant_cols = n_constant_cols
+    )
+}
+
 #' Assign inactive X chromosome for a single donor
 #'
 #' @param x A SNPData object
@@ -358,13 +397,32 @@ assign_inactive_x <- function(
 
     logger::log_info("Donor {donor_id}: Using {nrow(expr_high)} SNPs and {ncol(expr_high)} cells for clustering")
 
+    # Remove constant rows (SNPs) and columns (cells) before correlation
+    filtered_result <- .remove_constant_rows_and_columns(expr_high)
+
+    if (filtered_result$n_constant_rows > 0) {
+        logger::log_info("Donor {donor_id}: Removing {filtered_result$n_constant_rows} constant SNP(s)")
+    }
+    if (filtered_result$n_constant_cols > 0) {
+        logger::log_info("Donor {donor_id}: Removing {filtered_result$n_constant_cols} constant cell(s)")
+    }
+
+    expr_high <- filtered_result$matrix
+
+    # Verify sufficient SNPs and cells remain after removing constants
+    if (nrow(expr_high) < 2) {
+        stop(glue::glue("Donor {donor_id}: At least 2 non-constant SNPs required. Try lower snp_quantile."))
+    }
+    if (ncol(expr_high) < 3) {
+        stop(glue::glue("Donor {donor_id}: At least 3 non-constant cells required. Try lower cell_quantile."))
+    }
+
     # Compute pairwise correlation between cells across chrX SNPs
     cor_mat <- tryCatch(
         stats::cor(expr_high, method = "pearson"),
         error = function(e) {
             stop(glue::glue(
                 "Donor {donor_id}: Failed to compute correlation matrix. ",
-                "This may be due to constant or near-constant SNP values. ",
                 "Original error: {e$message}"
             ))
         }
