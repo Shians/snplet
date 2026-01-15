@@ -9,8 +9,9 @@
   donor_id,
   min_total_count,
   het_p_value,
-  snp_quantile,
-  max_snps
+  min_cell_prop,
+  max_snps,
+  filtered_cells
 )
 }
 \arguments{
@@ -22,12 +23,14 @@
 
 \item{het_p_value}{P-value threshold for heterozygosity testing}
 
-\item{snp_quantile}{Quantile threshold for SNP coverage filtering}
+\item{min_cell_prop}{Minimum proportion of cells with non-zero counts}
 
 \item{max_snps}{Maximum number of SNPs to use}
+
+\item{filtered_cells}{SNPData object already filtered to the desired cells}
 }
 \value{
-A SNPData object filtered to high-coverage heterozygous chrX SNPs
+A SNPData object filtered to heterozygous chrX SNPs
 }
 \description{
 Filter SNPs to heterozygous chrX SNPs for a donor

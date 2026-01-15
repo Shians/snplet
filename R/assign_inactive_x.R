@@ -8,8 +8,9 @@
 #' all cells from that donor.
 #'
 #' @param x A SNPData object with donor information in barcode metadata
-#' @param snp_quantile Quantile threshold for SNP coverage filtering (default 0.9).
-#'   Only chrX SNPs with coverage >= this quantile are used for clustering.
+#' @param min_cell_prop Minimum proportion of cells with non-zero counts for a SNP
+#'   to be included in clustering (default 0.2). After filtering cells by cell_quantile,
+#'   only SNPs with non-zero counts in at least this proportion of remaining cells are used.
 #'   Applied per donor.
 #' @param cell_quantile Quantile threshold for cell library size filtering (default 0.8).
 #'   Only cells with library size >= this quantile are used for training the model.
@@ -17,16 +18,16 @@
 #' @param max_snps Maximum number of SNPs to use for clustering (default 200).
 #'   If more SNPs pass the quantile filter, the top max_snps by coverage are selected.
 #'   Applied per donor.
-#' @param max_cells Maximum number of cells (or clonotypes if aggregate_by = "clonotype")
+#' @param max_cells Maximum number of cells (or clonotypes if level = "clonotype")
 #'   to use for training (default 1000). If more pass the quantile filter, the top
 #'   max_cells by library size are selected. Applied per donor.
 #' @param min_total_count Minimum total read depth per donor for heterozygosity testing (default 10).
 #'   Passed to donor_het_status_df for identifying heterozygous SNPs.
 #' @param het_p_value P-value threshold for heterozygosity testing (default 0.05).
 #'   Passed to donor_het_status_df for identifying heterozygous SNPs.
-#' @param aggregate_by Either "cell" (default) or "clonotype". When "clonotype",
-#'   counts are aggregated per clonotype using colsum() before assignment, and
-#'   clonotype-level assignments are then assigned back to individual cells.
+#' @param level Either "barcode" (default) or "clonotype". When "clonotype",
+#'   counts are aggregated per clonotype before assignment, and clonotype-level
+#'   assignments are then assigned back to individual cells.
 #'   Requires a "clonotype" column in barcode metadata.
 #'
 #' @return A SNPData object with added barcode metadata columns:
@@ -42,28 +43,26 @@
 #'   \item Remove cells with donor = "doublet" or "unassigned"
 #'   \item For each valid donor:
 #'   \itemize{
-#'     \item Identify heterozygous chrX SNPs for this donor using donor_het_status_df
-#'     \item Filter to high-coverage SNPs (>= snp_quantile) for this donor
-#'     \item Subsample to at most max_snps SNPs (highest coverage)
-#'     \item When aggregate_by = "cell":
+#'     \item When level = "barcode":
 #'       \itemize{
 #'         \item Filter to cells with high library size (>= cell_quantile)
 #'         \item Select top max_cells cells by library size
-#'         \item Convert to expression matrix using sign(REF-ALT) * log1p(|REF-ALT|)
 #'       }
-#'     \item When aggregate_by = "clonotype":
+#'     \item When level = "clonotype":
 #'       \itemize{
-#'         \item Aggregate counts by clonotype using colsum()
 #'         \item Filter to clonotypes with high total library size (>= cell_quantile)
 #'         \item Select top max_cells clonotypes by total library size
-#'         \item Convert aggregated counts to expression using sign(REF-ALT) * log1p(|REF-ALT|)
 #'       }
+#'     \item Identify heterozygous chrX SNPs for this donor using donor_het_status_df
+#'     \item Filter to SNPs with non-zero counts in at least min_cell_prop of the filtered cells
+#'     \item Subsample to at most max_snps SNPs (highest coverage)
+#'     \item Convert to expression matrix using sign(REF-ALT) * log1p(|REF-ALT|)
 #'     \item Cluster using hierarchical clustering (Ward's method) on correlation distance
 #'     \item Cut dendrogram into 2 clusters
 #'     \item Calculate cluster assignment scores
 #'     \item Fit Gaussian Mixture Model on training scores
 #'     \item Predict inactive X using the GMM
-#'     \item When aggregate_by = "clonotype": Map clonotype predictions back to individual cells
+#'     \item When level = "clonotype": Map clonotype predictions back to individual cells
 #'   }
 #' }
 #'
@@ -84,14 +83,14 @@
 #' # Use more stringent filtering
 #' snpdata <- assign_inactive_x(
 #'     snpdata,
-#'     snp_quantile = 0.95,
+#'     min_cell_prop = 0.3,
 #'     cell_quantile = 0.9
 #' )
 #'
 #' # Assign by clonotype instead of individual cells
 #' snpdata <- assign_inactive_x(
 #'     snpdata,
-#'     aggregate_by = "clonotype"
+#'     level = "clonotype"
 #' )
 #'
 #' # Use fewer SNPs and cells for faster computation
@@ -112,28 +111,28 @@
 #' @export
 assign_inactive_x <- function(
     x,
-    snp_quantile = 0.9,
+    min_cell_prop = 0.2,
     cell_quantile = 0.8,
     max_snps = 200,
     max_cells = 1000,
     min_total_count = 10,
     het_p_value = 0.05,
-    aggregate_by = c("cell", "clonotype")
+    level = c("barcode", "clonotype")
 ) {
     # Validate input object type
     if (!methods::is(x, "SNPData")) {
         stop("assign_inactive_x expects a SNPData object")
     }
 
-    # Validate aggregate_by parameter
-    aggregate_by <- match.arg(aggregate_by)
+    # Validate level parameter
+    level <- match.arg(level)
 
     # Validate that chromosome style is known
     .validate_chr_style(x, "assign_inactive_x")
 
-    # Validate snp_quantile parameter range
-    if (snp_quantile < 0 || snp_quantile > 1) {
-        stop("snp_quantile must be between 0 and 1")
+    # Validate min_cell_prop parameter range
+    if (min_cell_prop < 0 || min_cell_prop > 1) {
+        stop("min_cell_prop must be between 0 and 1")
     }
 
     # Validate cell_quantile parameter range
@@ -164,7 +163,9 @@ assign_inactive_x <- function(
     # Check for required chromosome annotation
     snp_info <- get_snp_info(x)
     if (!"chrom_canonical" %in% colnames(snp_info)) {
-        stop("snp_info must contain a 'chrom_canonical' column. This should be automatically added during SNPData creation.")
+        stop(
+            "snp_info must contain a 'chrom_canonical' column. This should be automatically added during SNPData creation."
+        )
     }
 
     # Verify presence of chrX SNPs in the dataset
@@ -176,19 +177,22 @@ assign_inactive_x <- function(
     # Check for donor information (required for heterozygosity testing and per-donor analysis)
     barcode_info <- get_barcode_info(x)
     if (!"donor" %in% colnames(barcode_info)) {
-        stop("assign_inactive_x requires donor information in barcode metadata. Please add donor assignments using Vireo or similar tools.")
+        stop(
+            "assign_inactive_x requires donor information in barcode metadata. Please add donor assignments using Vireo or similar tools."
+        )
     }
 
     # Check for clonotype information if aggregating by clonotype
-    if (aggregate_by == "clonotype" && !"clonotype" %in% colnames(barcode_info)) {
-        stop("aggregate_by = 'clonotype' requires a 'clonotype' column in barcode metadata")
+    if (level == "clonotype" && !"clonotype" %in% colnames(barcode_info)) {
+        stop("level = 'clonotype' requires a 'clonotype' column in barcode metadata")
     }
 
     # Remove doublets and unassigned cells before processing
     n_cells_before <- nrow(barcode_info)
-    logger::with_log_threshold({
-        x <- x %>%
-            filter_barcodes(!donor %in% c("doublet", "unassigned"))
+    logger::with_log_threshold(
+        {
+            x <- x %>%
+                filter_barcodes(!donor %in% c("doublet", "unassigned"))
         },
         threshold = logger::INFO
     )
@@ -198,7 +202,9 @@ assign_inactive_x <- function(
     n_removed <- n_cells_before - n_cells_after
 
     if (n_removed > 0) {
-        logger::log_info("Removed {n_removed} doublet/unassigned cells ({round(100 * n_removed / n_cells_before, 1)}% of total)")
+        logger::log_info(
+            "Removed {n_removed} doublet/unassigned cells ({round(100 * n_removed / n_cells_before, 1)}% of total)"
+        )
     }
 
     # Get list of valid donors (excluding doublets and unassigned)
@@ -222,13 +228,13 @@ assign_inactive_x <- function(
             .assign_inactive_x_single_donor(
                 x = x,
                 donor_id = donor_id,
-                snp_quantile = snp_quantile,
+                min_cell_prop = min_cell_prop,
                 cell_quantile = cell_quantile,
                 max_snps = max_snps,
                 max_cells = max_cells,
                 min_total_count = min_total_count,
                 het_p_value = het_p_value,
-                aggregate_by = aggregate_by
+                level = level
             ),
             error = function(e) {
                 logger::log_warn("Failed to process donor {donor_id}: {e$message}")
@@ -297,29 +303,33 @@ assign_inactive_x <- function(
 #' @param donor_id The donor ID to process
 #' @param min_total_count Minimum total count for heterozygosity testing
 #' @param het_p_value P-value threshold for heterozygosity testing
-#' @param snp_quantile Quantile threshold for SNP coverage filtering
+#' @param min_cell_prop Minimum proportion of cells with non-zero counts
 #' @param max_snps Maximum number of SNPs to use
+#' @param filtered_cells SNPData object already filtered to the desired cells
 #'
-#' @return A SNPData object filtered to high-coverage heterozygous chrX SNPs
+#' @return A SNPData object filtered to heterozygous chrX SNPs
 #' @keywords internal
 .filter_to_het_chrx_snps <- function(
     x,
     donor_id,
     min_total_count,
     het_p_value,
-    snp_quantile,
-    max_snps
+    min_cell_prop,
+    max_snps,
+    filtered_cells
 ) {
-    logger::with_log_threshold({
-        donor_data <- x %>%
-            filter_barcodes(donor == donor_id)
+    logger::with_log_threshold(
+        {
+            donor_data <- x %>%
+                filter_barcodes(donor == donor_id)
         },
         threshold = logger::INFO
     )
 
-    logger::with_log_threshold({
-        chrx_data <- donor_data %>%
-            filter_snps(chrom_canonical == "chrX")
+    logger::with_log_threshold(
+        {
+            chrx_data <- donor_data %>%
+                filter_snps(chrom_canonical == "chrX")
         },
         threshold = logger::INFO
     )
@@ -342,23 +352,53 @@ assign_inactive_x <- function(
 
     logger::log_info("Found {length(het_snp_ids)} heterozygous SNPs for donor {donor_id}")
 
-    logger::with_log_threshold({
-        het_data <- chrx_data %>%
-            filter_snps(snp_id %in% het_snp_ids)
+    logger::with_log_threshold(
+        {
+            het_data <- chrx_data %>%
+                filter_snps(snp_id %in% het_snp_ids)
         },
         threshold = logger::INFO
     )
 
-    snp_coverage <- get_snp_info(het_data)$coverage
-    coverage_threshold <- stats::quantile(snp_coverage, snp_quantile)
-
-    logger::with_log_threshold({
-        snp_subset <- het_data %>%
-            filter_snps(coverage >= coverage_threshold)
+    # Filter to the same cells that will be used for clustering
+    logger::with_log_threshold(
+        {
+            het_data_filtered_cells <- het_data %>%
+                filter_barcodes(cell_id %in% get_barcode_info(filtered_cells)$cell_id)
         },
         threshold = logger::INFO
     )
 
+    # Calculate total coverage for each SNP in the filtered cells
+    total_coverage <- alt_count(het_data_filtered_cells) + ref_count(het_data_filtered_cells)
+
+    # Count cells with non-zero coverage for each SNP
+    cells_with_coverage <- Matrix::rowSums(total_coverage > 0)
+    n_cells <- ncol(total_coverage)
+
+    # Filter to SNPs with non-zero counts in at least min_cell_prop of cells
+    prop_cells_with_coverage <- cells_with_coverage / n_cells
+    passing_snp_indices <- which(prop_cells_with_coverage >= min_cell_prop)
+
+    if (length(passing_snp_indices) == 0) {
+        stop(glue::glue(
+            "No SNPs found with non-zero counts in at least {min_cell_prop * 100}% of cells for donor {donor_id}"
+        ))
+    }
+
+    passing_snp_ids <- rownames(total_coverage)[passing_snp_indices]
+
+    logger::log_info("Found {length(passing_snp_ids)} SNPs with non-zero counts in >= {min_cell_prop * 100}% of cells")
+
+    logger::with_log_threshold(
+        {
+            snp_subset <- het_data %>%
+                filter_snps(snp_id %in% passing_snp_ids)
+        },
+        threshold = logger::INFO
+    )
+
+    # If we have more SNPs than max_snps, select top by coverage
     snp_info_subset <- get_snp_info(snp_subset)
     if (nrow(snp_info_subset) > max_snps) {
         top_snp_ids <- snp_info_subset %>%
@@ -366,124 +406,16 @@ assign_inactive_x <- function(
             dplyr::slice_head(n = max_snps) %>%
             dplyr::pull(snp_id)
 
-        logger::with_log_threshold({
-            snp_subset <- snp_subset %>%
-                filter_snps(snp_id %in% top_snp_ids)
+        logger::with_log_threshold(
+            {
+                snp_subset <- snp_subset %>%
+                    filter_snps(snp_id %in% top_snp_ids)
             },
             threshold = logger::INFO
         )
     }
 
     snp_subset
-}
-
-#' Prepare expression matrix for clonotype-level analysis
-#'
-#' @param snp_data A SNPData object
-#' @param cell_quantile Quantile threshold for clonotype library size filtering
-#' @param max_cells Maximum number of clonotypes to use
-#' @param donor_id The donor ID (for logging)
-#'
-#' @return Expression matrix with clonotypes as columns
-#' @keywords internal
-.prepare_clonotype_expr_matrix <- function(
-    snp_data,
-    cell_quantile,
-    max_cells,
-    donor_id
-) {
-    barcode_info_subset <- get_barcode_info(snp_data)
-
-    clonotype_lib_size <- barcode_info_subset %>%
-        dplyr::group_by(clonotype) %>%
-        dplyr::summarise(total_library_size = sum(library_size, na.rm = TRUE), .groups = "drop")
-
-    lib_size_threshold <- stats::quantile(clonotype_lib_size$total_library_size, cell_quantile)
-
-    high_clonotypes <- clonotype_lib_size %>%
-        dplyr::filter(total_library_size >= lib_size_threshold) %>%
-        dplyr::pull(clonotype)
-
-    logger::with_log_threshold({
-        high_cells <- snp_data %>%
-            filter_barcodes(clonotype %in% high_clonotypes)
-        },
-        threshold = logger::INFO
-    )
-
-    if (length(high_clonotypes) > max_cells) {
-        top_clonotypes <- clonotype_lib_size %>%
-            dplyr::filter(clonotype %in% high_clonotypes) %>%
-            dplyr::arrange(dplyr::desc(total_library_size)) %>%
-            dplyr::slice_head(n = max_cells) %>%
-            dplyr::pull(clonotype)
-
-        logger::with_log_threshold({
-            high_cells <- high_cells %>%
-                filter_barcodes(clonotype %in% top_clonotypes)
-            },
-            threshold = logger::INFO
-        )
-    }
-
-    barcode_info_high <- get_barcode_info(high_cells)
-    clonotype_factor <- factor(barcode_info_high$clonotype)
-
-    ref_counts <- ref_count(high_cells)
-    alt_counts <- alt_count(high_cells)
-
-    ref_by_clonotype <- DelayedArray::colsum(ref_counts, group = clonotype_factor)
-    alt_by_clonotype <- DelayedArray::colsum(alt_counts, group = clonotype_factor)
-
-    expr_high <- sign(ref_by_clonotype - alt_by_clonotype) * log1p(abs(ref_by_clonotype - alt_by_clonotype))
-    expr_high <- as.matrix(expr_high)
-    colnames(expr_high) <- levels(clonotype_factor)
-
-    expr_high
-}
-
-#' Prepare expression matrix for cell-level analysis
-#'
-#' @param snp_data A SNPData object
-#' @param cell_quantile Quantile threshold for cell library size filtering
-#' @param max_cells Maximum number of cells to use
-#' @param donor_id The donor ID (for logging)
-#'
-#' @return Expression matrix with cells as columns
-#' @keywords internal
-.prepare_cell_expr_matrix <- function(
-    snp_data,
-    cell_quantile,
-    max_cells,
-    donor_id
-) {
-    barcode_lib_size <- get_barcode_info(snp_data)$library_size
-    lib_size_threshold <- stats::quantile(barcode_lib_size, cell_quantile)
-
-    logger::with_log_threshold({
-        high_cells <- snp_data %>%
-            filter_barcodes(library_size >= lib_size_threshold)
-        },
-        threshold = logger::INFO
-    )
-
-    barcode_info_subset <- get_barcode_info(high_cells)
-    if (nrow(barcode_info_subset) > max_cells) {
-        top_cell_ids <- barcode_info_subset %>%
-            dplyr::arrange(dplyr::desc(library_size)) %>%
-            dplyr::slice_head(n = max_cells) %>%
-            dplyr::pull(cell_id)
-
-        logger::with_log_threshold({
-            high_cells <- high_cells %>%
-                filter_barcodes(cell_id %in% top_cell_ids)
-            },
-            threshold = logger::INFO
-        )
-    }
-
-    snplet::to_expr_matrix(high_cells) %>%
-        as("matrix")
 }
 
 #' Cluster cells/clonotypes and fit GMM
@@ -506,7 +438,7 @@ assign_inactive_x <- function(
     expr_mat <- filtered_result$matrix
 
     if (nrow(expr_mat) < 2) {
-        stop(glue::glue("Donor {donor_id}: At least 2 non-constant SNPs required. Try lower snp_quantile."))
+        stop(glue::glue("Donor {donor_id}: At least 2 non-constant SNPs required. Try lower min_cell_prop."))
     }
     if (ncol(expr_mat) < 3) {
         stop(glue::glue("Donor {donor_id}: At least 3 non-constant cells required. Try lower cell_quantile."))
@@ -576,26 +508,18 @@ assign_inactive_x <- function(
     assignment_score_matrix,
     gmm
 ) {
-    logger::with_log_threshold({
-        scored_data <- x %>%
-            filter_barcodes(donor == donor_id) %>%
-            filter_snps(snp_id %in% rownames(assignment_score_matrix))
+    logger::with_log_threshold(
+        {
+            scored_data <- x %>%
+                filter_barcodes(donor == donor_id) %>%
+                filter_snps(snp_id %in% rownames(assignment_score_matrix))
         },
         threshold = logger::INFO
     )
 
-    barcode_info_all <- get_barcode_info(scored_data)
-    clonotype_factor_all <- factor(barcode_info_all$clonotype)
-
-    ref_counts_all <- ref_count(scored_data)
-    alt_counts_all <- alt_count(scored_data)
-
-    ref_by_clonotype_all <- DelayedArray::colsum(ref_counts_all, group = clonotype_factor_all)
-    alt_by_clonotype_all <- DelayedArray::colsum(alt_counts_all, group = clonotype_factor_all)
-
-    expr_all <- sign(ref_by_clonotype_all - alt_by_clonotype_all) * log1p(abs(ref_by_clonotype_all - alt_by_clonotype_all))
-    expr_all <- as.matrix(expr_all)
-    colnames(expr_all) <- levels(clonotype_factor_all)
+    # Get clonotype-level expression matrix
+    expr_all <- snplet::to_expr_matrix(scored_data, level = "clonotype") %>%
+        as("matrix")
 
     all_scores <- t(assignment_score_matrix) %*% expr_all
     preds <- mclust::predict.Mclust(gmm, all_scores[1, ])
@@ -606,7 +530,7 @@ assign_inactive_x <- function(
         inactive_x_prob = pmax(preds$z[, 1], preds$z[, 2])
     )
 
-    barcode_info_all %>%
+    get_barcode_info(scored_data) %>%
         dplyr::select(cell_id, clonotype) %>%
         dplyr::left_join(clonotype_metadata, by = "clonotype") %>%
         dplyr::select(cell_id, inactive_x, inactive_x_prob)
@@ -627,10 +551,11 @@ assign_inactive_x <- function(
     assignment_score_matrix,
     gmm
 ) {
-    logger::with_log_threshold({
-        scored_data <- x %>%
-            filter_barcodes(donor == donor_id) %>%
-            filter_snps(snp_id %in% rownames(assignment_score_matrix))
+    logger::with_log_threshold(
+        {
+            scored_data <- x %>%
+                filter_barcodes(donor == donor_id) %>%
+                filter_snps(snp_id %in% rownames(assignment_score_matrix))
         },
         threshold = logger::INFO
     )
@@ -648,73 +573,188 @@ assign_inactive_x <- function(
     )
 }
 
+#' Filter cells for clustering based on library size
+#'
+#' @param donor_data SNPData filtered to a single donor
+#' @param cell_quantile Quantile threshold for library size filtering
+#' @param max_cells Maximum number of cells/clonotypes to retain
+#' @param level Either "barcode" or "clonotype"
+#'
+#' @return SNPData object with filtered cells
+#' @keywords internal
+.filter_cells_for_clustering <- function(
+    donor_data,
+    cell_quantile,
+    max_cells,
+    level
+) {
+    if (level == "clonotype") {
+        barcode_info <- get_barcode_info(donor_data)
+
+        clonotype_lib_size <- barcode_info %>%
+            dplyr::group_by(clonotype) %>%
+            dplyr::summarise(total_library_size = sum(library_size, na.rm = TRUE), .groups = "drop")
+
+        lib_size_threshold <- stats::quantile(clonotype_lib_size$total_library_size, cell_quantile)
+
+        high_clonotypes <- clonotype_lib_size %>%
+            dplyr::filter(total_library_size >= lib_size_threshold) %>%
+            dplyr::pull(clonotype)
+
+        if (length(high_clonotypes) > max_cells) {
+            high_clonotypes <- clonotype_lib_size %>%
+                dplyr::filter(clonotype %in% high_clonotypes) %>%
+                dplyr::arrange(dplyr::desc(total_library_size)) %>%
+                dplyr::slice_head(n = max_cells) %>%
+                dplyr::pull(clonotype)
+        }
+
+        logger::with_log_threshold(
+            {
+                filtered_cells <- donor_data %>%
+                    filter_barcodes(clonotype %in% high_clonotypes)
+            },
+            threshold = logger::INFO
+        )
+    } else {
+        barcode_lib_size <- get_barcode_info(donor_data)$library_size
+        lib_size_threshold <- stats::quantile(barcode_lib_size, cell_quantile)
+
+        logger::with_log_threshold(
+            {
+                filtered_cells <- donor_data %>%
+                    filter_barcodes(library_size >= lib_size_threshold)
+            },
+            threshold = logger::INFO
+        )
+
+        barcode_info <- get_barcode_info(filtered_cells)
+        if (nrow(barcode_info) > max_cells) {
+            top_cell_ids <- barcode_info %>%
+                dplyr::arrange(dplyr::desc(library_size)) %>%
+                dplyr::slice_head(n = max_cells) %>%
+                dplyr::pull(cell_id)
+
+            logger::with_log_threshold(
+                {
+                    filtered_cells <- filtered_cells %>%
+                        filter_barcodes(cell_id %in% top_cell_ids)
+                },
+                threshold = logger::INFO
+            )
+        }
+    }
+
+    filtered_cells
+}
+
+#' Prepare expression matrix for clustering
+#'
+#' @param snp_subset SNPData with selected SNPs
+#' @param filtered_cells SNPData with filtered cells
+#' @param level Either "barcode" or "clonotype"
+#'
+#' @return Expression matrix (SNPs x cells/clonotypes)
+#' @keywords internal
+.prepare_expr_matrix_for_clustering <- function(
+    snp_subset,
+    filtered_cells,
+    level
+) {
+    logger::with_log_threshold(
+        {
+            snp_subset_filtered <- snp_subset %>%
+                filter_barcodes(cell_id %in% get_barcode_info(filtered_cells)$cell_id)
+        },
+        threshold = logger::INFO
+    )
+
+    # Use to_expr_matrix with the specified level
+    expr_matrix <- snplet::to_expr_matrix(snp_subset_filtered, level = level) %>%
+        as("matrix")
+
+    expr_matrix
+}
+
 #' Assign inactive X chromosome for a single donor
 #'
 #' @param x A SNPData object
 #' @param donor_id The donor ID to process
-#' @param snp_quantile Quantile threshold for SNP coverage filtering
+#' @param min_cell_prop Minimum proportion of cells with non-zero counts
 #' @param cell_quantile Quantile threshold for cell library size filtering
 #' @param max_snps Maximum number of SNPs to use
 #' @param max_cells Maximum number of cells to use
 #' @param min_total_count Minimum total count for heterozygosity testing
 #' @param het_p_value P-value threshold for heterozygosity testing
-#' @param aggregate_by Either "cell" or "clonotype" for aggregation level
+#' @param level Either "barcode" or "clonotype" for aggregation level
 #'
 #' @return A tibble with cell_id, inactive_x, and inactive_x_prob columns
 #' @keywords internal
 .assign_inactive_x_single_donor <- function(
     x,
     donor_id,
-    snp_quantile,
+    min_cell_prop,
     cell_quantile,
     max_snps,
     max_cells,
     min_total_count,
     het_p_value,
-    aggregate_by
+    level
 ) {
+    # Filter to donor
+    logger::with_log_threshold(
+        {
+            donor_data <- x %>%
+                filter_barcodes(donor == donor_id)
+        },
+        threshold = logger::INFO
+    )
+
+    # Filter cells based on cell_quantile and max_cells
+    filtered_cells <- .filter_cells_for_clustering(
+        donor_data = donor_data,
+        cell_quantile = cell_quantile,
+        max_cells = max_cells,
+        level = level
+    )
+
+    # Filter SNPs based on the filtered cells
     snp_subset <- .filter_to_het_chrx_snps(
         x = x,
         donor_id = donor_id,
         min_total_count = min_total_count,
         het_p_value = het_p_value,
-        snp_quantile = snp_quantile,
-        max_snps = max_snps
+        min_cell_prop = min_cell_prop,
+        max_snps = max_snps,
+        filtered_cells = filtered_cells
     )
 
-    if (aggregate_by == "clonotype") {
-        expr_high <- .prepare_clonotype_expr_matrix(
-            snp_data = snp_subset,
-            cell_quantile = cell_quantile,
-            max_cells = max_cells,
-            donor_id = donor_id
-        )
-    } else {
-        expr_high <- .prepare_cell_expr_matrix(
-            snp_data = snp_subset,
-            cell_quantile = cell_quantile,
-            max_cells = max_cells,
-            donor_id = donor_id
-        )
-    }
+    # Prepare expression matrix
+    expr_high <- .prepare_expr_matrix_for_clustering(
+        snp_subset = snp_subset,
+        filtered_cells = filtered_cells,
+        level = level
+    )
 
     if (nrow(expr_high) < 2) {
-        stop(glue::glue("Donor {donor_id}: At least 2 SNPs required after filtering. Try lower snp_quantile."))
+        stop(glue::glue("Donor {donor_id}: At least 2 SNPs required after filtering. Try lower min_cell_prop."))
     }
 
     if (ncol(expr_high) < 3) {
         stop(glue::glue("Donor {donor_id}: At least 3 cells required after filtering. Try lower cell_quantile."))
     }
 
-    if (aggregate_by == "clonotype") {
-        logger::log_info("Donor {donor_id}: Using {nrow(expr_high)} SNPs and {ncol(expr_high)} clonotypes for clustering")
+    if (level == "clonotype") {
+        logger::log_info(
+            "Donor {donor_id}: Using {nrow(expr_high)} SNPs and {ncol(expr_high)} clonotypes for clustering"
+        )
     } else {
         logger::log_info("Donor {donor_id}: Using {nrow(expr_high)} SNPs and {ncol(expr_high)} cells for clustering")
     }
 
     model <- .cluster_and_fit_gmm(expr_high, donor_id)
 
-    if (aggregate_by == "clonotype") {
+    if (level == "clonotype") {
         metadata <- .predict_clonotype_assignments(
             x = x,
             donor_id = donor_id,

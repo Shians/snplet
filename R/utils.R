@@ -15,6 +15,8 @@ utils::globalVariables(c(
     "donor_id",
     "end",
     "gene_name",
+    "inactive_x",
+    "inactive_x_prob",
     "library_size",
     "maf",
     "minor_count",
