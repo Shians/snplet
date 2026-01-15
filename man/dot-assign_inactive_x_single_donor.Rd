@@ -7,13 +7,13 @@
 .assign_inactive_x_single_donor(
   x,
   donor_id,
-  snp_quantile,
+  min_cell_prop,
   cell_quantile,
   max_snps,
   max_cells,
   min_total_count,
   het_p_value,
-  aggregate_by
+  level
 )
 }
 \arguments{
@@ -21,7 +21,7 @@
 
 \item{donor_id}{The donor ID to process}
 
-\item{snp_quantile}{Quantile threshold for SNP coverage filtering}
+\item{min_cell_prop}{Minimum proportion of cells with non-zero counts}
 
 \item{cell_quantile}{Quantile threshold for cell library size filtering}
 
@@ -33,7 +33,7 @@
 
 \item{het_p_value}{P-value threshold for heterozygosity testing}
 
-\item{aggregate_by}{Either "cell" or "clonotype" for aggregation level}
+\item{level}{Either "barcode" or "clonotype" for aggregation level}
 }
 \value{
 A tibble with cell_id, inactive_x, and inactive_x_prob columns
