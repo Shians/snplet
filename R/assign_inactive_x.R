@@ -160,7 +160,7 @@ assign_inactive_x <- function(
         x <- x %>%
             filter_barcodes(!donor %in% c("doublet", "unassigned"))
         },
-        threshold = logger::INFO
+        threshold = logger::WARN
     )
 
     barcode_info <- get_barcode_info(x)
@@ -288,7 +288,7 @@ assign_inactive_x <- function(
         donor_data <- x %>%
             filter_barcodes(donor == donor_id)
         },
-        threshold = logger::INFO
+        threshold = logger::WARN
     )
 
     # Filter to chrX SNPs
@@ -296,7 +296,7 @@ assign_inactive_x <- function(
         chrx_data <- donor_data %>%
             filter_snps(chrom_canonical == "chrX")
         },
-        threshold = logger::INFO
+        threshold = logger::WARN
     )
 
     # Identify heterozygous SNPs for this donor
@@ -324,7 +324,7 @@ assign_inactive_x <- function(
         het_data <- chrx_data %>%
             filter_snps(snp_id %in% het_snp_ids)
         },
-        threshold = logger::INFO
+        threshold = logger::WARN
     )
 
     # Filter to high-coverage SNPs for this donor
@@ -335,7 +335,7 @@ assign_inactive_x <- function(
         snp_subset <- het_data %>%
             filter_snps(coverage >= coverage_threshold)
         },
-        threshold = logger::INFO
+        threshold = logger::WARN
     )
 
     # Subsample to at most max_snps SNPs (select highest coverage SNPs)
@@ -350,7 +350,7 @@ assign_inactive_x <- function(
             snp_subset <- snp_subset %>%
                 filter_snps(snp_id %in% top_snp_ids)
             },
-            threshold = logger::INFO
+            threshold = logger::WARN
         )
     }
 
@@ -362,7 +362,7 @@ assign_inactive_x <- function(
         high_cells <- snp_subset %>%
             filter_barcodes(library_size >= lib_size_threshold)
         },
-        threshold = logger::INFO
+        threshold = logger::WARN
     )
 
     # Subsample to at most max_cells cells (random sampling)
@@ -377,7 +377,7 @@ assign_inactive_x <- function(
             high_cells <- high_cells %>%
                 filter_barcodes(cell_id %in% sampled_cell_ids)
             },
-            threshold = logger::INFO
+            threshold = logger::WARN
         )
     }
 
@@ -474,7 +474,7 @@ assign_inactive_x <- function(
             filter_barcodes(donor == donor_id) %>%
             filter_snps(snp_id %in% rownames(assignment_score_matrix))
         },
-        threshold = logger::INFO
+        threshold = logger::WARN
     )
 
     # Convert all cells from this donor to expression values
