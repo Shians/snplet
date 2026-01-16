@@ -368,9 +368,9 @@ assign_inactive_x <- function(
     # Subsample to at most max_cells cells (random sampling)
     barcode_info_subset <- get_barcode_info(high_cells)
     if (nrow(barcode_info_subset) > max_cells) {
-        set.seed(42)
         sampled_cell_ids <- barcode_info_subset %>%
-            dplyr::slice_sample(n = max_cells) %>%
+            dplyr::arrange(dplyr::desc(library_size)) %>%
+            dplyr::slice_head(n = max_cells) %>%
             dplyr::pull(cell_id)
 
         logger::with_log_threshold({
