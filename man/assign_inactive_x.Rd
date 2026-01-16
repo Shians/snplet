@@ -6,21 +6,19 @@
 \usage{
 assign_inactive_x(
   x,
-  min_cell_prop = 0.2,
+  snp_quantile = 0.9,
   cell_quantile = 0.8,
   max_snps = 200,
   max_cells = 1000,
   min_total_count = 10,
-  het_p_value = 0.05,
-  level = c("barcode", "clonotype")
+  het_p_value = 0.05
 )
 }
 \arguments{
 \item{x}{A SNPData object with donor information in barcode metadata}
 
-\item{min_cell_prop}{Minimum proportion of cells with non-zero counts for a SNP
-to be included in clustering (default 0.2). After filtering cells by cell_quantile,
-only SNPs with non-zero counts in at least this proportion of remaining cells are used.
+\item{snp_quantile}{Quantile threshold for SNP coverage filtering (default 0.9).
+Only chrX SNPs with coverage >= this quantile are used for clustering.
 Applied per donor.}
 
 \item{cell_quantile}{Quantile threshold for cell library size filtering (default 0.8).
@@ -31,20 +29,15 @@ Applied per donor.}
 If more SNPs pass the quantile filter, the top max_snps by coverage are selected.
 Applied per donor.}
 
-\item{max_cells}{Maximum number of cells (or clonotypes if level = "clonotype")
-to use for training (default 1000). If more pass the quantile filter, the top
-max_cells by library size are selected. Applied per donor.}
+\item{max_cells}{Maximum number of cells to use for training (default 1000).
+If more cells pass the quantile filter, max_cells are randomly sampled.
+Applied per donor.}
 
 \item{min_total_count}{Minimum total read depth per donor for heterozygosity testing (default 10).
 Passed to donor_het_status_df for identifying heterozygous SNPs.}
 
 \item{het_p_value}{P-value threshold for heterozygosity testing (default 0.05).
 Passed to donor_het_status_df for identifying heterozygous SNPs.}
-
-\item{level}{Either "barcode" (default) or "clonotype". When "clonotype",
-counts are aggregated per clonotype before assignment, and clonotype-level
-assignments are then assigned back to individual cells.
-Requires a "clonotype" column in barcode metadata.}
 }
 \value{
 A SNPData object with added barcode metadata columns:
@@ -68,26 +61,17 @@ donor independently with the following steps:
   \item Remove cells with donor = "doublet" or "unassigned"
   \item For each valid donor:
   \itemize{
-    \item When level = "barcode":
-      \itemize{
-        \item Filter to cells with high library size (>= cell_quantile)
-        \item Select top max_cells cells by library size
-      }
-    \item When level = "clonotype":
-      \itemize{
-        \item Filter to clonotypes with high total library size (>= cell_quantile)
-        \item Select top max_cells clonotypes by total library size
-      }
     \item Identify heterozygous chrX SNPs for this donor using donor_het_status_df
-    \item Filter to SNPs with non-zero counts in at least min_cell_prop of the filtered cells
+    \item Filter to high-coverage SNPs (>= snp_quantile) for this donor
     \item Subsample to at most max_snps SNPs (highest coverage)
+    \item Filter to cells from this donor with high library size (>= cell_quantile)
+    \item Subsample to at most max_cells cells (random sampling)
     \item Convert to expression matrix using sign(REF-ALT) * log1p(|REF-ALT|)
-    \item Cluster using hierarchical clustering (Ward's method) on correlation distance
+    \item Cluster cells using hierarchical clustering (Ward's method) on correlation distance
     \item Cut dendrogram into 2 clusters
-    \item Calculate cluster assignment scores
+    \item Calculate cluster assignment scores for all cells from this donor
     \item Fit Gaussian Mixture Model on training scores
-    \item Predict inactive X using the GMM
-    \item When level = "clonotype": Map clonotype predictions back to individual cells
+    \item Predict inactive X for all cells from this donor using the GMM
   }
 }
 
@@ -108,14 +92,8 @@ table(barcode_info$donor, barcode_info$inactive_x)
 # Use more stringent filtering
 snpdata <- assign_inactive_x(
     snpdata,
-    min_cell_prop = 0.3,
+    snp_quantile = 0.95,
     cell_quantile = 0.9
-)
-
-# Assign by clonotype instead of individual cells
-snpdata <- assign_inactive_x(
-    snpdata,
-    level = "clonotype"
 )
 
 # Use fewer SNPs and cells for faster computation

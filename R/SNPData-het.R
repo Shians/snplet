@@ -28,6 +28,10 @@ donor_het_status_df_impl <- function(
     p_value_threshold = 0.05,
     minor_allele_prop = 0.1
 ) {
+    old_threshold <- logger::log_threshold()
+    logger::log_threshold(logger::WARN)
+    on.exit(logger::log_threshold(old_threshold), add = TRUE)
+    
     stopifnot(min_total_count >= 1)
     stopifnot(p_value_threshold > 0 && p_value_threshold <= 1)
     stopifnot(minor_allele_prop > 0 && minor_allele_prop < 0.5)
