@@ -2,113 +2,54 @@
 % Please edit documentation in R/assign_inactive_x.R
 \name{assign_inactive_x}
 \alias{assign_inactive_x}
-\title{Assign Inactive X Chromosome}
+\alias{assign_inactive_x,SNPData-method}
+\title{Assign inactive X chromosome to cells}
 \usage{
-assign_inactive_x(
-  x,
-  snp_quantile = 0.9,
-  cell_quantile = 0.8,
-  max_snps = 200,
-  max_cells = 1000,
-  min_total_count = 10,
-  het_p_value = 0.05
-)
+assign_inactive_x(x)
+
+\S4method{assign_inactive_x}{SNPData}(x)
 }
 \arguments{
-\item{x}{A SNPData object with donor information in barcode metadata}
-
-\item{snp_quantile}{Quantile threshold for SNP coverage filtering (default 0.9).
-Only chrX SNPs with coverage >= this quantile are used for clustering.
-Applied per donor.}
-
-\item{cell_quantile}{Quantile threshold for cell library size filtering (default 0.8).
-Only cells with library size >= this quantile are used for training the model.
-Applied per donor.}
-
-\item{max_snps}{Maximum number of SNPs to use for clustering (default 200).
-If more SNPs pass the quantile filter, the top max_snps by coverage are selected.
-Applied per donor.}
-
-\item{max_cells}{Maximum number of cells to use for training (default 1000).
-If more cells pass the quantile filter, max_cells are randomly sampled.
-Applied per donor.}
-
-\item{min_total_count}{Minimum total read depth per donor for heterozygosity testing (default 10).
-Passed to donor_het_status_df for identifying heterozygous SNPs.}
-
-\item{het_p_value}{P-value threshold for heterozygosity testing (default 0.05).
-Passed to donor_het_status_df for identifying heterozygous SNPs.}
+\item{x}{SNPData object containing X chromosome SNP data with donor
+assignments and heterozygosity information}
 }
 \value{
-A SNPData object with added barcode metadata columns:
-  \itemize{
-    \item inactive_x: Predicted inactive X chromosome ("X1" or "X2")
-    \item inactive_x_prob: Probability of the assignment (max of the two class probabilities)
-  }
+SNPData object with an additional \code{inactive_x} column in
+  barcode metadata, with values "X1" or "X2" indicating the inferred
+  inactive X chromosome state
 }
 \description{
-Infers which X chromosome is inactive in female cells based on allele-specific
-expression patterns. X inactivation is determined independently for each donor,
-as each female individual has her own pattern of X inactivation. Uses hierarchical
-clustering on high-coverage heterozygous chrX SNPs to identify two groups of cells
-with correlated expression patterns, then fits a Gaussian Mixture Model to classify
-all cells from that donor.
+Identifies which X chromosome is inactive in female cells based on allelic
+imbalance patterns at heterozygous SNPs. Uses hierarchical clustering to
+assign cells into two groups representing the two possible X-inactivation
+states.
 }
 \details{
-The function first removes doublets and unassigned cells, then processes each valid
-donor independently with the following steps:
+X-chromosome inactivation (XCI) is a dosage compensation mechanism in female
+mammals where one of the two X chromosomes is randomly silenced in each cell.
+This function infers which X is inactive by analyzing allelic expression
+patterns at heterozygous SNPs on the X chromosome.
+
+The algorithm works as follows:
 \enumerate{
-  \item Remove cells with donor = "doublet" or "unassigned"
-  \item For each valid donor:
-  \itemize{
-    \item Identify heterozygous chrX SNPs for this donor using donor_het_status_df
-    \item Filter to high-coverage SNPs (>= snp_quantile) for this donor
-    \item Subsample to at most max_snps SNPs (highest coverage)
-    \item Filter to cells from this donor with high library size (>= cell_quantile)
-    \item Subsample to at most max_cells cells (random sampling)
-    \item Convert to expression matrix using sign(REF-ALT) * log1p(|REF-ALT|)
-    \item Cluster cells using hierarchical clustering (Ward's method) on correlation distance
-    \item Cut dendrogram into 2 clusters
-    \item Calculate cluster assignment scores for all cells from this donor
-    \item Fit Gaussian Mixture Model on training scores
-    \item Predict inactive X for all cells from this donor using the GMM
-  }
+  \item Filters to heterozygous SNPs on the X chromosome for each donor
+  \item Selects the SNP with highest coverage per gene to avoid redundancy
+  \item Identifies informative SNPs with sufficient coverage across cells
+  \item Computes an expression-like matrix capturing allelic imbalance
+  \item Performs hierarchical clustering on the sign of allelic imbalance
+  \item Assigns cells to two clusters (X1 or X2) representing inactive X states
 }
 
-Note: This function requires donor information in barcode metadata, as X inactivation
-is donor-specific and heterozygous SNPs are identified per donor. Doublets and
-unassigned cells are automatically excluded from analysis. Homozygous SNPs cannot
-be used for X inactivation analysis since they lack allele-specific signal.
+Cells within each cluster should show consistent allelic bias patterns,
+reflecting which parental X chromosome is active vs. inactive.
 }
 \examples{
 \dontrun{
-# Assign inactive X chromosome (analyzed per donor)
-snpdata <- assign_inactive_x(snpdata)
+# Assign inactive X chromosome to cells
+snp_data <- assign_inactive_x(snp_data)
 
-# View results by donor
-barcode_info <- get_barcode_info(snpdata)
-table(barcode_info$donor, barcode_info$inactive_x)
-
-# Use more stringent filtering
-snpdata <- assign_inactive_x(
-    snpdata,
-    snp_quantile = 0.95,
-    cell_quantile = 0.9
-)
-
-# Use fewer SNPs and cells for faster computation
-snpdata <- assign_inactive_x(
-    snpdata,
-    max_snps = 100,
-    max_cells = 500
-)
-
-# Adjust heterozygosity testing parameters
-snpdata <- assign_inactive_x(
-    snpdata,
-    min_total_count = 20,
-    het_p_value = 0.01
-)
+# View results
+get_barcode_info(snp_data) \%>\%
+  count(donor, inactive_x)
 }
-
 }

@@ -1,12 +1,57 @@
-#' Assign inactive x
-assign_inactive_x <- function(
-    snp_data
-) {
-    unique_donors <- unique(get_barcode_info(snp_data)$donor)
+#' Assign inactive X chromosome to cells
+#'
+#' Identifies which X chromosome is inactive in female cells based on allelic
+#' imbalance patterns at heterozygous SNPs. Uses hierarchical clustering to
+#' assign cells into two groups representing the two possible X-inactivation
+#' states.
+#'
+#' @details
+#' X-chromosome inactivation (XCI) is a dosage compensation mechanism in female
+#' mammals where one of the two X chromosomes is randomly silenced in each cell.
+#' This function infers which X is inactive by analyzing allelic expression
+#' patterns at heterozygous SNPs on the X chromosome.
+#'
+#' The algorithm works as follows:
+#' \enumerate{
+#'   \item Filters to heterozygous SNPs on the X chromosome for each donor
+#'   \item Selects the SNP with highest coverage per gene to avoid redundancy
+#'   \item Identifies informative SNPs with sufficient coverage across cells
+#'   \item Computes an expression-like matrix capturing allelic imbalance
+#'   \item Performs hierarchical clustering on the sign of allelic imbalance
+#'   \item Assigns cells to two clusters (X1 or X2) representing inactive X states
+#' }
+#'
+#' Cells within each cluster should show consistent allelic bias patterns,
+#' reflecting which parental X chromosome is active vs. inactive.
+#'
+#' @param x SNPData object containing X chromosome SNP data with donor
+#'   assignments and heterozygosity information
+#'
+#' @return SNPData object with an additional \code{inactive_x} column in
+#'   barcode metadata, with values "X1" or "X2" indicating the inferred
+#'   inactive X chromosome state
+#'
+#' @export
+#'
+#' @examples
+#' \dontrun{
+#' # Assign inactive X chromosome to cells
+#' snp_data <- assign_inactive_x(snp_data)
+#'
+#' # View results
+#' get_barcode_info(snp_data) %>%
+#'   count(donor, inactive_x)
+#' }
+setGeneric("assign_inactive_x", function(x) standardGeneric("assign_inactive_x"))
+
+#' @rdname assign_inactive_x
+#' @include SNPData-class.R
+setMethod("assign_inactive_x", signature(x = "SNPData"), function(x) {
+    unique_donors <- unique(get_barcode_info(x)$donor)
 
     unique_donor_snp_data <- map(
         unique_donors,
-        ~filter_samples(snp_data, donor == .x)
+        ~filter_samples(x, donor == .x)
     ) %>%
         magrittr::set_names(unique_donors)
 
@@ -16,12 +61,10 @@ assign_inactive_x <- function(
         bind_rows()
 
     # add inactive_x to barcode_info
-    snp_data %>%
+    x %>%
         add_barcode_metadata(barcode_inactive_x_df)
-}
+})
 
-#' Assign inactive x for a single donor
-#' @returns data.frame with barcode and inactive_x assignment
 .assign_inactive_x_single_donor <- function(
     snp_data
 ) {
@@ -105,9 +148,54 @@ assign_inactive_x <- function(
     expr_matrix[, nonzero_cells, drop = FALSE]
 }
 
-plot_inactive_x_heatmap <- function(snp_data, donor) {
+#' Plot inactive X chromosome heatmap for a donor
+#'
+#' Visualizes allelic imbalance patterns at informative heterozygous SNPs to
+#' reveal X-inactivation structure. Cells are clustered based on their allelic
+#' bias signatures, which should separate into two groups corresponding to the
+#' two inactive X states.
+#'
+#' @details
+#' This function creates a heatmap showing the sign of allelic expression at
+#' heterozygous SNPs across cells from a single donor. The heatmap uses:
+#' \itemize{
+#'   \item Rows: Informative heterozygous SNPs on the X chromosome (one per gene)
+#'   \item Columns: Individual cells/barcodes
+#'   \item Values: Sign of allelic imbalance (+1 for REF bias, -1 for ALT bias, 0 for balanced)
+#'   \item Clustering: Hierarchical clustering with complete linkage and Euclidean distance
+#' }
+#'
+#' The clustering should reveal two main groups of cells, each showing opposite
+#' allelic bias patterns across SNPs. This bimodal pattern reflects which of the
+#' two parental X chromosomes is inactive in each cell.
+#'
+#' Only SNPs with at least 2 reads coverage in at least 1% of cells are included
+#' to focus on informative loci.
+#'
+#' @param x SNPData object containing X chromosome SNP data
+#' @param donor Character string specifying which donor to visualize
+#'
+#' @return A ComplexHeatmap object showing the inactive X clustering pattern
+#'
+#' @export
+#'
+#' @examples
+#' \dontrun{
+#' # Plot inactive X pattern for a specific donor
+#' plot_inactive_x_heatmap(snp_data, donor = "donor1")
+#'
+#' # Save the plot
+#' pdf("inactive_x_heatmap.pdf", width = 10, height = 8)
+#' plot_inactive_x_heatmap(snp_data, donor = "donor1")
+#' dev.off()
+#' }
+setGeneric("plot_inactive_x_heatmap", function(x, donor) standardGeneric("plot_inactive_x_heatmap"))
+
+#' @rdname plot_inactive_x_heatmap
+#' @include SNPData-class.R
+setMethod("plot_inactive_x_heatmap", signature(x = "SNPData"), function(x, donor) {
     expr_matrix <- .prepare_expr_matrix(
-        filter_barcodes(snp_data, donor == donor),
+        filter_barcodes(x, donor == donor),
         min_coverage = 2,
         min_sample_prop = 0.01
     )
@@ -120,4 +208,4 @@ plot_inactive_x_heatmap <- function(snp_data, donor) {
         show_column_names = FALSE,
         name = paste("Donor", donor, "Inactive X Heatmap")
     )
-}
+})
