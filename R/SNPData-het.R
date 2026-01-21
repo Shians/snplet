@@ -99,3 +99,42 @@ setMethod(
     signature(x = "SNPData"),
     donor_het_status_df_impl
 )
+
+#' Get heterozygous SNP data for a specific donor
+#'
+#' Filters a SNPData object to a specific donor and only includes SNPs that are 
+#' heterozygous for that donor.
+#'
+#' @param snp_data A SNPData object
+#' @param donor Character string specifying the donor to filter for
+#' @param ... Additional arguments passed to `donor_het_status_df`
+#' @return A filtered SNPData object containing only the specified donor and 
+#'   their heterozygous SNPs
+#' @export
+#'
+#' @examples
+#' \dontrun{
+#' snp_data <- get_example_snpdata()
+#' donor_het_data <- get_donor_het_snpdata(snp_data, "donor0")
+#' }
+get_donor_het_snpdata <- function(snp_data, donor, ...) {
+    # Filter to the specified donor first
+    donor_data <- filter_barcodes(snp_data, donor == !!donor)
+    
+    # Get heterozygosity status for all donors (but we only care about our donor)
+    het_status <- donor_het_status_df(donor_data, ...)
+    
+    # Get SNPs that are heterozygous for this donor
+    het_snps <- het_status %>%
+        dplyr::filter(donor == !!donor, zygosity == "het") %>%
+        dplyr::pull(snp_id)
+    
+    # Filter to heterozygous SNPs
+    if (length(het_snps) > 0) {
+        filter_snps(donor_data, snp_id %in% het_snps)
+    } else {
+        # Return empty SNPData object if no heterozygous SNPs
+        filter_snps(donor_data, FALSE)
+    }
+}
+
