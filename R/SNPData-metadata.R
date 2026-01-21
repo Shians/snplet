@@ -12,8 +12,6 @@
 #'   For snp_info: "snp_id"
 #' @param overwrite Logical, whether to overwrite existing columns (default FALSE).
 #'   Set to TRUE to update existing columns in barcode_info or snp_info.
-#' @param validate Logical, whether to validate that all rows have matches (default TRUE).
-#'   Set to FALSE when adding partial data (subset of barcodes or SNPs).
 #'
 #' @return A SNPData object with updated barcode_info or snp_info
 #'
@@ -38,16 +36,13 @@
 #'   overwrite = TRUE
 #' )
 #'
-#' # Add columns to barcode_info for subset of cells (validate=FALSE)
+#' # Add columns to barcode_info for subset of cells
+#' # (cells not in metadata will have NA for new columns)
 #' partial_barcode_info <- data.frame(
 #'   cell_id = c("cell_1", "cell_2"),
 #'   annotation = c("A", "B")
 #' )
-#' updated_snpdata <- add_barcode_metadata(
-#'   snpdata,
-#'   partial_barcode_info,
-#'   validate = FALSE
-#' )
+#' updated_snpdata <- add_barcode_metadata(snpdata, partial_barcode_info)
 #'
 #' # Add new columns to snp_info
 #' new_snp_info <- data.frame(
@@ -66,7 +61,6 @@ NULL
     metadata,
     join_by,
     overwrite,
-    validate,
     preserved_cols,
     info_name
 ) {
@@ -94,21 +88,6 @@ NULL
                 ": ",
                 paste(conflicting_cols, collapse = ", "),
                 ". Set overwrite=TRUE to replace existing columns."
-            ))
-        }
-    }
-
-    if (validate) {
-        missing_keys <- setdiff(current_info[[join_by]], metadata[[join_by]])
-        if (length(missing_keys) > 0) {
-            stop(paste0(
-                "Some ",
-                info_name,
-                " are missing from metadata data.frame: ",
-                paste(head(missing_keys, 5), collapse = ", "),
-                if (length(missing_keys) > 5) {
-                    paste0(" (and ", length(missing_keys) - 5, " more)")
-                }
             ))
         }
     }
@@ -143,7 +122,7 @@ NULL
 
 #' @rdname add_metadata
 #' @export
-add_barcode_metadata <- function(x, metadata, join_by = "cell_id", overwrite = FALSE, validate = TRUE) {
+add_barcode_metadata <- function(x, metadata, join_by = "cell_id", overwrite = FALSE) {
     # Validate input
     if (!methods::is(x, "SNPData")) {
         stop("Input must be a SNPData object")
@@ -163,7 +142,6 @@ add_barcode_metadata <- function(x, metadata, join_by = "cell_id", overwrite = F
         metadata = metadata,
         join_by = join_by,
         overwrite = overwrite,
-        validate = validate,
         preserved_cols = c("library_size", "non_zero_snps"),
         info_name = "barcode_info"
     )
@@ -181,7 +159,7 @@ add_barcode_metadata <- function(x, metadata, join_by = "cell_id", overwrite = F
 
 #' @rdname add_metadata
 #' @export
-add_snp_metadata <- function(x, metadata, join_by = "snp_id", overwrite = FALSE, validate = TRUE) {
+add_snp_metadata <- function(x, metadata, join_by = "snp_id", overwrite = FALSE) {
     # Validate input
     if (!methods::is(x, "SNPData")) {
         stop("Input must be a SNPData object")
@@ -201,7 +179,6 @@ add_snp_metadata <- function(x, metadata, join_by = "snp_id", overwrite = FALSE,
         metadata = metadata,
         join_by = join_by,
         overwrite = overwrite,
-        validate = validate,
         preserved_cols = c("coverage", "non_zero_samples"),
         info_name = "snp_info"
     )
