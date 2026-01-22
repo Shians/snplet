@@ -67,8 +67,9 @@ test_that("to_expr_matrix works with barcode level", {
     expect_equal(colnames(result), colnames(test_ref_count))
 
     # Test calculation manually for first element
-    # Calculate expected value: sign(ref - alt) * log1p(abs(ref - alt))
-    expected_val <- sign(5 - 1) * log1p(abs(5 - 1))
+    # Calculate expected value: (ref - alt) / (depth + 1) * log1p(depth)
+    # For snp_1, cell_1: ref=5, alt=1, depth=6
+    expected_val <- (5 - 1) / (6 + 1) * log1p(6)
     # Verify calculation is correct
     expect_equal(result[1, 1], expected_val, tolerance = 1e-10)
 })
