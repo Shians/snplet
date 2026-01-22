@@ -6,21 +6,9 @@
 \alias{add_snp_metadata}
 \title{Add metadata to SNPData barcode_info or snp_info}
 \usage{
-add_barcode_metadata(
-  x,
-  metadata,
-  join_by = "cell_id",
-  overwrite = FALSE,
-  validate = TRUE
-)
+add_barcode_metadata(x, metadata, join_by = "cell_id", overwrite = FALSE)
 
-add_snp_metadata(
-  x,
-  metadata,
-  join_by = "snp_id",
-  overwrite = FALSE,
-  validate = TRUE
-)
+add_snp_metadata(x, metadata, join_by = "snp_id", overwrite = FALSE)
 }
 \arguments{
 \item{x}{A SNPData object}
@@ -33,9 +21,6 @@ For snp_info: "snp_id"}
 
 \item{overwrite}{Logical, whether to overwrite existing columns (default FALSE).
 Set to TRUE to update existing columns in barcode_info or snp_info.}
-
-\item{validate}{Logical, whether to validate that all rows have matches (default TRUE).
-Set to FALSE when adding partial data (subset of barcodes or SNPs).}
 }
 \value{
 A SNPData object with updated barcode_info or snp_info
@@ -67,16 +52,13 @@ updated_snpdata <- add_barcode_metadata(
   overwrite = TRUE
 )
 
-# Add columns to barcode_info for subset of cells (validate=FALSE)
+# Add columns to barcode_info for subset of cells
+# (cells not in metadata will have NA for new columns)
 partial_barcode_info <- data.frame(
   cell_id = c("cell_1", "cell_2"),
   annotation = c("A", "B")
 )
-updated_snpdata <- add_barcode_metadata(
-  snpdata,
-  partial_barcode_info,
-  validate = FALSE
-)
+updated_snpdata <- add_barcode_metadata(snpdata, partial_barcode_info)
 
 # Add new columns to snp_info
 new_snp_info <- data.frame(

@@ -534,8 +534,7 @@ test_that("complete workflow: import without VDJ then add clonotype data", {
         snp_data,
         clonotype_data,
         join_by = "cell_id",
-        overwrite = TRUE,
-        validate = FALSE
+        overwrite = TRUE
     )
 
     # Verify clonotype data was added
