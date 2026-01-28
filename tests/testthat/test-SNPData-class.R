@@ -12,7 +12,9 @@ library(Matrix)
 
 # Create test matrices
 test_alt_count <- Matrix::Matrix(matrix(c(1, 2, 3, 4), nrow = 2, ncol = 2))
+dimnames(test_alt_count) <- list(c("snp_1", "snp_2"), c("cell_1", "cell_2"))
 test_ref_count <- Matrix::Matrix(matrix(c(5, 6, 7, 8), nrow = 2, ncol = 2))
+dimnames(test_ref_count) <- list(c("snp_1", "snp_2"), c("cell_1", "cell_2"))
 
 # Create test metadata
 test_snp_info <- data.frame(
@@ -83,7 +85,7 @@ test_that("ref_count() returns reference count matrix with correct values and na
     ref_count_matrix <- ref_count(snp_data)
 
     # Verify ref_count accessor returns correct matrix values
-    expect_equal(ref_count_matrix, test_ref_count, ignore_attr = TRUE)
+    expect_equal(as.matrix(ref_count_matrix), as.matrix(test_ref_count))
     # Check that ref_count matrix has correct row names
     expect_equal(rownames(ref_count_matrix), c("snp_1", "snp_2"))
     # Check that ref_count matrix has correct column names
@@ -101,7 +103,7 @@ test_that("alt_count() returns alternate count matrix with correct values and na
     alt_count_matrix <- alt_count(snp_data)
 
     # Verify alt_count accessor returns correct matrix values
-    expect_equal(alt_count_matrix, test_alt_count, ignore_attr = TRUE)
+    expect_equal(as.matrix(alt_count_matrix), as.matrix(test_alt_count))
     # Check that alt_count matrix has correct row names
     expect_equal(rownames(alt_count_matrix), c("snp_1", "snp_2"))
     # Check that alt_count matrix has correct column names
@@ -127,9 +129,9 @@ test_that("get_snp_info() returns SNP metadata with computed coverage metrics", 
     # Check that non_zero_samples column is automatically added
     expect_true("non_zero_samples" %in% colnames(snp_info))
     # Verify coverage calculation: rowSums of alt_count + ref_count
-    expect_equal(snp_info$coverage, c(16, 20), ignore_attr = TRUE)
+    expect_equal(as.numeric(snp_info$coverage), c(16, 20))
     # Verify non_zero_samples count: all samples have counts
-    expect_equal(snp_info$non_zero_samples, c(2, 2), ignore_attr = TRUE)
+    expect_equal(as.numeric(snp_info$non_zero_samples), c(2, 2))
 })
 
 test_that("get_barcode_info() returns barcode metadata with computed library size metrics", {
@@ -153,9 +155,9 @@ test_that("get_barcode_info() returns barcode metadata with computed library siz
     # Check that non_zero_snps column is automatically added
     expect_true("non_zero_snps" %in% colnames(barcode_info))
     # Verify library_size calculation: colSums of alt_count + ref_count
-    expect_equal(barcode_info$library_size, c(14, 22), ignore_attr = TRUE)
+    expect_equal(as.numeric(barcode_info$library_size), c(14, 22))
     # Verify non_zero_snps count: all SNPs have counts
-    expect_equal(barcode_info$non_zero_snps, c(2, 2), ignore_attr = TRUE)
+    expect_equal(as.numeric(barcode_info$non_zero_snps), c(2, 2))
 })
 
 test_that("[() subsetting by numeric index returns SNPData object with correct dimensions", {
@@ -245,12 +247,15 @@ test_that("coverage() returns sum of alt_count and ref_count matrices", {
         snp_info = test_snp_info,
         barcode_info = test_barcode_info
     )
-    expected_coverage <- Matrix::Matrix(matrix(c(6, 8, 10, 12), nrow = 2, ncol = 2))
+    expected_coverage <- Matrix::Matrix(
+        matrix(c(6, 8, 10, 12), nrow = 2, ncol = 2),
+        dimnames = list(c("snp_1", "snp_2"), c("cell_1", "cell_2"))
+    )
 
     result <- coverage(snp_data)
 
     # Verify coverage calculation: alt_count + ref_count
-    expect_equal(result, expected_coverage, ignore_attr = TRUE)
+    expect_equal(result, expected_coverage)
 })
 test_that("SNPData() auto-generates snp_id column when missing from snp_info", {
     test_snp_info_no_id <- data.frame(pos = c(100, 200))
@@ -334,5 +339,183 @@ test_that("SNPData() throws error when barcode_info rows don't match matrix colu
             barcode_info = wrong_dim_barcode_info
         ),
         "ncol\\(alt_count\\) == nrow\\(barcode_info\\)"
+    )
+})
+
+test_that("get_sample_info() returns same result as get_barcode_info()", {
+    snp_data <- SNPData(
+        ref_count = test_ref_count,
+        alt_count = test_alt_count,
+        snp_info = test_snp_info,
+        barcode_info = test_barcode_info
+    )
+
+    # Verify get_sample_info is an alias for get_barcode_info
+    expect_equal(get_sample_info(snp_data), get_barcode_info(snp_data))
+})
+
+test_that("barcode_info<- replaces barcode_info with valid data", {
+    snp_data <- SNPData(
+        ref_count = test_ref_count,
+        alt_count = test_alt_count,
+        snp_info = test_snp_info,
+        barcode_info = test_barcode_info
+    )
+
+    new_barcode_info <- data.frame(
+        cell_id = c("cell_1", "cell_2"),
+        donor = c("donor_2", "donor_2"),
+        clonotype = c("clonotype_3", "clonotype_4"),
+        stringsAsFactors = FALSE
+    )
+
+    barcode_info(snp_data) <- new_barcode_info
+
+    # Verify barcode_info was updated
+    expect_equal(get_barcode_info(snp_data)$donor, c("donor_2", "donor_2"))
+    # Verify clonotype was updated
+    expect_equal(get_barcode_info(snp_data)$clonotype, c("clonotype_3", "clonotype_4"))
+})
+
+test_that("barcode_info<- throws error when dimensions don't match", {
+    snp_data <- SNPData(
+        ref_count = test_ref_count,
+        alt_count = test_alt_count,
+        snp_info = test_snp_info,
+        barcode_info = test_barcode_info
+    )
+
+    wrong_dim_barcode_info <- data.frame(
+        cell_id = c("cell_1", "cell_2", "cell_3"),
+        donor = c("donor_1", "donor_1", "donor_1")
+    )
+
+    # Verify error when number of rows doesn't match
+    expect_error(
+        barcode_info(snp_data) <- wrong_dim_barcode_info,
+        "Number of rows in barcode_info must match number of columns in count matrices"
+    )
+})
+
+test_that("barcode_info<- throws error when cell_id column is missing", {
+    snp_data <- SNPData(
+        ref_count = test_ref_count,
+        alt_count = test_alt_count,
+        snp_info = test_snp_info,
+        barcode_info = test_barcode_info
+    )
+
+    no_cell_id <- data.frame(
+        donor = c("donor_1", "donor_1"),
+        clonotype = c("clonotype_1", "clonotype_2")
+    )
+
+    # Verify error when cell_id column is missing
+    expect_error(
+        barcode_info(snp_data) <- no_cell_id,
+        "barcode_info must contain a 'cell_id' column"
+    )
+})
+
+test_that("barcode_info<- throws error when cell_id doesn't match matrix column names", {
+    snp_data <- SNPData(
+        ref_count = test_ref_count,
+        alt_count = test_alt_count,
+        snp_info = test_snp_info,
+        barcode_info = test_barcode_info
+    )
+
+    mismatched_cell_id <- data.frame(
+        cell_id = c("cell_3", "cell_4"),
+        donor = c("donor_1", "donor_1")
+    )
+
+    # Verify error when cell_id doesn't match column names
+    expect_error(
+        barcode_info(snp_data) <- mismatched_cell_id,
+        "barcode_info\\$cell_id must match column names of count matrices"
+    )
+})
+
+test_that("snp_info<- replaces snp_info with valid data", {
+    snp_data <- SNPData(
+        ref_count = test_ref_count,
+        alt_count = test_alt_count,
+        snp_info = test_snp_info,
+        barcode_info = test_barcode_info
+    )
+
+    new_snp_info <- data.frame(
+        snp_id = c("snp_1", "snp_2"),
+        pos = c(150, 250),
+        chr = c("chr1", "chr2"),
+        stringsAsFactors = FALSE
+    )
+
+    snp_info(snp_data) <- new_snp_info
+
+    # Verify snp_info was updated
+    expect_equal(get_snp_info(snp_data)$pos, c(150, 250))
+    # Verify chr column was added
+    expect_equal(get_snp_info(snp_data)$chr, c("chr1", "chr2"))
+})
+
+test_that("snp_info<- throws error when dimensions don't match", {
+    snp_data <- SNPData(
+        ref_count = test_ref_count,
+        alt_count = test_alt_count,
+        snp_info = test_snp_info,
+        barcode_info = test_barcode_info
+    )
+
+    wrong_dim_snp_info <- data.frame(
+        snp_id = c("snp_1", "snp_2", "snp_3"),
+        pos = c(100, 200, 300)
+    )
+
+    # Verify error when number of rows doesn't match
+    expect_error(
+        snp_info(snp_data) <- wrong_dim_snp_info,
+        "Number of rows in snp_info must match number of rows in count matrices"
+    )
+})
+
+test_that("snp_info<- throws error when snp_id column is missing", {
+    snp_data <- SNPData(
+        ref_count = test_ref_count,
+        alt_count = test_alt_count,
+        snp_info = test_snp_info,
+        barcode_info = test_barcode_info
+    )
+
+    no_snp_id <- data.frame(
+        pos = c(100, 200),
+        chr = c("chr1", "chr2")
+    )
+
+    # Verify error when snp_id column is missing
+    expect_error(
+        snp_info(snp_data) <- no_snp_id,
+        "snp_info must contain a 'snp_id' column"
+    )
+})
+
+test_that("snp_info<- throws error when snp_id doesn't match matrix row names", {
+    snp_data <- SNPData(
+        ref_count = test_ref_count,
+        alt_count = test_alt_count,
+        snp_info = test_snp_info,
+        barcode_info = test_barcode_info
+    )
+
+    mismatched_snp_id <- data.frame(
+        snp_id = c("snp_3", "snp_4"),
+        pos = c(100, 200)
+    )
+
+    # Verify error when snp_id doesn't match row names
+    expect_error(
+        snp_info(snp_data) <- mismatched_snp_id,
+        "snp_info\\$snp_id must match row names of count matrices"
     )
 })
