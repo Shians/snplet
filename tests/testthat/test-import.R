@@ -15,9 +15,9 @@ test_that("get_example_snpdata works correctly", {
     # Test basic object structure
     # Verify get_example_snpdata returns a valid SNPData object
     expect_s4_class(snp_data, "SNPData")
-    # Check that example data has SNPs (rows > 0)
+    # Verify example data has SNPs (rows > 0)
     expect_true(nrow(snp_data) > 0)
-    # Check that example data has samples (columns > 0)
+    # Verify example data has samples (columns > 0)
     expect_true(ncol(snp_data) > 0)
 
     # Test SNP info structure
@@ -45,13 +45,13 @@ test_that("read_vcf_base works correctly", {
 
     # Test required columns
     expected_cols <- c("snp_id", "chrom", "pos", "id", "ref", "alt", "qual", "filter", "info")
-    # Check that all expected VCF columns are present
+    # Verify all expected VCF columns are present
     expect_true(all(expected_cols %in% colnames(vcf_data)))
     # Verify snp_id is the first column
     expect_equal(colnames(vcf_data)[1], "snp_id")
 
     # Test SNP ID generation
-    # Check that all SNP IDs follow standardized format "chr:pos:ref:alt"
+    # Verify all SNP IDs follow standardized format "chr:pos:ref:alt"
     expect_true(all(grepl("^chr.+:[0-9]+:[ACGT]+:[ACGT]+$", vcf_data$snp_id)))
     # Verify first SNP ID matches expected format from VCF data
     expect_equal(vcf_data$snp_id[1], "chr1:1108258:A:C")
@@ -94,7 +94,7 @@ test_that("merge_cell_annotations works correctly with standard column names", {
     # Verify merge_cell_annotations returns a data frame
     expect_s3_class(result, "data.frame")
     required_cols <- c("cell_id", "donor", "clonotype")
-    # Check that all required columns are present after merge
+    # Verify all required columns are present after merge
     expect_true(all(required_cols %in% colnames(result)))
 
     # Test merge behavior (left join on donor_info)
@@ -102,7 +102,7 @@ test_that("merge_cell_annotations works correctly with standard column names", {
     expect_equal(sort(result$barcode), c("CELL1", "CELL2", "CELL3"))
     # Verify cell_id values are generated sequentially
     expect_equal(sort(result$cell_id), c("cell_1", "cell_2", "cell_3"))
-    # Check that result has expected number of rows
+    # Verify result has expected number of rows
     expect_equal(nrow(result), 3)
 
     # Test specific merge results
@@ -144,7 +144,7 @@ test_that("merge_cell_annotations handles cell_id column naming", {
     # Test that cell_id column was renamed to barcode for internal processing
     # Verify merge_cell_annotations returns a data frame
     expect_s3_class(result, "data.frame")
-    # Check that all required columns are present after merge
+    # Verify all required columns are present after merge
     expect_true(all(c("cell_id", "donor", "clonotype") %in% colnames(result)))
     # Verify correct number of rows after merge
     expect_equal(nrow(result), 3)
@@ -182,7 +182,7 @@ test_that("merge_cell_annotations handles donor column without donor_id", {
     # Test that donor column is preserved without renaming
     # Verify merge_cell_annotations returns a data frame
     expect_s3_class(result, "data.frame")
-    # Check that all required columns are present after merge
+    # Verify all required columns are present after merge
     expect_true(all(c("cell_id", "donor", "clonotype") %in% colnames(result)))
 
     # Test specific merge results
@@ -216,7 +216,7 @@ test_that("merge_cell_annotations handles mixed column naming scenarios", {
     # Test mixed column naming scenario
     # Verify merge_cell_annotations returns a data frame
     expect_s3_class(result, "data.frame")
-    # Check that all required columns are present after merge
+    # Verify all required columns are present after merge
     expect_true(all(c("cell_id", "donor", "clonotype") %in% colnames(result)))
     # Verify correct number of rows after merge
     expect_equal(nrow(result), 3)
@@ -243,19 +243,20 @@ test_that("import_cellsnp works with example data", {
     gene_annotation <- readr::read_tsv(gene_anno_file, show_col_types = FALSE)
 
     # Execute import
-    snp_data <- import_cellsnp(
+    # Verify import completes without error
+    snp_data <- expect_no_error(import_cellsnp(
         cellsnp_dir = cellsnp_dir,
         gene_annotation = gene_annotation,
         vdj_file = vdj_file,
         vireo_file = vireo_file
-    )
+    ))
 
     # Test return object
     # Verify import_cellsnp returns a valid SNPData object
     expect_s4_class(snp_data, "SNPData")
-    # Check that imported data has SNPs (rows > 0)
+    # Verify imported data has SNPs (rows > 0)
     expect_true(nrow(snp_data) > 0)
-    # Check that imported data has samples (columns > 0)
+    # Verify imported data has samples (columns > 0)
     expect_true(ncol(snp_data) > 0)
 
     # Test matrix dimension consistency
@@ -267,9 +268,9 @@ test_that("import_cellsnp works with example data", {
     # Test metadata structure
     snp_info <- get_snp_info(snp_data)
     barcode_info <- get_barcode_info(snp_data)
-    # Check that SNP info rows match matrix rows
+    # Verify SNP info rows match matrix rows
     expect_equal(nrow(snp_info), nrow(snp_data))
-    # Check that sample info rows match matrix columns
+    # Verify sample info rows match matrix columns
     expect_equal(nrow(barcode_info), ncol(snp_data))
 
     # Test required columns
@@ -318,7 +319,7 @@ test_that("merge_cell_annotations works without VDJ info", {
     # Verify merge_cell_annotations returns a data frame when VDJ info is NULL
     expect_s3_class(result, "data.frame")
     required_cols <- c("cell_id", "donor", "clonotype")
-    # Check that all required columns are present including clonotype (as NA)
+    # Verify all required columns are present including clonotype (as NA)
     expect_true(all(required_cols %in% colnames(result)))
 
     # Test that clonotype is all NA
@@ -330,7 +331,7 @@ test_that("merge_cell_annotations works without VDJ info", {
     expect_equal(sort(result$barcode), c("CELL1", "CELL2", "CELL3"))
     # Verify cell_id values are generated sequentially
     expect_equal(sort(result$cell_id), c("cell_1", "cell_2", "cell_3"))
-    # Check that result has expected number of rows
+    # Verify result has expected number of rows
     expect_equal(nrow(result), 3)
 
     # Test donor assignments
@@ -352,23 +353,24 @@ test_that("import_cellsnp works without vdj_file", {
     gene_annotation <- readr::read_tsv(gene_anno_file, show_col_types = FALSE)
 
     # Execute import without VDJ file
-    snp_data <- import_cellsnp(
+    # Verify import completes without error
+    snp_data <- expect_no_error(import_cellsnp(
         cellsnp_dir = cellsnp_dir,
         gene_annotation = gene_annotation,
         vireo_file = vireo_file
-    )
+    ))
 
     # Test return object
     # Verify import_cellsnp returns a valid SNPData object without VDJ
     expect_s4_class(snp_data, "SNPData")
-    # Check that imported data has SNPs (rows > 0)
+    # Verify imported data has SNPs (rows > 0)
     expect_true(nrow(snp_data) > 0)
-    # Check that imported data has samples (columns > 0)
+    # Verify imported data has samples (columns > 0)
     expect_true(ncol(snp_data) > 0)
 
     # Test metadata structure
     barcode_info <- get_barcode_info(snp_data)
-    # Check that clonotype column exists
+    # Verify clonotype column exists
     expect_true("clonotype" %in% colnames(barcode_info))
     # Verify all clonotype values are NA when no VDJ file provided
     expect_true(all(is.na(barcode_info$clonotype)))
@@ -391,24 +393,25 @@ test_that("import_cellsnp works without vdj_file or vireo_file", {
     gene_annotation <- readr::read_tsv(gene_anno_file, show_col_types = FALSE)
 
     # Execute import without VDJ or Vireo files
-    snp_data <- import_cellsnp(
+    # Verify import completes without error
+    snp_data <- expect_no_error(import_cellsnp(
         cellsnp_dir = cellsnp_dir,
         gene_annotation = gene_annotation
-    )
+    ))
 
     # Test return object
     # Verify import_cellsnp returns a valid SNPData object with minimal inputs
     expect_s4_class(snp_data, "SNPData")
-    # Check that imported data has SNPs (rows > 0)
+    # Verify imported data has SNPs (rows > 0)
     expect_true(nrow(snp_data) > 0)
-    # Check that imported data has samples (columns > 0)
+    # Verify imported data has samples (columns > 0)
     expect_true(ncol(snp_data) > 0)
 
     # Test metadata structure
     barcode_info <- get_barcode_info(snp_data)
-    # Check that clonotype column exists even without VDJ
+    # Verify clonotype column exists even without VDJ
     expect_true("clonotype" %in% colnames(barcode_info))
-    # Check that donor column exists even without Vireo
+    # Verify donor column exists even without Vireo
     expect_true("donor" %in% colnames(barcode_info))
     # Verify all clonotype values are NA when no VDJ file provided
     expect_true(all(is.na(barcode_info$clonotype)))
@@ -419,11 +422,11 @@ test_that("import_cellsnp works without vdj_file or vireo_file", {
 test_that("export_cellsnp creates output files", {
     # Setup - Get example data and create temp directory
     snp_data <- get_example_snpdata()
-    temp_dir <- tempdir()
-    out_dir <- file.path(temp_dir, "test_export")
+    out_dir <- withr::local_tempdir()
 
     # Execute export
-    export_cellsnp(snp_data, out_dir)
+    # Verify export completes without error
+    expect_no_error(export_cellsnp(snp_data, out_dir))
 
     # Test that all expected files were created
     expected_files <- c(
@@ -435,13 +438,13 @@ test_that("export_cellsnp creates output files", {
         "filtered_contig_annotations.csv"
     )
 
-    for (file in expected_files) {
-        # Verify each expected output file was created
-        expect_true(file.exists(file.path(out_dir, file)))
-    }
-
-    # Cleanup
-    unlink(out_dir, recursive = TRUE)
+    # Verify all expected output files were created
+    expect_true(file.exists(file.path(out_dir, "cellSNP.tag.AD.mtx")))
+    expect_true(file.exists(file.path(out_dir, "cellSNP.tag.DP.mtx")))
+    expect_true(file.exists(file.path(out_dir, "cellSNP.tag.OTH.mtx")))
+    expect_true(file.exists(file.path(out_dir, "cellSNP.base.vcf.gz")))
+    expect_true(file.exists(file.path(out_dir, "donor_ids.tsv")))
+    expect_true(file.exists(file.path(out_dir, "filtered_contig_annotations.csv")))
 })
 
 test_that("export_cellsnp skips VDJ export when clonotype missing", {
@@ -458,33 +461,23 @@ test_that("export_cellsnp skips VDJ export when clonotype missing", {
         gene_annotation = gene_annotation
     )
 
-    temp_dir <- tempdir()
-    out_dir <- file.path(temp_dir, "test_export_no_vdj")
+    out_dir <- withr::local_tempdir()
 
     # Execute export
-    export_cellsnp(snp_data, out_dir)
+    # Verify export completes without error
+    expect_no_error(export_cellsnp(snp_data, out_dir))
 
     # Test that VDJ file was NOT created
     vdj_file <- file.path(out_dir, "filtered_contig_annotations.csv")
     # Verify VDJ file is not created when clonotype info missing
     expect_false(file.exists(vdj_file))
 
-    # Test that other expected files were created
-    expected_files <- c(
-        "cellSNP.tag.AD.mtx",
-        "cellSNP.tag.DP.mtx",
-        "cellSNP.tag.OTH.mtx",
-        "cellSNP.base.vcf.gz",
-        "donor_ids.tsv"
-    )
-
-    for (file in expected_files) {
-        # Verify other expected output files were created
-        expect_true(file.exists(file.path(out_dir, file)))
-    }
-
-    # Cleanup
-    unlink(out_dir, recursive = TRUE)
+    # Verify other expected output files were created
+    expect_true(file.exists(file.path(out_dir, "cellSNP.tag.AD.mtx")))
+    expect_true(file.exists(file.path(out_dir, "cellSNP.tag.DP.mtx")))
+    expect_true(file.exists(file.path(out_dir, "cellSNP.tag.OTH.mtx")))
+    expect_true(file.exists(file.path(out_dir, "cellSNP.base.vcf.gz")))
+    expect_true(file.exists(file.path(out_dir, "donor_ids.tsv")))
 })
 
 # ==============================================================================
@@ -510,7 +503,7 @@ test_that("complete workflow: import without VDJ then add clonotype data", {
 
     # Verify initial state - clonotype exists but all NA
     barcode_info <- get_barcode_info(snp_data)
-    # Check that clonotype column exists
+    # Verify clonotype column exists
     expect_true("clonotype" %in% colnames(barcode_info))
     # Verify all clonotype values are initially NA
     expect_true(all(is.na(barcode_info$clonotype)))
@@ -539,14 +532,14 @@ test_that("complete workflow: import without VDJ then add clonotype data", {
 
     # Verify clonotype data was added
     barcode_info_updated <- get_barcode_info(snp_data_with_clonotype)
-    # Check that clonotype column still exists
+    # Verify clonotype column still exists
     expect_true("clonotype" %in% colnames(barcode_info_updated))
     # Verify not all clonotypes are NA anymore
     expect_false(all(is.na(barcode_info_updated$clonotype)))
 
     # Verify first cells have clonotype data
     first_cells <- barcode_info_updated[1:min(10, nrow(barcode_info_updated)), ]
-    # Check that first 10 cells now have clonotype assignments
+    # Verify first 10 cells now have clonotype assignments
     expect_true(all(!is.na(first_cells$clonotype)))
 
     # Step 3: Use clonotype functions on subset with clonotype data
@@ -558,16 +551,16 @@ test_that("complete workflow: import without VDJ then add clonotype data", {
 
     # Verify clonotype functions now work
     result <- clonotype_count_df(snp_data_filtered, test_maf = FALSE)
-    # Check that clonotype_count_df returns valid data frame
+    # Verify clonotype_count_df returns valid data frame
     expect_s3_class(result, "data.frame")
     # Verify clonotype column is present in results
     expect_true("clonotype" %in% colnames(result))
-    # Check that results are not empty
+    # Verify results are not empty
     expect_true(nrow(result) > 0)
 
     # Verify to_expr_matrix works
     expr_mat <- to_expr_matrix(snp_data_filtered, level = "clonotype")
-    # Check that to_expr_matrix returns a matrix
+    # Verify to_expr_matrix returns a matrix
     expect_true(is.matrix(expr_mat))
     # Verify matrix has columns (clonotypes)
     expect_true(ncol(expr_mat) > 0)
@@ -595,20 +588,20 @@ test_that("import with VDJ then export and re-import preserves clonotype", {
 
     # Verify clonotype data present
     barcode_info_original <- get_barcode_info(snp_data_original)
-    # Check that clonotype column exists in imported data
+    # Verify clonotype column exists in imported data
     expect_true("clonotype" %in% colnames(barcode_info_original))
     clonotypes_with_data <- sum(!is.na(barcode_info_original$clonotype))
     # Verify some cells have clonotype assignments
     expect_true(clonotypes_with_data > 0)
 
     # Export to temp directory
-    temp_dir <- tempdir()
-    out_dir <- file.path(temp_dir, "test_roundtrip")
-    export_cellsnp(snp_data_original, out_dir)
+    out_dir <- withr::local_tempdir()
+    # Verify export completes without error
+    expect_no_error(export_cellsnp(snp_data_original, out_dir))
 
     # Verify VDJ file was created
     vdj_exported <- file.path(out_dir, "filtered_contig_annotations.csv")
-    # Check that VDJ file was exported when clonotype data present
+    # Verify VDJ file was exported when clonotype data present
     expect_true(file.exists(vdj_exported))
 
     # Re-import
@@ -621,16 +614,13 @@ test_that("import with VDJ then export and re-import preserves clonotype", {
 
     # Verify clonotype data preserved
     barcode_info_reimported <- get_barcode_info(snp_data_reimported)
-    # Check that clonotype column exists after re-import
+    # Verify clonotype column exists after re-import
     expect_true("clonotype" %in% colnames(barcode_info_reimported))
 
     # Compare number of cells with clonotype data
     clonotypes_reimported <- sum(!is.na(barcode_info_reimported$clonotype))
     # Verify same number of cells have clonotype data after roundtrip
     expect_equal(clonotypes_reimported, clonotypes_with_data)
-
-    # Cleanup
-    unlink(out_dir, recursive = TRUE)
 })
 
 test_that("import without VDJ, export, re-import maintains no clonotype state", {
@@ -651,17 +641,17 @@ test_that("import without VDJ, export, re-import maintains no clonotype state", 
 
     # Verify all clonotypes are NA
     barcode_info_original <- get_barcode_info(snp_data_original)
-    # Check that all clonotype values are NA when no VDJ imported
+    # Verify all clonotype values are NA when no VDJ imported
     expect_true(all(is.na(barcode_info_original$clonotype)))
 
     # Export to temp directory
-    temp_dir <- tempdir()
-    out_dir <- file.path(temp_dir, "test_no_vdj_roundtrip")
-    export_cellsnp(snp_data_original, out_dir)
+    out_dir <- withr::local_tempdir()
+    # Verify export completes without error
+    expect_no_error(export_cellsnp(snp_data_original, out_dir))
 
     # Verify VDJ file was NOT created
     vdj_exported <- file.path(out_dir, "filtered_contig_annotations.csv")
-    # Check that VDJ file is not exported when no clonotype data
+    # Verify VDJ file is not exported when no clonotype data
     expect_false(file.exists(vdj_exported))
 
     # Re-import without VDJ file
@@ -673,11 +663,131 @@ test_that("import without VDJ, export, re-import maintains no clonotype state", 
 
     # Verify all clonotypes still NA
     barcode_info_reimported <- get_barcode_info(snp_data_reimported)
-    # Check that clonotype column exists after re-import
+    # Verify clonotype column exists after re-import
     expect_true("clonotype" %in% colnames(barcode_info_reimported))
     # Verify all clonotype values remain NA after roundtrip
     expect_true(all(is.na(barcode_info_reimported$clonotype)))
+})
 
-    # Cleanup
-    unlink(out_dir, recursive = TRUE)
+# ==============================================================================
+# Error Handling Tests
+# ==============================================================================
+
+test_that("merge_cell_annotations errors when barcode_column not found in vdj_info", {
+    # Setup - Create donor and VDJ info with mismatched column name
+    donor_info <- data.frame(
+        cell = c("CELL1", "CELL2", "CELL3"),
+        donor_id = c("donor1", "donor2", "donor1"),
+        stringsAsFactors = FALSE
+    )
+
+    vdj_info <- data.frame(
+        wrong_barcode_name = c("CELL1", "CELL2", "CELL4"),
+        raw_clonotype_id = c("clonotype1", "clonotype2", "clonotype1"),
+        stringsAsFactors = FALSE
+    )
+
+    # Verify error when barcode_column is not found in vdj_info
+    expect_error(
+        merge_cell_annotations(
+            donor_info = donor_info,
+            vdj_info = vdj_info,
+            barcode_column = "barcode",
+            clonotype_column = "raw_clonotype_id"
+        ),
+        "Column barcode not found in VDJ annotation file"
+    )
+})
+
+test_that("merge_cell_annotations errors when clonotype_column not found in vdj_info", {
+    # Setup - Create donor and VDJ info with mismatched clonotype column name
+    donor_info <- data.frame(
+        cell = c("CELL1", "CELL2", "CELL3"),
+        donor_id = c("donor1", "donor2", "donor1"),
+        stringsAsFactors = FALSE
+    )
+
+    vdj_info <- data.frame(
+        barcode = c("CELL1", "CELL2", "CELL4"),
+        wrong_clonotype_name = c("clonotype1", "clonotype2", "clonotype1"),
+        stringsAsFactors = FALSE
+    )
+
+    # Verify error when clonotype_column is not found in vdj_info
+    expect_error(
+        merge_cell_annotations(
+            donor_info = donor_info,
+            vdj_info = vdj_info,
+            barcode_column = "barcode",
+            clonotype_column = "raw_clonotype_id"
+        ),
+        "Column raw_clonotype_id not found in VDJ annotation file"
+    )
+})
+
+test_that("merge_cell_annotations handles donor_info without donor column", {
+    # Setup - Create donor info without donor or donor_id column
+    donor_info <- data.frame(
+        cell = c("CELL1", "CELL2", "CELL3"),
+        other_column = c("A", "B", "C"),
+        stringsAsFactors = FALSE
+    )
+
+    vdj_info <- data.frame(
+        barcode = c("CELL1", "CELL2", "CELL4"),
+        raw_clonotype_id = c("clonotype1", "clonotype2", "clonotype1"),
+        stringsAsFactors = FALSE
+    )
+
+    # Execute merge
+    result <- merge_cell_annotations(
+        donor_info = donor_info,
+        vdj_info = vdj_info,
+        barcode_column = "barcode",
+        clonotype_column = "raw_clonotype_id"
+    )
+
+    # Verify merge_cell_annotations returns a data frame
+    expect_s3_class(result, "data.frame")
+    # Verify donor column exists
+    expect_true("donor" %in% colnames(result))
+    # Verify all donor values are NA when donor column not in input
+    expect_true(all(is.na(result$donor)))
+    # Verify clonotype column exists and has values
+    expect_true("clonotype" %in% colnames(result))
+    # Verify clonotypes are assigned correctly
+    expect_equal(result$clonotype[result$barcode == "CELL1"], "clonotype1")
+})
+
+test_that("merge_cell_annotations handles empty vdj_info data frame", {
+    # Setup - Create donor info and empty VDJ info
+    donor_info <- data.frame(
+        cell = c("CELL1", "CELL2", "CELL3"),
+        donor_id = c("donor1", "donor2", "donor1"),
+        stringsAsFactors = FALSE
+    )
+
+    # Create empty vdj_info with correct columns but no rows
+    vdj_info <- data.frame(
+        barcode = character(0),
+        raw_clonotype_id = character(0),
+        stringsAsFactors = FALSE
+    )
+
+    # Execute merge
+    result <- merge_cell_annotations(
+        donor_info = donor_info,
+        vdj_info = vdj_info,
+        barcode_column = "barcode",
+        clonotype_column = "raw_clonotype_id"
+    )
+
+    # Verify merge_cell_annotations returns a data frame
+    expect_s3_class(result, "data.frame")
+    # Verify all required columns exist
+    expect_true(all(c("cell_id", "barcode", "donor", "clonotype") %in% colnames(result)))
+    # Verify all clonotypes are NA when vdj_info is empty
+    expect_true(all(is.na(result$clonotype)))
+    # Verify donors are assigned correctly
+    expect_equal(result$donor[result$barcode == "CELL1"], "donor1")
 })
