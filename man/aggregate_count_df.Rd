@@ -17,7 +17,7 @@ aggregate_count_df(x, group_by, test_maf = TRUE)
 \item{test_maf}{Logical, whether to include a test_maf column (default TRUE)}
 }
 \value{
-A tibble with columns: snp_id, [group_by], ref_count, alt_count, total_count, ref_ratio, maf, (optionally test_maf)
+A tibble with columns: snp_id, gene_name, chrom, pos, strand (if available in snp_info), [group_by], ref_count, alt_count, total_count, ref_ratio, maf, (optionally test_maf)
 }
 \description{
 Returns a long-format data frame of reference and alternate allele counts per SNP and aggregated by the specified grouping column from barcode_info.

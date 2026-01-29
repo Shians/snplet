@@ -11,31 +11,59 @@ library(Matrix)
 # Test Data Setup
 # ------------------------------------------------------------------------------
 
+# Chromosome style definitions
+CHR_STYLES <- list(
+    numeric = c("1", "2", "3", "X", "Y", "MT"),
+    ucsc = c("chr1", "chr2", "chr3", "chrX", "chrY", "chrM"),
+    refseq_mouse = c("NC_000067.6", "NC_000068.7", "NC_000069.6", "NC_000086.7", "NC_000087.7", "NC_005089.1"),
+    genbank_mouse = c("CM000994.2", "CM000995.2", "CM000996.2", "CM001013.2", "CM001014.2", "AY172335.1"),
+    refseq_human = c("NC_000001.11", "NC_000002.12", "NC_000003.12", "NC_000023.11", "NC_000024.10", "NC_012920.1"),
+    genbank_human = c("CM000663.2", "CM000664.2", "CM000665.2", "CM000685.2", "CM000686.2", "J01415.2"),
+    unknown = c("custom1", "custom2", "customX")
+)
+
 # Helper to create test SNP info with different chromosome styles
 make_test_snp_info <- function(chr_style = "numeric") {
-    if (chr_style == "numeric") {
-        chrom <- c("1", "2", "3", "X", "Y", "MT")
-    } else if (chr_style == "ucsc") {
-        chrom <- c("chr1", "chr2", "chr3", "chrX", "chrY", "chrM")
-    } else if (chr_style == "refseq_mouse") {
-        chrom <- c("NC_000067.6", "NC_000068.7", "NC_000069.6", "NC_000086.7", "NC_000087.7", "NC_005089.1")
-    } else if (chr_style == "genbank_mouse") {
-        chrom <- c("CM000994.2", "CM000995.2", "CM000996.2", "CM001013.2", "CM001014.2", "AY172335.1")
-    } else if (chr_style == "refseq_human") {
-        chrom <- c("NC_000001.11", "NC_000002.12", "NC_000003.12", "NC_000023.11", "NC_000024.10", "NC_012920.1")
-    } else if (chr_style == "genbank_human") {
-        chrom <- c("CM000663.2", "CM000664.2", "CM000665.2", "CM000685.2", "CM000686.2", "J01415.2")
-    } else {
-        chrom <- c("custom1", "custom2", "customX")
+    chrom <- CHR_STYLES[[chr_style]]
+    if (is.null(chrom)) {
+        chrom <- CHR_STYLES[["unknown"]]
     }
 
+    n <- length(chrom)
     data.frame(
         chrom = chrom,
-        pos = c(1000, 2000, 3000, 4000, 5000, 6000),
-        ref = c("A", "C", "G", "T", "A", "C"),
-        alt = c("G", "T", "A", "C", "G", "T"),
+        pos = seq_len(n) * 1000,
+        ref = rep_len(c("A", "C", "G", "T"), n),
+        alt = rep_len(c("G", "T", "A", "C"), n),
         stringsAsFactors = FALSE
     )
+}
+
+# Helper to create SNPData with unknown chromosome style
+make_unknown_style_snpdata <- function(suppress_warnings = TRUE) {
+    snp_info <- make_test_snp_info("unknown")
+    barcode_info <- data.frame(barcode = c("cell1", "cell2"))
+    n_snps <- nrow(snp_info)
+    alt_count <- sparseMatrix(i = c(1, 2), j = c(1, 1), x = c(5, 3), dims = c(n_snps, 2))
+    ref_count <- sparseMatrix(i = c(1, 2), j = c(1, 1), x = c(10, 7), dims = c(n_snps, 2))
+
+    if (suppress_warnings) {
+        suppressWarnings(
+            SNPData(
+                ref_count = ref_count,
+                alt_count = alt_count,
+                snp_info = snp_info,
+                barcode_info = barcode_info
+            )
+        )
+    } else {
+        SNPData(
+            ref_count = ref_count,
+            alt_count = alt_count,
+            snp_info = snp_info,
+            barcode_info = barcode_info
+        )
+    }
 }
 
 # ==============================================================================
@@ -175,16 +203,21 @@ test_that("normalize_chr_names converts numeric to UCSC", {
     expect_equal(result, c("chr1", "chr2", "chrX", "chrY"))
 })
 
-test_that("normalize_chr_names handles unknown style with warning", {
+test_that("normalize_chr_names issues warning for unknown style", {
     chr_names <- c("custom1", "custom2")
 
     # Verify warning is issued for unknown style
     expect_warning(
-        result <- normalize_chr_names(chr_names),
+        normalize_chr_names(chr_names),
         "Chromosome style is unknown"
     )
+})
 
-    # Verify original names are returned
+test_that("normalize_chr_names returns original names for unknown style", {
+    chr_names <- c("custom1", "custom2")
+
+    # Verify original names are returned despite warning
+    result <- suppressWarnings(normalize_chr_names(chr_names))
     expect_equal(result, chr_names)
 })
 
@@ -301,21 +334,9 @@ test_that("SNPData detects and stores chr_style for UCSC chromosomes", {
 })
 
 test_that("SNPData handles unknown chromosome style", {
-    snp_info <- make_test_snp_info("unknown")
-    barcode_info <- data.frame(barcode = c("cell1", "cell2"))
-    # Unknown style returns 3 chromosomes, so matrices need 3 rows
-    n_snps <- nrow(snp_info)
-    alt_count <- sparseMatrix(i = c(1, 2), j = c(1, 1), x = c(5, 3), dims = c(n_snps, 2))
-    ref_count <- sparseMatrix(i = c(1, 2), j = c(1, 1), x = c(10, 7), dims = c(n_snps, 2))
-
     # Verify SNPData object is created even with unknown chr_style
     expect_warning(
-        snp_data <- SNPData(
-            ref_count = ref_count,
-            alt_count = alt_count,
-            snp_info = snp_info,
-            barcode_info = barcode_info
-        ),
+        snp_data <- make_unknown_style_snpdata(suppress_warnings = FALSE),
         "Chromosome style is unknown"
     )
 
@@ -323,9 +344,10 @@ test_that("SNPData handles unknown chromosome style", {
     expect_equal(chr_style(snp_data), "unknown")
 
     # Check chrom_canonical preserves original names
+    expected_chrom <- CHR_STYLES[["unknown"]]
     expect_equal(
         get_snp_info(snp_data)$chrom_canonical,
-        snp_info$chrom
+        expected_chrom
     )
 })
 
@@ -369,22 +391,8 @@ test_that(".validate_chr_style passes for known chr_style", {
 })
 
 test_that(".validate_chr_style fails for unknown chr_style", {
-    snp_info <- make_test_snp_info("unknown")
-    barcode_info <- data.frame(barcode = c("cell1", "cell2"))
-    # Unknown style returns 3 chromosomes, so matrices need 3 rows
-    n_snps <- nrow(snp_info)
-    alt_count <- sparseMatrix(i = c(1, 2), j = c(1, 1), x = c(5, 3), dims = c(n_snps, 2))
-    ref_count <- sparseMatrix(i = c(1, 2), j = c(1, 1), x = c(10, 7), dims = c(n_snps, 2))
-
     # Verify SNPData with unknown style is created
-    expect_warning(
-        snp_data <- SNPData(
-            ref_count = ref_count,
-            alt_count = alt_count,
-            snp_info = snp_info,
-            barcode_info = barcode_info
-        )
-    )
+    snp_data <- make_unknown_style_snpdata()
 
     # Verify validation fails for unknown style
     expect_error(
@@ -394,22 +402,8 @@ test_that(".validate_chr_style fails for unknown chr_style", {
 })
 
 test_that(".validate_chr_style provides informative error message", {
-    snp_info <- make_test_snp_info("unknown")
-    barcode_info <- data.frame(barcode = c("cell1", "cell2"))
-    # Unknown style returns 3 chromosomes, so matrices need 3 rows
-    n_snps <- nrow(snp_info)
-    alt_count <- sparseMatrix(i = c(1, 2), j = c(1, 1), x = c(5, 3), dims = c(n_snps, 2))
-    ref_count <- sparseMatrix(i = c(1, 2), j = c(1, 1), x = c(10, 7), dims = c(n_snps, 2))
-
     # Verify SNPData with unknown style is created
-    expect_warning(
-        snp_data <- SNPData(
-            ref_count = ref_count,
-            alt_count = alt_count,
-            snp_info = snp_info,
-            barcode_info = barcode_info
-        )
-    )
+    snp_data <- make_unknown_style_snpdata()
 
     # Verify error includes operation name
     expect_error(

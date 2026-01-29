@@ -1,7 +1,7 @@
 Package: snplet
 Type: Package
 Title: Package for handling SNP based allele-specific expression analysis
-Version: 0.3.28
+Version: 0.3.29
 Authors@R: c(
     person(
       "Shian", "Su",
@@ -42,7 +42,8 @@ Imports:
     tidyr
 Suggests:
     ComplexHeatmap,
-    testthat
+    testthat,
+    withr
 License: Apache License (>= 2)
 Encoding: UTF-8
 LazyData: false

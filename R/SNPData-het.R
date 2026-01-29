@@ -6,7 +6,7 @@
 #' @param min_total_count Minimum total read depth (ref + alt) required per donor to test for heterozygosity (default: 10)
 #' @param p_value_threshold P-value threshold for binomial test (default: 0.05). P-values are multiple-testing corrected and SNPs with p < threshold reject monoallelic expression.
 #' @param minor_allele_prop Minor allele proportion used as the null threshold for monoallelic expression testing (default: 0.1).
-#' @return A tibble with columns: snp_id, chrom, pos, donor, ref_count, alt_count, total_count, minor_allele_count, p_val, adj_p_val, tested, zygosity
+#' @return A tibble with columns: snp_id, gene_name, chrom, pos, strand (if available in snp_info), donor, ref_count, alt_count, total_count, ref_ratio, maf, minor_allele_count, p_val, adj_p_val, tested, zygosity
 #' @export
 #'
 #' @examples
@@ -62,27 +62,8 @@ donor_het_status_df_impl <- function(
             )
     }
 
-    snp_info <- get_snp_info(x)
-    chrom_col <- if ("chrom" %in% colnames(snp_info)) {
-        snp_info$chrom
-    } else {
-        rep(NA_character_, nrow(snp_info))
-    }
-    pos_col <- if ("pos" %in% colnames(snp_info)) {
-        snp_info$pos
-    } else {
-        rep(NA_real_, nrow(snp_info))
-    }
-    snp_coords <- data.frame(
-        snp_id = snp_info$snp_id,
-        chrom = chrom_col,
-        pos = pos_col,
-        stringsAsFactors = FALSE
-    )
-
     donor_counts %>%
         dplyr::left_join(tested_counts, by = c("snp_id", "donor")) %>%
-        dplyr::left_join(snp_coords, by = "snp_id") %>%
         dplyr::mutate(
             zygosity = dplyr::case_when(
                 tested & !is.na(adj_p_val) & adj_p_val < p_value_threshold ~ "het",

@@ -22,6 +22,17 @@ test_maf <- function(x, p = 0.10) {
         stop(glue::glue("Missing required columns: {missing_list}"))
     }
 
+    # validate that ref_count + alt_count <= total_count
+    invalid_rows <- which(x$ref_count + x$alt_count > x$total_count)
+    if (length(invalid_rows) > 0) {
+        if (length(invalid_rows) <= 5) {
+            row_list <- paste0(invalid_rows, collapse = ", ")
+        } else {
+            row_list <- paste0(paste0(head(invalid_rows, 5), collapse = ", "), ", ...")
+        }
+        stop(glue::glue("Invalid data: ref_count + alt_count > total_count in row(s): {row_list}"))
+    }
+
     minor_allele_count <- pmin(x$ref_count, x$alt_count)
     total_count <- ceiling(x$total_count)
     major_allele_count <- pmax(total_count - minor_allele_count, 0)

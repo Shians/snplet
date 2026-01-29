@@ -4,7 +4,7 @@
 #'
 #' @param x A SNPData object
 #' @param test_maf Logical, whether to include a test_maf column (default TRUE)
-#' @return A tibble with columns: snp_id, cell_id, ref_count, alt_count, total_count, ref_ratio, maf, (optionally test_maf)
+#' @return A tibble with columns: snp_id, gene_name, chrom, pos, strand (if available in snp_info), cell_id, ref_count, alt_count, total_count, ref_ratio, maf, (optionally test_maf)
 #' @export
 #'
 #' @examples
@@ -15,7 +15,7 @@
 #' @rdname barcode_count_df
 setGeneric("barcode_count_df", function(x, test_maf = TRUE) standardGeneric("barcode_count_df"))
 
-.build_long_count_df <- function(ref_count_mat, alt_count_mat, group_name) {
+.build_long_count_df <- function(ref_count_mat, alt_count_mat, group_name, snp_info = NULL) {
     ref_count_df <- ref_count_mat %>%
         as.matrix() %>%
         tibble::as_tibble() %>%
@@ -36,19 +36,35 @@ setGeneric("barcode_count_df", function(x, test_maf = TRUE) standardGeneric("bar
             values_to = "alt_count"
         )
 
-    dplyr::inner_join(ref_count_df, alt_count_df, by = c("snp_id", group_name)) %>%
+    result <- dplyr::inner_join(ref_count_df, alt_count_df, by = c("snp_id", group_name)) %>%
         dplyr::mutate(
             total_count = ref_count + alt_count,
             ref_ratio = ref_count / total_count,
             maf = pmin(ref_count, alt_count) / total_count
         ) %>%
         dplyr::filter(total_count > 0)
+
+    # Join SNP metadata if provided
+    if (!is.null(snp_info)) {
+        # Select relevant columns from snp_info
+        snp_cols <- c("snp_id")
+        optional_cols <- c("gene_name", "chrom", "pos", "strand")
+        available_cols <- optional_cols[optional_cols %in% colnames(snp_info)]
+        snp_metadata <- snp_info %>%
+            dplyr::select(dplyr::all_of(c(snp_cols, available_cols)))
+
+        result <- result %>%
+            dplyr::left_join(snp_metadata, by = "snp_id") %>%
+            dplyr::relocate(dplyr::all_of(available_cols), .after = snp_id)
+    }
+
+    result
 }
 
 barcode_count_df_impl <- function(x, test_maf = TRUE) {
     logger::log_info("Calculating barcode/cell level counts")
 
-    out <- .build_long_count_df(ref_count(x), alt_count(x), "cell_id")
+    out <- .build_long_count_df(ref_count(x), alt_count(x), "cell_id", get_snp_info(x))
     if (isTRUE(test_maf)) {
         out <- test_maf(out)
     }
@@ -71,7 +87,7 @@ setMethod(
 #'
 #' @param x A SNPData object
 #' @param test_maf Logical, whether to include a test_maf column (default TRUE)
-#' @return A tibble with columns: snp_id, donor, ref_count, alt_count, total_count, ref_ratio, maf, (optionally test_maf)
+#' @return A tibble with columns: snp_id, gene_name, chrom, pos, strand (if available in snp_info), donor, ref_count, alt_count, total_count, ref_ratio, maf, (optionally test_maf)
 #' @export
 #'
 #' @examples
@@ -102,7 +118,7 @@ donor_count_df_impl <- function(x, test_maf = TRUE) {
     ]
 
     logger::log_info("Processing reference and alternate counts")
-    out <- .build_long_count_df(ref_count_grouped, alt_count_grouped, "donor")
+    out <- .build_long_count_df(ref_count_grouped, alt_count_grouped, "donor", get_snp_info(x))
     if (isTRUE(test_maf)) {
         out <- test_maf(out)
     }
@@ -125,7 +141,7 @@ setMethod(
 #'
 #' @param x A SNPData object
 #' @param test_maf Logical, whether to include a test_maf column (default TRUE)
-#' @return A tibble with columns: snp_id, clonotype, ref_count, alt_count, total_count, ref_ratio, maf, donor, (optionally test_maf)
+#' @return A tibble with columns: snp_id, gene_name, chrom, pos, strand (if available in snp_info), clonotype, ref_count, alt_count, total_count, ref_ratio, maf, donor, (optionally test_maf)
 #' @export
 #'
 #' @examples
@@ -165,8 +181,8 @@ clonotype_count_df_impl <- function(x, test_maf = TRUE) {
         dplyr::slice(1, .by = clonotype) %>%
         dplyr::select(clonotype, donor)
 
-    out <- .build_long_count_df(ref_count_grouped, alt_count_grouped, "clonotype") %>%
-        dplyr::left_join(most_likely_donor, by = c("clonotype" = "clonotype"))
+    out <- .build_long_count_df(ref_count_grouped, alt_count_grouped, "clonotype", get_snp_info(x)) %>%
+        dplyr::left_join(most_likely_donor, by = "clonotype")
     if (isTRUE(test_maf)) {
         out <- test_maf(out)
     }
@@ -190,7 +206,7 @@ setMethod(
 #' @param x A SNPData object
 #' @param group_by Character string specifying the column name in barcode_info to group by
 #' @param test_maf Logical, whether to include a test_maf column (default TRUE)
-#' @return A tibble with columns: snp_id, [group_by], ref_count, alt_count, total_count, ref_ratio, maf, (optionally test_maf)
+#' @return A tibble with columns: snp_id, gene_name, chrom, pos, strand (if available in snp_info), [group_by], ref_count, alt_count, total_count, ref_ratio, maf, (optionally test_maf)
 #' @export
 #'
 #' @examples
@@ -237,7 +253,7 @@ aggregate_count_df_impl <- function(x, group_by, test_maf = TRUE) {
     alt_count_grouped <- groupedRowSums(alt_count(x_filtered), groups)
 
     logger::log_info("Processing reference and alternate counts")
-    out <- .build_long_count_df(ref_count_grouped, alt_count_grouped, group_by)
+    out <- .build_long_count_df(ref_count_grouped, alt_count_grouped, group_by, get_snp_info(x_filtered))
     if (isTRUE(test_maf)) {
         out <- test_maf(out)
     }

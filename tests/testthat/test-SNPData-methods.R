@@ -10,6 +10,37 @@ expected_equal_unnamed <- function(object, expected, ...) {
     expect_equal(unname(object), unname(expected), ...)
 }
 
+# Helper function to build SNPData with a single NA donor for edge cases
+create_snpdata_with_na_donor <- function() {
+    barcode_info <- test_barcode_info
+    barcode_info$donor[1] <- NA
+    SNPData(
+        alt_count = test_alt_count,
+        ref_count = test_ref_count,
+        snp_info = test_snp_info,
+        barcode_info = barcode_info
+    )
+}
+
+# Helper function to validate MAF columns and calculations
+expect_maf_columns_added <- function(result_df) {
+    expected_maf_cols <- c("minor_allele_count", "p_val", "adj_p_val")
+    # Verify test_maf function columns are present
+    expect_true(all(expected_maf_cols %in% colnames(result_df)))
+    # Verify minor_allele_count is calculated correctly
+    expect_true(all(result_df$minor_allele_count == pmin(result_df$ref_count, result_df$alt_count)))
+    # Verify p_val and adj_p_val are numeric
+    expect_true(is.numeric(result_df$p_val))
+    expect_true(is.numeric(result_df$adj_p_val))
+}
+
+# Helper function to validate MAF columns are absent
+expect_maf_columns_absent <- function(result_df) {
+    expected_maf_cols <- c("minor_allele_count", "p_val", "adj_p_val")
+    # Verify test_maf columns are not present
+    expect_false(any(expected_maf_cols %in% colnames(result_df)))
+}
+
 # ------------------------------------------------------------------------------
 # Test Data Setup
 # ------------------------------------------------------------------------------
@@ -35,7 +66,7 @@ test_barcode_info <- data.frame(
 
 # ==============================================================================
 
-test_that("SNPData count data frame methods work correctly", {
+test_that("barcode_count_df returns a tibble with expected columns", {
     # Setup
     snp_data <- SNPData(
         alt_count = test_alt_count,
@@ -53,6 +84,16 @@ test_that("SNPData count data frame methods work correctly", {
     expected_barcode_cols <- c("snp_id", "cell_id", "ref_count", "alt_count", "total_count", "ref_ratio", "maf")
     # Verify all expected columns are present in barcode data frame
     expect_true(all(expected_barcode_cols %in% colnames(cell_df)))
+})
+
+test_that("donor_count_df aggregates by donor correctly", {
+    # Setup
+    snp_data <- SNPData(
+        alt_count = test_alt_count,
+        ref_count = test_ref_count,
+        snp_info = test_snp_info,
+        barcode_info = test_barcode_info
+    )
 
     # Test donor_count_df method
     donor_df <- donor_count_df(snp_data)
@@ -63,6 +104,16 @@ test_that("SNPData count data frame methods work correctly", {
     expected_donor_cols <- c("snp_id", "donor", "ref_count", "alt_count", "total_count", "ref_ratio", "maf")
     # Verify all expected columns are present in donor data frame
     expect_true(all(expected_donor_cols %in% colnames(donor_df)))
+})
+
+test_that("clonotype_count_df includes donor column", {
+    # Setup
+    snp_data <- SNPData(
+        alt_count = test_alt_count,
+        ref_count = test_ref_count,
+        snp_info = test_snp_info,
+        barcode_info = test_barcode_info
+    )
 
     # Test clonotype_count_df method
     clonotype_df <- clonotype_count_df(snp_data)
@@ -152,6 +203,34 @@ test_that("SNPData constructor drops duplicate SNP IDs", {
     )
 })
 
+test_that("SNPData constructor formats duplicate warning when many duplicates", {
+    dup_alt_count <- Matrix::Matrix(matrix(1, nrow = 7, ncol = 1))
+    dup_ref_count <- Matrix::Matrix(matrix(2, nrow = 7, ncol = 1))
+    dup_snp_info <- data.frame(
+        snp_id = rep("dup_snp", 7),
+        pos = seq_len(7),
+        stringsAsFactors = FALSE
+    )
+    barcode_info <- data.frame(
+        cell_id = "cell_1",
+        donor = "donor_1",
+        stringsAsFactors = FALSE
+    )
+
+    # Verify warning includes duplicate count when more than 5 duplicates exist
+    expect_warning(
+        snp_dup <- SNPData(
+            alt_count = dup_alt_count,
+            ref_count = dup_ref_count,
+            snp_info = dup_snp_info,
+            barcode_info = barcode_info
+        ),
+        "duplicates"
+    )
+    # Verify duplicates are removed down to a single SNP
+    expect_equal(nrow(snp_dup), 1)
+})
+
 test_that("filter_snps and filter_barcodes validate column names", {
     # Setup
     snp_data <- SNPData(
@@ -182,6 +261,54 @@ test_that("filter_snps and filter_barcodes validate column names", {
     # Test filter_barcodes with valid column
     # Verify successful filtering when using valid sample info column
     expect_s4_class(filter_barcodes(snp_data, donor == "donor_1"), "SNPData")
+})
+
+test_that("filter_snps errors when no SNPs remain after filtering", {
+    # Setup
+    snp_data <- SNPData(
+        alt_count = test_alt_count,
+        ref_count = test_ref_count,
+        snp_info = test_snp_info,
+        barcode_info = test_barcode_info
+    )
+
+    # Verify empty SNP selection errors
+    expect_error(
+        filter_snps(snp_data, pos > 1000),
+        "No SNPs remain after filtering"
+    )
+})
+
+test_that("filter_barcodes errors when no barcodes remain after filtering", {
+    # Setup
+    snp_data <- SNPData(
+        alt_count = test_alt_count,
+        ref_count = test_ref_count,
+        snp_info = test_snp_info,
+        barcode_info = test_barcode_info
+    )
+
+    # Verify empty barcode selection errors
+    expect_error(
+        filter_barcodes(snp_data, donor == "donor_missing"),
+        "No barcodes remain after filtering"
+    )
+})
+
+test_that("filter_samples forwards to filter_barcodes", {
+    # Setup
+    snp_data <- SNPData(
+        alt_count = test_alt_count,
+        ref_count = test_ref_count,
+        snp_info = test_snp_info,
+        barcode_info = test_barcode_info
+    )
+
+    # Verify filter_samples returns a filtered SNPData object
+    result <- filter_samples(snp_data, donor == "donor_1")
+    expect_s4_class(result, "SNPData")
+    # Verify filtered object retains expected number of cells
+    expect_equal(ncol(result), 2)
 })
 
 test_that("variable resolution in filter expressions works correctly", {
@@ -292,8 +419,14 @@ test_that("aggregate_count_df works correctly with various grouping columns", {
     # Verify all expected columns are present
     expect_true(all(expected_cols %in% colnames(donor_agg_df)))
     # Check that counts are properly aggregated (sum of both cells)
-    expect_equal(donor_agg_df$ref_count[1], 5 + 7) # ref counts for snp_1: cell_1 + cell_2
-    expect_equal(donor_agg_df$alt_count[1], 1 + 3) # alt counts for snp_1: cell_1 + cell_2
+    ref_cell1_snp1 <- test_ref_count[1, 1]
+    ref_cell2_snp1 <- test_ref_count[1, 2]
+    alt_cell1_snp1 <- test_alt_count[1, 1]
+    alt_cell2_snp1 <- test_alt_count[1, 2]
+    expected_ref_sum <- ref_cell1_snp1 + ref_cell2_snp1 # snp_1: cell_1 + cell_2
+    expected_alt_sum <- alt_cell1_snp1 + alt_cell2_snp1 # snp_1: cell_1 + cell_2
+    expect_equal(donor_agg_df$ref_count[1], expected_ref_sum)
+    expect_equal(donor_agg_df$alt_count[1], expected_alt_sum)
 
     # Test aggregation by clonotype
     clonotype_agg_df <- aggregate_count_df(snp_data, "clonotype")
@@ -317,14 +450,13 @@ test_that("aggregate_count_df works correctly with various grouping columns", {
 
     # Test with test_maf = FALSE
     no_maf_df <- aggregate_count_df(snp_data, "donor", test_maf = FALSE)
-    expected_maf_cols <- c("minor_allele_count", "p_val", "adj_p_val")
     # Verify test_maf function columns are not present when test_maf = FALSE
-    expect_false(any(expected_maf_cols %in% colnames(no_maf_df)))
+    expect_maf_columns_absent(no_maf_df)
 
     # Test with test_maf = TRUE (default)
     with_maf_df <- aggregate_count_df(snp_data, "donor", test_maf = TRUE)
     # Verify test_maf function columns are present when test_maf = TRUE
-    expect_true(all(expected_maf_cols %in% colnames(with_maf_df)))
+    expect_maf_columns_added(with_maf_df)
 })
 
 test_that("aggregate_count_df handles edge cases correctly", {
@@ -344,19 +476,19 @@ test_that("aggregate_count_df handles edge cases correctly", {
     )
 
     # Test with NA values in grouping column
-    test_barcode_info_na <- test_barcode_info
-    test_barcode_info_na$donor[1] <- NA
-    snp_data_na <- SNPData(
-        alt_count = test_alt_count,
-        ref_count = test_ref_count,
-        snp_info = test_snp_info,
-        barcode_info = test_barcode_info_na
-    )
+    snp_data_na <- create_snpdata_with_na_donor()
 
-    # Verify function handles NA values by excluding them
-    result_na <- suppressMessages(aggregate_count_df(snp_data_na, "donor"))
-    # Check that function issues warning about NA values (checking this indirectly by verifying behavior)
-    expect_true(exists("result_na"))
+    # Verify function handles NA values by excluding them and logs NA warning
+    log_file <- tempfile("aggregate_count_df_warn_", fileext = ".log")
+    original_appender_name <- as.character(logger::log_appender())
+    original_appender <- get(original_appender_name, asNamespace("logger"))
+    logger::log_appender(logger::appender_file(log_file))
+    on.exit(logger::log_appender(original_appender), add = TRUE)
+
+    result_na <- aggregate_count_df(snp_data_na, "donor")
+    log_lines <- readLines(log_file, warn = FALSE)
+    # Verify warning about NA values is logged
+    expect_true(any(grepl("NA values", log_lines)))
     # Check that result excludes NA groups
     expect_equal(nrow(result_na), 2) # 2 SNPs x 1 non-NA donor
 })
@@ -372,19 +504,13 @@ test_that("test_maf=TRUE adds correct statistical columns to barcode_count_df", 
 
     # Test with test_maf = TRUE (default)
     result_with_maf <- barcode_count_df(snp_data, test_maf = TRUE)
-    expected_maf_cols <- c("minor_allele_count", "p_val", "adj_p_val")
     # Verify test_maf function columns are added when test_maf = TRUE
-    expect_true(all(expected_maf_cols %in% colnames(result_with_maf)))
-    # Verify minor_allele_count is calculated correctly
-    expect_true(all(result_with_maf$minor_allele_count == pmin(result_with_maf$ref_count, result_with_maf$alt_count)))
-    # Verify p_val and adj_p_val are numeric
-    expect_true(is.numeric(result_with_maf$p_val))
-    expect_true(is.numeric(result_with_maf$adj_p_val))
+    expect_maf_columns_added(result_with_maf)
 
     # Test with test_maf = FALSE
     result_without_maf <- barcode_count_df(snp_data, test_maf = FALSE)
     # Verify test_maf columns are not present when test_maf = FALSE
-    expect_false(any(expected_maf_cols %in% colnames(result_without_maf)))
+    expect_maf_columns_absent(result_without_maf)
 })
 
 test_that("test_maf=TRUE adds correct statistical columns to donor_count_df", {
@@ -398,19 +524,13 @@ test_that("test_maf=TRUE adds correct statistical columns to donor_count_df", {
 
     # Test with test_maf = TRUE (default)
     result_with_maf <- donor_count_df(snp_data, test_maf = TRUE)
-    expected_maf_cols <- c("minor_allele_count", "p_val", "adj_p_val")
     # Verify test_maf function columns are added when test_maf = TRUE
-    expect_true(all(expected_maf_cols %in% colnames(result_with_maf)))
-    # Verify minor_allele_count is calculated correctly
-    expect_true(all(result_with_maf$minor_allele_count == pmin(result_with_maf$ref_count, result_with_maf$alt_count)))
-    # Verify p_val and adj_p_val are numeric
-    expect_true(is.numeric(result_with_maf$p_val))
-    expect_true(is.numeric(result_with_maf$adj_p_val))
+    expect_maf_columns_added(result_with_maf)
 
     # Test with test_maf = FALSE
     result_without_maf <- donor_count_df(snp_data, test_maf = FALSE)
     # Verify test_maf columns are not present when test_maf = FALSE
-    expect_false(any(expected_maf_cols %in% colnames(result_without_maf)))
+    expect_maf_columns_absent(result_without_maf)
 })
 
 test_that("test_maf=TRUE adds correct statistical columns to clonotype_count_df", {
@@ -424,21 +544,15 @@ test_that("test_maf=TRUE adds correct statistical columns to clonotype_count_df"
 
     # Test with test_maf = TRUE (default)
     result_with_maf <- clonotype_count_df(snp_data, test_maf = TRUE)
-    expected_maf_cols <- c("minor_allele_count", "p_val", "adj_p_val")
     # Verify test_maf function columns are added when test_maf = TRUE
-    expect_true(all(expected_maf_cols %in% colnames(result_with_maf)))
-    # Verify minor_allele_count is calculated correctly
-    expect_true(all(result_with_maf$minor_allele_count == pmin(result_with_maf$ref_count, result_with_maf$alt_count)))
-    # Verify p_val and adj_p_val are numeric
-    expect_true(is.numeric(result_with_maf$p_val))
-    expect_true(is.numeric(result_with_maf$adj_p_val))
+    expect_maf_columns_added(result_with_maf)
     # Verify donor column is still present (specific to clonotype_count_df)
     expect_true("donor" %in% colnames(result_with_maf))
 
     # Test with test_maf = FALSE
     result_without_maf <- clonotype_count_df(snp_data, test_maf = FALSE)
     # Verify test_maf columns are not present when test_maf = FALSE
-    expect_false(any(expected_maf_cols %in% colnames(result_without_maf)))
+    expect_maf_columns_absent(result_without_maf)
 })
 
 test_that("test_maf=TRUE adds correct statistical columns to aggregate_count_df", {
@@ -452,24 +566,18 @@ test_that("test_maf=TRUE adds correct statistical columns to aggregate_count_df"
 
     # Test with test_maf = TRUE (default) for donor aggregation
     result_with_maf <- aggregate_count_df(snp_data, "donor", test_maf = TRUE)
-    expected_maf_cols <- c("minor_allele_count", "p_val", "adj_p_val")
     # Verify test_maf function columns are added when test_maf = TRUE
-    expect_true(all(expected_maf_cols %in% colnames(result_with_maf)))
-    # Verify minor_allele_count is calculated correctly
-    expect_true(all(result_with_maf$minor_allele_count == pmin(result_with_maf$ref_count, result_with_maf$alt_count)))
-    # Verify p_val and adj_p_val are numeric
-    expect_true(is.numeric(result_with_maf$p_val))
-    expect_true(is.numeric(result_with_maf$adj_p_val))
+    expect_maf_columns_added(result_with_maf)
 
     # Test with test_maf = FALSE
     result_without_maf <- aggregate_count_df(snp_data, "donor", test_maf = FALSE)
     # Verify test_maf columns are not present when test_maf = FALSE
-    expect_false(any(expected_maf_cols %in% colnames(result_without_maf)))
+    expect_maf_columns_absent(result_without_maf)
 
     # Test with different grouping column (clonotype) and test_maf = TRUE
     result_clonotype_maf <- aggregate_count_df(snp_data, "clonotype", test_maf = TRUE)
     # Verify test_maf columns are present for different grouping variables
-    expect_true(all(expected_maf_cols %in% colnames(result_clonotype_maf)))
+    expect_maf_columns_added(result_clonotype_maf)
 })
 
 test_that("test_maf function produces meaningful statistical results", {
@@ -777,6 +885,144 @@ test_that("clonotype functions work after updating clonotype with overwrite=TRUE
     expect_true(is.matrix(expr_mat))
 })
 
+# ==============================================================================
+# Tests for Metadata Updates
+# ==============================================================================
+
+test_that("add_barcode_metadata validates inputs and join keys", {
+    # Setup
+    snp_data <- SNPData(
+        alt_count = test_alt_count,
+        ref_count = test_ref_count,
+        snp_info = test_snp_info,
+        barcode_info = test_barcode_info
+    )
+
+    # Verify error for non-SNPData input
+    expect_error(
+        add_barcode_metadata("not_snpdata", data.frame()),
+        "Input must be a SNPData object"
+    )
+    # Verify error for non-data.frame metadata
+    expect_error(
+        add_barcode_metadata(snp_data, "not_a_df"),
+        "metadata must be a data.frame"
+    )
+    # Verify error for missing join_by in metadata
+    expect_error(
+        add_barcode_metadata(snp_data, data.frame(other = "x"), join_by = "cell_id"),
+        "Column 'cell_id' not found in metadata data.frame"
+    )
+    # Verify error for duplicate join values in metadata
+    dup_metadata <- data.frame(
+        cell_id = c("cell_1", "cell_1"),
+        donor = c("d1", "d2"),
+        stringsAsFactors = FALSE
+    )
+    expect_error(
+        add_barcode_metadata(snp_data, dup_metadata),
+        "Duplicate values found in join column 'cell_id'"
+    )
+})
+
+test_that("add_barcode_metadata handles conflicts and preserves computed columns", {
+    # Setup
+    snp_data <- SNPData(
+        alt_count = test_alt_count,
+        ref_count = test_ref_count,
+        snp_info = test_snp_info,
+        barcode_info = test_barcode_info
+    )
+    original_info <- get_barcode_info(snp_data)
+    original_library_size <- original_info$library_size
+
+    # Verify conflicting columns error when overwrite is FALSE
+    conflict_metadata <- data.frame(
+        cell_id = c("cell_1", "cell_2"),
+        donor = c("d1_new", "d2_new"),
+        stringsAsFactors = FALSE
+    )
+    expect_error(
+        add_barcode_metadata(snp_data, conflict_metadata, overwrite = FALSE),
+        "Column\\(s\\) already exist in barcode_info"
+    )
+
+    # Verify overwrite replaces existing columns and preserves library_size
+    updated <- add_barcode_metadata(snp_data, conflict_metadata, overwrite = TRUE)
+    updated_info <- get_barcode_info(updated)
+    # Verify donor values are overwritten by new metadata
+    expect_equal(updated_info$donor, c("d1_new", "d2_new"))
+    # Verify library_size is preserved from original object
+    expect_equal(updated_info$library_size, original_library_size)
+})
+
+test_that("add_snp_metadata validates inputs and join keys", {
+    # Setup
+    snp_data <- SNPData(
+        alt_count = test_alt_count,
+        ref_count = test_ref_count,
+        snp_info = test_snp_info,
+        barcode_info = test_barcode_info
+    )
+
+    # Verify error for non-SNPData input
+    expect_error(
+        add_snp_metadata("not_snpdata", data.frame()),
+        "Input must be a SNPData object"
+    )
+    # Verify error for non-data.frame metadata
+    expect_error(
+        add_snp_metadata(snp_data, "not_a_df"),
+        "metadata must be a data.frame"
+    )
+    # Verify error for missing join_by in metadata
+    expect_error(
+        add_snp_metadata(snp_data, data.frame(other = "x"), join_by = "snp_id"),
+        "Column 'snp_id' not found in metadata data.frame"
+    )
+    # Verify error for duplicate join values in metadata
+    dup_metadata <- data.frame(
+        snp_id = c("snp_1", "snp_1"),
+        gene = c("g1", "g2"),
+        stringsAsFactors = FALSE
+    )
+    expect_error(
+        add_snp_metadata(snp_data, dup_metadata),
+        "Duplicate values found in join column 'snp_id'"
+    )
+})
+
+test_that("add_snp_metadata handles conflicts, overwrite, and preserves computed columns", {
+    # Setup
+    snp_data <- SNPData(
+        alt_count = test_alt_count,
+        ref_count = test_ref_count,
+        snp_info = test_snp_info,
+        barcode_info = test_barcode_info
+    )
+    original_info <- get_snp_info(snp_data)
+    original_coverage <- original_info$coverage
+
+    # Verify conflicting columns error when overwrite is FALSE
+    conflict_metadata <- data.frame(
+        snp_id = c("snp_1", "snp_2"),
+        pos = c(101, 202),
+        stringsAsFactors = FALSE
+    )
+    expect_error(
+        add_snp_metadata(snp_data, conflict_metadata, overwrite = FALSE),
+        "Column\\(s\\) already exist in snp_info"
+    )
+
+    # Verify overwrite replaces existing columns and preserves coverage
+    updated <- add_snp_metadata(snp_data, conflict_metadata, overwrite = TRUE)
+    updated_info <- get_snp_info(updated)
+    # Verify SNP positions are overwritten by new metadata
+    expect_equal(updated_info$pos, c(101, 202))
+    # Verify coverage is preserved from original object
+    expect_equal(updated_info$coverage, original_coverage)
+})
+
 # ------------------------------------------------------------------------------
 # Test Data Setup - merge_snpdata
 # ------------------------------------------------------------------------------
@@ -869,6 +1115,82 @@ create_merge_test_data <- function() {
     list(x = x, y = y)
 }
 
+create_barcode_merge_test_data <- function() {
+    alt_x <- Matrix::Matrix(
+        matrix(
+            c(
+                1, 0, # snpA
+                0, 2  # snpB
+            ),
+            nrow = 2,
+            ncol = 2,
+            dimnames = list(c("snpA", "snpB"), c("cell_x1", "cell_x2"))
+        )
+    )
+    ref_x <- Matrix::Matrix(
+        matrix(
+            c(
+                3, 1, # snpA
+                1, 1  # snpB
+            ),
+            nrow = 2,
+            ncol = 2,
+            dimnames = list(c("snpA", "snpB"), c("cell_x1", "cell_x2"))
+        )
+    )
+    alt_y <- Matrix::Matrix(
+        matrix(
+            c(
+                1, 2, # snpA
+                1, 0  # snpB
+            ),
+            nrow = 2,
+            ncol = 2,
+            dimnames = list(c("snpA", "snpB"), c("cell_y1", "cell_y2"))
+        )
+    )
+    ref_y <- Matrix::Matrix(
+        matrix(
+            c(
+                0, 2, # snpA
+                0, 3  # snpB
+            ),
+            nrow = 2,
+            ncol = 2,
+            dimnames = list(c("snpA", "snpB"), c("cell_y1", "cell_y2"))
+        )
+    )
+    snp_info <- data.frame(
+        snp_id = c("snpA", "snpB"),
+        stringsAsFactors = FALSE
+    )
+    barcode_info_x <- data.frame(
+        cell_id = c("cell_x1", "cell_x2"),
+        barcode = c("bc1", "bc2"),
+        stringsAsFactors = FALSE
+    )
+    barcode_info_y <- data.frame(
+        cell_id = c("cell_y1", "cell_y2"),
+        barcode = c("bc2", "bc3"),
+        stringsAsFactors = FALSE
+    )
+
+    x <- SNPData(
+        alt_count = alt_x,
+        ref_count = ref_x,
+        snp_info = snp_info,
+        barcode_info = barcode_info_x
+    )
+    y <- SNPData(
+        alt_count = alt_y,
+        ref_count = ref_y,
+        snp_info = snp_info,
+        barcode_info = barcode_info_y
+    )
+
+    list(x = x, y = y)
+}
+
 test_that("merge_snpdata union/union retains all SNPs and cells", {
     data <- create_merge_test_data()
     x <- data$x
@@ -919,6 +1241,127 @@ test_that("merge_snpdata union/union retains all SNPs and cells", {
     expect_equal(as.matrix(ref_count(merged)), as.matrix(expected_ref))
     # Check alt count matrix matches expected
     expect_equal(as.matrix(alt_count(merged)), as.matrix(expected_alt))
+})
+
+test_that("merge_snpdata merges by barcode when barcode column exists", {
+    data <- create_barcode_merge_test_data()
+    x <- data$x
+    y <- data$y
+
+    merged <- merge_snpdata(x, y, snp_join = "union", cell_join = "union")
+    merged_barcode_info <- get_barcode_info(merged)
+
+    # Verify barcode-based merge retains union of barcodes in order
+    expect_equal(merged_barcode_info$barcode, c("bc1", "bc2", "bc3"))
+    # Verify cell_id is regenerated when joining by barcode
+    expect_equal(merged_barcode_info$cell_id, c("cell_1", "cell_2", "cell_3"))
+
+    # Verify counts for shared barcode bc2 are summed
+    ref_x <- ref_count(x)
+    ref_y <- ref_count(y)
+    expected_ref <- Matrix::Matrix(
+        matrix(
+            c(
+                ref_x[1, "cell_x1"],
+                ref_x[1, "cell_x2"] + ref_y[1, "cell_y1"],
+                ref_y[1, "cell_y2"],
+                ref_x[2, "cell_x1"],
+                ref_x[2, "cell_x2"] + ref_y[2, "cell_y1"],
+                ref_y[2, "cell_y2"]
+            ),
+            nrow = 2,
+            ncol = 3,
+            byrow = TRUE,
+            dimnames = list(c("snpA", "snpB"), c("cell_1", "cell_2", "cell_3"))
+        )
+    )
+    alt_x <- alt_count(x)
+    alt_y <- alt_count(y)
+    expected_alt <- Matrix::Matrix(
+        matrix(
+            c(
+                alt_x[1, "cell_x1"],
+                alt_x[1, "cell_x2"] + alt_y[1, "cell_y1"],
+                alt_y[1, "cell_y2"],
+                alt_x[2, "cell_x1"],
+                alt_x[2, "cell_x2"] + alt_y[2, "cell_y1"],
+                alt_y[2, "cell_y2"]
+            ),
+            nrow = 2,
+            ncol = 3,
+            byrow = TRUE,
+            dimnames = list(c("snpA", "snpB"), c("cell_1", "cell_2", "cell_3"))
+        )
+    )
+    # Verify merged matrices align with barcode ordering
+    expect_equal(as.matrix(ref_count(merged)), as.matrix(expected_ref))
+    # Verify merged alt counts align with barcode ordering
+    expect_equal(as.matrix(alt_count(merged)), as.matrix(expected_alt))
+})
+
+test_that("merge_snpdata handles barcode merge with no overlapping barcodes", {
+    data <- create_barcode_merge_test_data()
+    x <- data$x
+    y <- data$y
+
+    # Replace y barcodes so there is no overlap with x
+    barcode_info_y <- get_barcode_info(y)
+    barcode_info_y$barcode <- c("bc3", "bc4")
+    y <- SNPData(
+        alt_count = alt_count(y),
+        ref_count = ref_count(y),
+        snp_info = get_snp_info(y),
+        barcode_info = barcode_info_y
+    )
+
+    merged <- merge_snpdata(x, y, snp_join = "union", cell_join = "right")
+
+    # Verify merged object keeps only y barcodes
+    merged_barcode_info <- get_barcode_info(merged)
+    expect_equal(merged_barcode_info$barcode, c("bc3", "bc4"))
+    # Verify counts match y when x has no matching barcodes
+    expect_equal(unname(as.matrix(ref_count(merged))), unname(as.matrix(ref_count(y))))
+    # Verify alt counts match y when x has no matching barcodes
+    expect_equal(unname(as.matrix(alt_count(merged))), unname(as.matrix(alt_count(y))))
+})
+
+test_that("merge_snpdata errors when no SNPs or cells are retained", {
+    data <- create_merge_test_data()
+    x <- data$x
+    y <- data$y
+
+    # Remove overlap in SNPs to trigger empty SNP set
+    y_no_overlap <- SNPData(
+        alt_count = alt_count(y),
+        ref_count = ref_count(y),
+        snp_info = data.frame(
+            snp_id = c("snpC", "snpD"),
+            stringsAsFactors = FALSE
+        ),
+        barcode_info = get_barcode_info(y)
+    )
+    # Verify error when intersect retains no SNPs
+    expect_error(
+        merge_snpdata(x, y_no_overlap, snp_join = "intersect", cell_join = "union"),
+        "No SNPs to retain after merge"
+    )
+
+    # Remove overlap in cells to trigger empty cell set
+    y_no_cells <- SNPData(
+        alt_count = alt_count(y),
+        ref_count = ref_count(y),
+        snp_info = get_snp_info(y),
+        barcode_info = data.frame(
+            cell_id = c("cell4", "cell5"),
+            donor = c("d4", "d5"),
+            stringsAsFactors = FALSE
+        )
+    )
+    # Verify error when intersect retains no cells
+    expect_error(
+        merge_snpdata(x, y_no_cells, snp_join = "union", cell_join = "intersect"),
+        "No cells to retain after merge"
+    )
 })
 
 test_that("merge_snpdata union/union merges metadata correctly", {
@@ -1276,19 +1719,75 @@ test_that("donor_het_status_df reports het/hom status with tested flag", {
         minor_allele_prop = 0.1
     )
 
+    # Verify required output columns exist
     expect_true(all(c("snp_id", "chrom", "pos", "donor", "zygosity", "tested") %in% colnames(status_df)))
 
     snp1_d1 <- status_df %>% dplyr::filter(snp_id == "snp1", donor == "donor1")
+    # Verify snp1 is heterozygous for donor1
     expect_equal(snp1_d1$zygosity, "het")
+    # Verify snp1 is marked tested for donor1
     expect_true(snp1_d1$tested)
+    # Verify chrom is preserved from snp_info
     expect_equal(snp1_d1$chrom, "chr1")
+    # Verify pos is preserved from snp_info
     expect_equal(snp1_d1$pos, 100)
 
     snp2_d1 <- status_df %>% dplyr::filter(snp_id == "snp2", donor == "donor1")
+    # Verify snp2 is homozygous for donor1
     expect_equal(snp2_d1$zygosity, "hom")
+    # Verify snp2 is marked tested for donor1
     expect_true(snp2_d1$tested)
 
     snp4_d1 <- status_df %>% dplyr::filter(snp_id == "snp4", donor == "donor1")
+    # Verify snp4 is unknown due to low coverage
     expect_equal(snp4_d1$zygosity, "unknown")
+    # Verify snp4 is not tested for donor1
     expect_false(snp4_d1$tested)
+})
+
+test_that("donor_het_status_df handles cases with no tested SNPs", {
+    snp_data <- create_heterozygous_test_data()
+
+    status_df <- donor_het_status_df(
+        snp_data,
+        min_total_count = 100,
+        p_value_threshold = 0.05,
+        minor_allele_prop = 0.1
+    )
+
+    # Verify all SNPs are untested with missing statistics
+    expect_true(all(!status_df$tested))
+    # Verify minor_allele_count is missing for untested SNPs
+    expect_true(all(is.na(status_df$minor_allele_count)))
+    # Verify p_val is missing for untested SNPs
+    expect_true(all(is.na(status_df$p_val)))
+    # Verify adj_p_val is missing for untested SNPs
+    expect_true(all(is.na(status_df$adj_p_val)))
+})
+
+test_that("get_donor_het_snpdata returns heterozygous SNPs for a donor", {
+    snp_data <- create_heterozygous_test_data()
+
+    result <- get_donor_het_snpdata(
+        snp_data,
+        "donor1",
+        min_total_count = 10,
+        p_value_threshold = 0.05,
+        minor_allele_prop = 0.1
+    )
+
+    # Verify only heterozygous SNPs for donor1 are retained
+    expect_equal(rownames(result), c("snp1", "snp3"))
+    # Verify only donor1 cells are retained
+    expect_equal(ncol(result), 2)
+})
+
+test_that("get_donor_het_snpdata errors when no heterozygous SNPs remain", {
+    snp_data <- create_heterozygous_test_data()
+
+    # Verify error when no SNPs are tested due to high coverage threshold
+    expect_error(
+        get_donor_het_snpdata(snp_data, "donor1", min_total_count = 100),
+        "No SNPs remain after filtering"
+    )
 })
