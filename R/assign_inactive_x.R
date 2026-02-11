@@ -113,8 +113,8 @@ setMethod("assign_inactive_x", signature(x = "SNPData"), function(x) {
 }
 
 .assign_cluster <- function(expr_mat, n_clusters) {
-    dist_mat <- dist(t(as.matrix(sign(expr_mat))), method = "euclidean")
-    hc <- hclust(dist_mat, method = "complete")
+    dist_mat <- dist(t(as.matrix(expr_mat)), method = "euclidean")
+    hc <- hclust(dist_mat, method = "ward.D2")
     cluster_assignments <- cutree(hc, k = n_clusters)
     tibble(
         cell_id = names(cluster_assignments),
@@ -383,9 +383,9 @@ setMethod("plot_inactive_x_heatmap", signature(x = "SNPData"), function(x, donor
     )
 
     ComplexHeatmap::Heatmap(
-        sign(as.matrix(expr_matrix)),
+        as.matrix(expr_matrix),
         clustering_method_columns = "complete",
-        clustering_distance_columns = "euclidean",
+        clustering_distance_columns = "ward.D2",
         show_row_names = FALSE,
         show_column_names = FALSE,
         name = paste("Donor", donor, "Inactive X Heatmap")
@@ -446,9 +446,9 @@ setMethod("plot_inactive_x_heatmap_by_clonotype", signature(x = "SNPData"), func
     )
 
     ComplexHeatmap::Heatmap(
-        sign(as.matrix(expr_matrix)),
+        as.matrix(expr_matrix),
         clustering_method_columns = "complete",
-        clustering_distance_columns = "euclidean",
+        clustering_distance_columns = "ward.D2",
         show_row_names = FALSE,
         show_column_names = FALSE,
         name = paste("Donor", donor, "Inactive X Heatmap (Clonotype)")
