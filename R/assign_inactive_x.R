@@ -153,6 +153,21 @@ setMethod("assign_inactive_x", signature(x = "SNPData"), function(x) {
 }
 
 .assign_cluster <- function(expr_mat, n_clusters) {
+    n_samples <- ncol(expr_mat)
+    if (n_samples == 0) {
+        stop("No cells/clonotypes available for inactive X clustering")
+    }
+    if (n_clusters < 1) {
+        stop("n_clusters must be at least 1")
+    }
+    if (n_samples < n_clusters) {
+        stop(sprintf(
+            "Cannot assign %d clusters with only %d cells/clonotypes",
+            n_clusters,
+            n_samples
+        ))
+    }
+
     dist_mat <- dist(t(as.matrix(expr_mat)), method = "euclidean")
     hc <- hclust(dist_mat, method = "ward.D2")
     cluster_assignments <- cutree(hc, k = n_clusters)
