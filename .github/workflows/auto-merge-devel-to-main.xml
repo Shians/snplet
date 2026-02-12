@@ -1,0 +1,39 @@
+name: Auto-merge devel into main after R-CMD-check
+
+on:
+  workflow_run:
+    workflows: ["R-CMD-check"]
+    branches: ["devel"]
+    types:
+      - completed
+
+permissions:
+  contents: write
+
+jobs:
+  merge:
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Configure git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Merge devel into main
+        run: |
+          git fetch origin devel
+          git merge --no-ff origin/devel -m "Merge devel into main after successful R-CMD-check"
+          git push origin HEAD:main
+
+      - name: Sync main back into devel
+        run: |
+          git checkout devel
+          git merge --no-ff origin/main -m "Sync main back into devel"
+          git push origin HEAD:devel

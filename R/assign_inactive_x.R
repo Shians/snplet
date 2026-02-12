@@ -57,7 +57,16 @@ setMethod("assign_inactive_x", signature(x = "SNPData"), function(x) {
 
     # assign inactive x for each donor and combine results
     barcode_inactive_x_df <- unique_donor_snp_data %>%
-        map(.assign_inactive_x_single_donor) %>%
+        map(function(donor_data) {
+            tryCatch(
+                .assign_inactive_x_single_donor(donor_data),
+                error = function(e) {
+                    d <- unique(get_barcode_info(donor_data)$donor)
+                    logger::log_warn("Failed to assign inactive X for donor {d}: {conditionMessage(e)}")
+                    tibble(cell_id = character(), inactive_x = character())
+                }
+            )
+        }) %>%
         bind_rows()
 
     # add inactive_x to barcode_info
@@ -68,11 +77,18 @@ setMethod("assign_inactive_x", signature(x = "SNPData"), function(x) {
 .assign_inactive_x_single_donor <- function(
     snp_data
 ) {
+    donor <- unique(get_barcode_info(snp_data)$donor)
+
     expr_matrix <- .prepare_expr_matrix(
         snp_data,
         min_coverage = 2,
         min_sample_prop = 0.01
     )
+
+    if (is.null(expr_matrix)) {
+        logger::log_warn("Skipping inactive X assignment for donor {donor}: insufficient data")
+        return(tibble(cell_id = character(), inactive_x = character()))
+    }
 
     .assign_cluster(expr_matrix, n_clusters = 2)
 }
@@ -87,6 +103,11 @@ setMethod("assign_inactive_x", signature(x = "SNPData"), function(x) {
         min_coverage = 2,
         min_sample_prop = 0.01
     )
+
+    if (is.null(expr_matrix)) {
+        logger::log_warn("Skipping inactive X assignment for donor {donor}: insufficient data")
+        return(tibble(cell_id = character(), inactive_x = character()))
+    }
 
     # Assign clusters to clonotypes
     clonotype_cluster_df <- .assign_cluster(expr_matrix, n_clusters = 2) %>%
@@ -112,7 +133,41 @@ setMethod("assign_inactive_x", signature(x = "SNPData"), function(x) {
     barcodes_with_sufficient_coverage >= barcode_threshold
 }
 
+.filter_to_informative_het_snps <- function(snp_data) {
+    het_snp_ids <- snp_data %>%
+        donor_het_status_df() %>%
+        filter(zygosity == "het") %>%
+        pull(snp_id)
+
+    logger::log_info("Filtering to heterozygous SNPs")
+    snp_data <- snp_data %>%
+        filter_snps(snp_id %in% het_snp_ids)
+
+    top_snp_per_gene <- get_snp_info(snp_data) %>%
+        arrange(desc(coverage)) %>%
+        slice_head(n = 1, by = "gene_name")
+
+    logger::log_info("Filtering to top SNP per gene")
+    snp_data %>%
+        filter_snps(snp_id %in% top_snp_per_gene$snp_id)
+}
+
 .assign_cluster <- function(expr_mat, n_clusters) {
+    n_samples <- ncol(expr_mat)
+    if (n_samples == 0) {
+        stop("No cells/clonotypes available for inactive X clustering")
+    }
+    if (n_clusters < 1) {
+        stop("n_clusters must be at least 1")
+    }
+    if (n_samples < n_clusters) {
+        stop(sprintf(
+            "Cannot assign %d clusters with only %d cells/clonotypes",
+            n_clusters,
+            n_samples
+        ))
+    }
+
     dist_mat <- dist(t(as.matrix(expr_mat)), method = "euclidean")
     hc <- hclust(dist_mat, method = "ward.D2")
     cluster_assignments <- cutree(hc, k = n_clusters)
@@ -130,48 +185,28 @@ setMethod("assign_inactive_x", signature(x = "SNPData"), function(x) {
     donor <- unique(get_barcode_info(snp_data)$donor)
     logger::log_info("Assigning inactive X for donor {donor}")
 
-    # filter to heterozygous snps only
-    het_snp_df <- snp_data %>%
-        donor_het_status_df() %>%
-        filter(zygosity == "het")
-
-    het_snp_ids <- het_snp_df %>%
-        pull(snp_id)
-
-    logger::log_info("Filtering to heterozygous SNPs")
-    snp_data <- snp_data %>%
-        filter_snps(snp_id %in% het_snp_ids)
-
-    # filter to top snp per gene
-    top_snp_per_gene <- get_snp_info(snp_data) %>%
-        arrange(desc(coverage)) %>%
-        slice_head(n = 1, by = "gene_name")
-
-    logger::log_info("Filtering to top SNP per gene")
-    snp_data <- snp_data %>%
-        filter_snps(snp_id %in% top_snp_per_gene$snp_id)
+    snp_data <- .filter_to_informative_het_snps(snp_data)
 
     # get expression matrix
     coverage_mat <- snplet::coverage(snp_data)
 
-    min_coverage <- 2
-    min_sample_prop <- 0.01
     logger::log_info("Selecting informative SNPs with at least {min_coverage} coverage in at least {min_sample_prop * 100}% of cells")
-    informative_snps <- .get_informative_snps(
-        coverage_mat,
-        min_coverage = 2,
-        min_sample_prop = 0.01
-    )
-
-    coverage_mat <- snplet::coverage(snp_data)
     informative_snps <- .get_informative_snps(
         coverage_mat,
         min_coverage = min_coverage,
         min_sample_prop = min_sample_prop
     )
+    if (sum(informative_snps) == 0) {
+        logger::log_warn("No informative SNPs found for donor {donor}")
+        return(NULL)
+    }
     logger::log_info("Using {sum(informative_snps)} informative SNPs for inactive X assignment")
     expr_matrix <- to_expr_matrix(snp_data)[informative_snps, , drop = FALSE]
     nonzero_cells <- colSums(abs(expr_matrix)) > 0
+    if (sum(nonzero_cells) < 2) {
+        logger::log_warn("Fewer than 2 cells with non-zero expression for donor {donor}")
+        return(NULL)
+    }
     logger::log_info("Retaining {sum(nonzero_cells)} barcodes with non-zero expression across informative SNPs")
     expr_matrix[, nonzero_cells, drop = FALSE]
 }
@@ -184,56 +219,26 @@ setMethod("assign_inactive_x", signature(x = "SNPData"), function(x) {
     donor <- unique(get_barcode_info(snp_data)$donor)
     logger::log_info("Assigning inactive X for donor {donor} at clonotype level")
 
-    # filter to heterozygous snps only
-    het_snp_df <- snp_data %>%
-        donor_het_status_df() %>%
-        filter(zygosity == "het")
-
-    het_snp_ids <- het_snp_df %>%
-        pull(snp_id)
-
-    logger::log_info("Filtering to heterozygous SNPs")
-    snp_data <- snp_data %>%
-        filter_snps(snp_id %in% het_snp_ids)
-
-    # filter to top snp per gene
-    top_snp_per_gene <- get_snp_info(snp_data) %>%
-        arrange(desc(coverage)) %>%
-        slice_head(n = 1, by = "gene_name")
-
-    logger::log_info("Filtering to top SNP per gene")
-    snp_data <- snp_data %>%
-        filter_snps(snp_id %in% top_snp_per_gene$snp_id)
-
-    # Get clonotype grouping (remove NA clonotypes)
-    barcode_info <- get_barcode_info(snp_data)
-    clonotypes <- barcode_info$clonotype
+    snp_data <- .filter_to_informative_het_snps(snp_data)
 
     # Filter out cells with NA clonotypes
-    non_na_clonotypes <- !is.na(clonotypes)
+    barcode_info <- get_barcode_info(snp_data)
+    non_na_clonotypes <- !is.na(barcode_info$clonotype)
     if (!any(non_na_clonotypes)) {
-        stop("No cells with non-NA clonotype values for donor {donor}")
+        stop(glue::glue("No cells with non-NA clonotype values for donor {donor}"))
     }
 
-    snp_data_filtered <- snp_data[, non_na_clonotypes]
-    clonotypes_filtered <- clonotypes[non_na_clonotypes]
+    snp_data <- snp_data[, non_na_clonotypes]
+    clonotypes_filtered <- barcode_info$clonotype[non_na_clonotypes]
 
-    logger::log_info("Aggregating counts by clonotype ({length(unique(clonotypes_filtered))} unique clonotypes)")
+    n_clonotypes <- length(unique(clonotypes_filtered))
+    logger::log_info("Aggregating counts by clonotype ({n_clonotypes} unique clonotypes)")
 
-    # Aggregate counts by clonotype
-    ref_count_by_clonotype <- groupedRowSums(ref_count(snp_data_filtered), clonotypes_filtered)
-    alt_count_by_clonotype <- groupedRowSums(alt_count(snp_data_filtered), clonotypes_filtered)
-
-    # Calculate expression matrix (SNPs × clonotypes)
-    # expr = (REF - ALT) / (REF + ALT)
-    total_count <- ref_count_by_clonotype + alt_count_by_clonotype
-    expr_matrix <- (ref_count_by_clonotype - alt_count_by_clonotype) / total_count
-
-    # Replace NaN values (0/0) with 0
-    expr_matrix[is.nan(expr_matrix)] <- 0
+    # Compute expression matrix at clonotype level using canonical formula
+    expr_matrix <- to_expr_matrix(snp_data, level = "clonotype")
 
     # Get coverage for informative SNP selection
-    coverage_mat <- total_count
+    coverage_mat <- groupedRowSums(snplet::coverage(snp_data), clonotypes_filtered)
 
     logger::log_info("Selecting informative SNPs with at least {min_coverage} coverage in at least {min_sample_prop * 100}% of clonotypes")
     informative_snps <- .get_informative_snps(
@@ -242,11 +247,19 @@ setMethod("assign_inactive_x", signature(x = "SNPData"), function(x) {
         min_sample_prop = min_sample_prop
     )
 
+    if (sum(informative_snps) == 0) {
+        logger::log_warn("No informative SNPs found for donor {donor}")
+        return(NULL)
+    }
     logger::log_info("Using {sum(informative_snps)} informative SNPs for inactive X assignment")
     expr_matrix_filtered <- expr_matrix[informative_snps, , drop = FALSE]
 
     # Filter to clonotypes with non-zero expression
     nonzero_clonotypes <- colSums(abs(expr_matrix_filtered)) > 0
+    if (sum(nonzero_clonotypes) < 2) {
+        logger::log_warn("Fewer than 2 clonotypes with non-zero expression for donor {donor}")
+        return(NULL)
+    }
     logger::log_info("Retaining {sum(nonzero_clonotypes)} clonotypes with non-zero expression across informative SNPs")
     expr_matrix_filtered[, nonzero_clonotypes, drop = FALSE]
 }
@@ -322,7 +335,16 @@ setMethod("assign_inactive_x_by_clonotype", signature(x = "SNPData"), function(x
 
     # assign inactive x for each donor and combine results
     barcode_inactive_x_df <- unique_donor_snp_data %>%
-        map(.assign_inactive_x_single_donor_by_clonotype) %>%
+        map(function(donor_data) {
+            tryCatch(
+                .assign_inactive_x_single_donor_by_clonotype(donor_data),
+                error = function(e) {
+                    d <- unique(get_barcode_info(donor_data)$donor)
+                    logger::log_warn("Failed to assign inactive X for donor {d}: {conditionMessage(e)}")
+                    tibble(cell_id = character(), inactive_x = character())
+                }
+            )
+        }) %>%
         bind_rows()
 
     # add inactive_x to barcode_info
@@ -377,7 +399,7 @@ setGeneric("plot_inactive_x_heatmap", function(x, donor) standardGeneric("plot_i
 #' @include SNPData-class.R
 setMethod("plot_inactive_x_heatmap", signature(x = "SNPData"), function(x, donor) {
     expr_matrix <- .prepare_expr_matrix(
-        filter_barcodes(x, donor == donor),
+        filter_barcodes(x, donor == .env$donor),
         min_coverage = 2,
         min_sample_prop = 0.01
     )
@@ -440,7 +462,7 @@ setGeneric("plot_inactive_x_heatmap_by_clonotype", function(x, donor) standardGe
 #' @include SNPData-class.R
 setMethod("plot_inactive_x_heatmap_by_clonotype", signature(x = "SNPData"), function(x, donor) {
     expr_matrix <- .prepare_expr_matrix_by_clonotype(
-        filter_barcodes(x, donor == donor),
+        filter_barcodes(x, donor == .env$donor),
         min_coverage = 2,
         min_sample_prop = 0.01
     )
