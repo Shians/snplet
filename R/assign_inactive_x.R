@@ -139,7 +139,7 @@ setMethod("assign_inactive_x", signature(x = "SNPData"), function(x) {
         filter(zygosity == "het") %>%
         pull(snp_id)
 
-    logger::with_log_level("WARN", {
+    logger::with_log_threshold({
         snp_data <- snp_data %>%
             filter_snps(snp_id %in% het_snp_ids)
 
@@ -149,7 +149,7 @@ setMethod("assign_inactive_x", signature(x = "SNPData"), function(x) {
 
         snp_data <- snp_data %>%
             filter_snps(snp_id %in% top_snp_per_gene$snp_id)
-    })
+    }, threshold = logger::WARN)
     snp_data
 }
 
