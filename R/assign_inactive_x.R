@@ -400,8 +400,8 @@ setMethod("plot_inactive_x_heatmap", signature(x = "SNPData"), function(x, donor
 
     ComplexHeatmap::Heatmap(
         as.matrix(expr_matrix),
-        clustering_method_columns = "complete",
-        clustering_distance_columns = "ward.D2",
+        clustering_distance_columns = "euclidean",
+        clustering_method_columns = "ward.D2",
         show_row_names = FALSE,
         show_column_names = FALSE,
         name = paste("Donor", donor, "Inactive X Heatmap")
@@ -463,8 +463,8 @@ setMethod("plot_inactive_x_heatmap_by_clonotype", signature(x = "SNPData"), func
 
     ComplexHeatmap::Heatmap(
         as.matrix(expr_matrix),
-        clustering_method_columns = "complete",
-        clustering_distance_columns = "ward.D2",
+        clustering_distance_columns = "euclidean",
+        clustering_method_columns = "ward.D2",
         show_row_names = FALSE,
         show_column_names = FALSE,
         name = paste("Donor", donor, "Inactive X Heatmap (Clonotype)")
