@@ -11,6 +11,8 @@
 #' @keywords internal
 check_filter_expr <- function(df, dots, df_name = "data.frame") {
     vars <- unique(unlist(lapply(dots, function(q) all.vars(rlang::get_expr(q)))))
+    # Exclude rlang pronouns (.env, .data) — they are not column names or user variables
+    vars <- setdiff(vars, c(".env", ".data"))
     missing_vars <- setdiff(vars, colnames(df))
 
     # Check if variables exist in any accessible parent frame environments
