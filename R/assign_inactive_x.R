@@ -139,17 +139,18 @@ setMethod("assign_inactive_x", signature(x = "SNPData"), function(x) {
         filter(zygosity == "het") %>%
         pull(snp_id)
 
-    logger::log_info("Filtering to heterozygous SNPs")
-    snp_data <- snp_data %>%
-        filter_snps(snp_id %in% het_snp_ids)
+    logger::with_log_level("WARN", {
+        snp_data <- snp_data %>%
+            filter_snps(snp_id %in% het_snp_ids)
 
-    top_snp_per_gene <- get_snp_info(snp_data) %>%
-        arrange(desc(coverage)) %>%
-        slice_head(n = 1, by = "gene_name")
+        top_snp_per_gene <- get_snp_info(snp_data) %>%
+            arrange(desc(coverage)) %>%
+            slice_head(n = 1, by = "gene_name")
 
-    logger::log_info("Filtering to top SNP per gene")
-    snp_data %>%
-        filter_snps(snp_id %in% top_snp_per_gene$snp_id)
+        snp_data <- snp_data %>%
+            filter_snps(snp_id %in% top_snp_per_gene$snp_id)
+    })
+    snp_data
 }
 
 .assign_cluster <- function(expr_mat, n_clusters) {
@@ -187,10 +188,8 @@ setMethod("assign_inactive_x", signature(x = "SNPData"), function(x) {
 
     snp_data <- .filter_to_informative_het_snps(snp_data)
 
-    # get expression matrix
     coverage_mat <- snplet::coverage(snp_data)
 
-    logger::log_info("Selecting informative SNPs with at least {min_coverage} coverage in at least {min_sample_prop * 100}% of cells")
     informative_snps <- .get_informative_snps(
         coverage_mat,
         min_coverage = min_coverage,
@@ -200,14 +199,13 @@ setMethod("assign_inactive_x", signature(x = "SNPData"), function(x) {
         logger::log_warn("No informative SNPs found for donor {donor}")
         return(NULL)
     }
-    logger::log_info("Using {sum(informative_snps)} informative SNPs for inactive X assignment")
     expr_matrix <- to_expr_matrix(snp_data)[informative_snps, , drop = FALSE]
     nonzero_cells <- colSums(abs(expr_matrix)) > 0
     if (sum(nonzero_cells) < 2) {
         logger::log_warn("Fewer than 2 cells with non-zero expression for donor {donor}")
         return(NULL)
     }
-    logger::log_info("Retaining {sum(nonzero_cells)} barcodes with non-zero expression across informative SNPs")
+    logger::log_info("Donor {donor}: {sum(informative_snps)} informative SNPs, {sum(nonzero_cells)} cells retained")
     expr_matrix[, nonzero_cells, drop = FALSE]
 }
 
@@ -231,16 +229,12 @@ setMethod("assign_inactive_x", signature(x = "SNPData"), function(x) {
     snp_data <- snp_data[, non_na_clonotypes]
     clonotypes_filtered <- barcode_info$clonotype[non_na_clonotypes]
 
-    n_clonotypes <- length(unique(clonotypes_filtered))
-    logger::log_info("Aggregating counts by clonotype ({n_clonotypes} unique clonotypes)")
-
     # Compute expression matrix at clonotype level using canonical formula
     expr_matrix <- to_expr_matrix(snp_data, level = "clonotype")
 
     # Get coverage for informative SNP selection
     coverage_mat <- groupedRowSums(snplet::coverage(snp_data), clonotypes_filtered)
 
-    logger::log_info("Selecting informative SNPs with at least {min_coverage} coverage in at least {min_sample_prop * 100}% of clonotypes")
     informative_snps <- .get_informative_snps(
         coverage_mat,
         min_coverage = min_coverage,
@@ -251,7 +245,6 @@ setMethod("assign_inactive_x", signature(x = "SNPData"), function(x) {
         logger::log_warn("No informative SNPs found for donor {donor}")
         return(NULL)
     }
-    logger::log_info("Using {sum(informative_snps)} informative SNPs for inactive X assignment")
     expr_matrix_filtered <- expr_matrix[informative_snps, , drop = FALSE]
 
     # Filter to clonotypes with non-zero expression
@@ -260,7 +253,8 @@ setMethod("assign_inactive_x", signature(x = "SNPData"), function(x) {
         logger::log_warn("Fewer than 2 clonotypes with non-zero expression for donor {donor}")
         return(NULL)
     }
-    logger::log_info("Retaining {sum(nonzero_clonotypes)} clonotypes with non-zero expression across informative SNPs")
+    n_clonotypes <- length(unique(clonotypes_filtered))
+    logger::log_info("Donor {donor}: {sum(informative_snps)} informative SNPs, {sum(nonzero_clonotypes)}/{n_clonotypes} clonotypes retained")
     expr_matrix_filtered[, nonzero_clonotypes, drop = FALSE]
 }
 
