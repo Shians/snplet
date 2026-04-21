@@ -1,5 +1,7 @@
 # Suppress R CMD check notes about global variables used in data.frame operations
 utils::globalVariables(c(
+    ".data",
+    ".env",
     ".snp_row",
     "adj_p_val",
     "alt",
