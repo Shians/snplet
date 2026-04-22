@@ -392,10 +392,13 @@ setGeneric("plot_inactive_x_heatmap", function(x, donor) standardGeneric("plot_i
 #' @rdname plot_inactive_x_heatmap
 #' @include SNPData-class.R
 setMethod("plot_inactive_x_heatmap", signature(x = "SNPData"), function(x, donor) {
-    expr_matrix <- .prepare_expr_matrix(
+    logger::with_log_threshold({
+        expr_matrix <- .prepare_expr_matrix(
         filter_barcodes(x, donor == .env$donor),
         min_coverage = 2,
         min_sample_prop = 0.01
+    )},
+        threshold = logger::WARN
     )
 
     ComplexHeatmap::Heatmap(
