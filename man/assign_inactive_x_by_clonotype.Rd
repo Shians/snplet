@@ -5,27 +5,51 @@
 \alias{assign_inactive_x_by_clonotype,SNPData-method}
 \title{Assign inactive X chromosome to cells by clonotype}
 \usage{
-assign_inactive_x_by_clonotype(x)
+assign_inactive_x_by_clonotype(
+  x,
+  n_inits = 10,
+  confidence_threshold = 0.95,
+  refit_after_filter = FALSE
+)
 
-\S4method{assign_inactive_x_by_clonotype}{SNPData}(x)
+\S4method{assign_inactive_x_by_clonotype}{SNPData}(
+  x,
+  n_inits = 10,
+  confidence_threshold = 0.95,
+  refit_after_filter = FALSE
+)
 }
 \arguments{
 \item{x}{SNPData object containing X chromosome SNP data with donor
 assignments, clonotype information, and heterozygosity information}
+
+\item{n_inits}{Number of random initialisations for the EM algorithm.
+The run with the highest log-likelihood is returned. Default 10.}
+
+\item{confidence_threshold}{Posterior probability threshold for hard
+assignment. Clonotypes with \code{post_X1 >= confidence_threshold} are
+assigned "X1", those with \code{post_X1 <= 1 - confidence_threshold}
+are assigned "X2", and the remainder receive \code{NA}. Default 0.95.}
+
+\item{refit_after_filter}{Logical; if TRUE, re-run the EM algorithm after
+filtering genes with inconsistent allelic patterns. Provides sharper
+posteriors on the cleaned gene set. Default FALSE.}
 }
 \value{
 SNPData object with an additional \code{inactive_x} column in
   barcode metadata, with values "X1" or "X2" indicating the inferred
-  inactive X chromosome state
+  inactive X chromosome state. Cells from clonotypes that do not meet the
+  confidence threshold receive \code{NA}.
 }
 \description{
 Identifies which X chromosome is inactive in female cells based on allelic
-imbalance patterns at heterozygous SNPs, aggregating to the clonotype level
-before assigning and then projecting back to individual cells.
+imbalance at heterozygous SNPs, aggregating counts to the clonotype level
+before running the EM model and projecting assignments back to individual cells.
 }
 \details{
-This function is similar to \code{\link{assign_inactive_x}} but performs
-clustering at the clonotype level rather than the cell level. This approach:
+This function is similar to \code{\link{assign_inactive_x}} but runs the
+beta-binomial EM on clonotype-aggregated counts rather than per-cell counts.
+This approach:
 \itemize{
   \item Increases statistical power by aggregating counts across clonally related cells
   \item Reduces noise from sparse cell-level data
@@ -37,10 +61,9 @@ The algorithm works as follows:
   \item Filters to heterozygous SNPs on the X chromosome for each donor
   \item Selects the SNP with highest coverage per gene to avoid redundancy
   \item Aggregates ALT and REF counts by clonotype
-  \item Identifies informative SNPs with sufficient coverage across clonotypes
-  \item Computes an expression-like matrix capturing allelic imbalance at clonotype level
-  \item Performs hierarchical clustering on the sign of allelic imbalance
-  \item Assigns clonotypes to two clusters (X1 or X2) representing inactive X states
+  \item Removes outlier genes with atypical allelic skew
+  \item Runs a beta-binomial EM algorithm with multiple random initialisations
+  \item Assigns clonotypes to X1 or X2 based on posterior probability
   \item Projects clonotype assignments back to individual cells
 }
 }

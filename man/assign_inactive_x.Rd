@@ -5,43 +5,64 @@
 \alias{assign_inactive_x,SNPData-method}
 \title{Assign inactive X chromosome to cells}
 \usage{
-assign_inactive_x(x)
+assign_inactive_x(
+  x,
+  n_inits = 10,
+  confidence_threshold = 0.95,
+  refit_after_filter = FALSE
+)
 
-\S4method{assign_inactive_x}{SNPData}(x)
+\S4method{assign_inactive_x}{SNPData}(
+  x,
+  n_inits = 10,
+  confidence_threshold = 0.95,
+  refit_after_filter = FALSE
+)
 }
 \arguments{
 \item{x}{SNPData object containing X chromosome SNP data with donor
 assignments and heterozygosity information}
+
+\item{n_inits}{Number of random initialisations for the EM algorithm.
+The run with the highest log-likelihood is returned. Default 10.}
+
+\item{confidence_threshold}{Posterior probability threshold for hard
+assignment. Cells with \code{post_X1 >= confidence_threshold} are
+assigned "X1", those with \code{post_X1 <= 1 - confidence_threshold}
+are assigned "X2", and the remainder receive \code{NA}. Default 0.95.}
+
+\item{refit_after_filter}{Logical; if TRUE, re-run the EM algorithm after
+filtering genes with inconsistent allelic patterns. Provides sharper
+posteriors on the cleaned gene set. Default FALSE.}
 }
 \value{
 SNPData object with an additional \code{inactive_x} column in
   barcode metadata, with values "X1" or "X2" indicating the inferred
-  inactive X chromosome state
+  inactive X chromosome state. Cells that do not meet the confidence
+  threshold receive \code{NA}.
 }
 \description{
 Identifies which X chromosome is inactive in female cells based on allelic
-imbalance patterns at heterozygous SNPs. Uses hierarchical clustering to
-assign cells into two groups representing the two possible X-inactivation
-states.
+imbalance at heterozygous SNPs using an Expectation-Maximisation (EM)
+algorithm with a beta-binomial likelihood.
 }
 \details{
 X-chromosome inactivation (XCI) is a dosage compensation mechanism in female
 mammals where one of the two X chromosomes is randomly silenced in each cell.
-This function infers which X is inactive by analyzing allelic expression
-patterns at heterozygous SNPs on the X chromosome.
+This function infers which X is inactive by fitting an EM model to allelic
+read counts at heterozygous SNPs on the X chromosome.
 
 The algorithm works as follows:
 \enumerate{
   \item Filters to heterozygous SNPs on the X chromosome for each donor
   \item Selects the SNP with highest coverage per gene to avoid redundancy
-  \item Identifies informative SNPs with sufficient coverage across cells
-  \item Computes an expression-like matrix capturing allelic imbalance
-  \item Performs hierarchical clustering on the sign of allelic imbalance
-  \item Assigns cells to two clusters (X1 or X2) representing inactive X states
+  \item Removes outlier genes with atypical allelic skew
+  \item Runs a beta-binomial EM algorithm with multiple random initialisations
+  \item Assigns cells to X1 or X2 based on posterior probability
 }
 
-Cells within each cluster should show consistent allelic bias patterns,
-reflecting which parental X chromosome is active vs. inactive.
+Cells that do not meet \code{confidence_threshold} receive \code{NA} in
+the \code{inactive_x} column.
 }
 \examples{
 \dontrun{
