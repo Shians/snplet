@@ -351,7 +351,7 @@ plot_inactive_x_assignment_heatmap <- function(fit, donor) {
         return(NULL)
     }
 
-    res <- .infer_xci(
+    xci_result <- .infer_xci(
         ref_mat,
         alt_mat,
         n_inits = n_inits,
@@ -359,31 +359,31 @@ plot_inactive_x_assignment_heatmap <- function(fit, donor) {
         refit_after_filter = refit_after_filter
     )
 
-    assignments <- res$post %>%
+    assignments <- xci_result$post %>%
         dplyr::mutate(cell_id = cell_ids[cell], post_X2 = 1 - post_X1) %>%
         dplyr::select(cell_id, post_X1, post_X2, assignment)
 
-    snp_info_final <- snp_info[res$gene_keep, ]
+    snp_info_filtered <- snp_info[xci_result$gene_keep, ]
     haplotypes <- tibble::tibble(
-        snp_id = snp_info_final$snp_id,
-        gene_name = snp_info_final$gene_name,
-        allele_on_x1 = ifelse(res$h_g == 0, "REF", "ALT"),
-        pi_g = res$pi_g
+        snp_id = snp_info_filtered$snp_id,
+        gene_name = snp_info_filtered$gene_name,
+        allele_on_x1 = ifelse(xci_result$h_g == 0, "REF", "ALT"),
+        pi_g = xci_result$pi_g
     )
 
-    ref_mat_final <- ref_mat[res$gene_keep, , drop = FALSE]
-    alt_mat_final <- alt_mat[res$gene_keep, , drop = FALSE]
-    rownames(ref_mat_final) <- snp_info_final$snp_id
-    rownames(alt_mat_final) <- snp_info_final$snp_id
-    colnames(ref_mat_final) <- cell_ids
-    colnames(alt_mat_final) <- cell_ids
+    ref_mat_filtered <- ref_mat[xci_result$gene_keep, , drop = FALSE]
+    alt_mat_filtered <- alt_mat[xci_result$gene_keep, , drop = FALSE]
+    rownames(ref_mat_filtered) <- snp_info_filtered$snp_id
+    rownames(alt_mat_filtered) <- snp_info_filtered$snp_id
+    colnames(ref_mat_filtered) <- cell_ids
+    colnames(alt_mat_filtered) <- cell_ids
 
     list(
         donor = donor,
         assignments = assignments,
         haplotypes = haplotypes,
-        ref_mat = ref_mat_final,
-        alt_mat = alt_mat_final
+        ref_mat = ref_mat_filtered,
+        alt_mat = alt_mat_filtered
     )
 }
 
@@ -414,11 +414,11 @@ plot_inactive_x_assignment_heatmap <- function(fit, donor) {
     snp_data <- .filter_to_informative_het_snps(snp_data)
 
     barcode_info <- get_barcode_info(snp_data)
-    non_na_clonotypes <- !is.na(barcode_info$clonotype)
-    if (!any(non_na_clonotypes)) {
+    has_clonotype <- !is.na(barcode_info$clonotype)
+    if (!any(has_clonotype)) {
         stop(glue::glue("No cells with non-NA clonotype values for donor {donor}"))
     }
-    snp_data <- snp_data[, non_na_clonotypes]
+    snp_data <- snp_data[, has_clonotype]
     clonotypes <- get_barcode_info(snp_data)$clonotype
 
     ref_mat <- groupedRowSums(ref_count(snp_data), clonotypes)
@@ -430,7 +430,7 @@ plot_inactive_x_assignment_heatmap <- function(fit, donor) {
         return(tibble::tibble(cell_id = character(), inactive_x = character()))
     }
 
-    res <- .infer_xci(
+    xci_result <- .infer_xci(
         ref_mat,
         alt_mat,
         n_inits = n_inits,
@@ -438,7 +438,7 @@ plot_inactive_x_assignment_heatmap <- function(fit, donor) {
         refit_after_filter = refit_after_filter
     )
 
-    clonotype_assignment <- res$post %>%
+    clonotype_assignment <- xci_result$post %>%
         dplyr::filter(assignment != "unassigned") %>%
         dplyr::mutate(clonotype = clonotype_ids[cell]) %>%
         dplyr::select(clonotype, inactive_x = assignment)
@@ -475,19 +475,19 @@ plot_inactive_x_assignment_heatmap <- function(fit, donor) {
 
 .prepare_expr_matrix <- function(snp_data, min_coverage = 2, min_sample_prop = 0.01, level = "cell") {
     donor <- unique(get_barcode_info(snp_data)$donor)
-    by_clonotype <- level == "clonotype"
+    is_clonotype_level <- level == "clonotype"
 
     snp_data <- .filter_to_informative_het_snps(snp_data)
 
-    if (by_clonotype) {
+    if (is_clonotype_level) {
         barcode_info <- get_barcode_info(snp_data)
-        non_na <- !is.na(barcode_info$clonotype)
-        if (!any(non_na)) {
+        has_clonotype <- !is.na(barcode_info$clonotype)
+        if (!any(has_clonotype)) {
             stop(glue::glue("No cells with non-NA clonotype values for donor {donor}"))
         }
-        snp_data <- snp_data[, non_na]
-        groups <- get_barcode_info(snp_data)$clonotype
-        coverage_mat <- groupedRowSums(snplet::coverage(snp_data), groups)
+        snp_data <- snp_data[, has_clonotype]
+        clonotypes <- get_barcode_info(snp_data)$clonotype
+        coverage_mat <- groupedRowSums(snplet::coverage(snp_data), clonotypes)
         expr_matrix <- to_expr_matrix(snp_data, level = "clonotype")
     } else {
         coverage_mat <- snplet::coverage(snp_data)
@@ -501,25 +501,25 @@ plot_inactive_x_assignment_heatmap <- function(fit, donor) {
     }
 
     expr_matrix <- expr_matrix[informative_snps, , drop = FALSE]
-    nonzero <- colSums(abs(expr_matrix)) > 0
-    if (sum(nonzero) < 2) {
-        unit <- if (by_clonotype) "clonotypes" else "cells"
-        logger::log_warn("Fewer than 2 {unit} with non-zero expression for donor {donor}")
+    has_expression <- colSums(abs(expr_matrix)) > 0
+    if (sum(has_expression) < 2) {
+        sample_unit <- if (is_clonotype_level) "clonotypes" else "cells"
+        logger::log_warn("Fewer than 2 {sample_unit} with non-zero expression for donor {donor}")
         return(NULL)
     }
 
-    if (by_clonotype) {
-        n_total <- length(unique(groups))
+    if (is_clonotype_level) {
+        n_total <- length(unique(clonotypes))
         logger::log_info(
-            "Donor {donor}: {sum(informative_snps)} informative SNPs, {sum(nonzero)}/{n_total} clonotypes retained"
+            "Donor {donor}: {sum(informative_snps)} informative SNPs, {sum(has_expression)}/{n_total} clonotypes retained"
         )
     } else {
         logger::log_info(
-            "Donor {donor}: {sum(informative_snps)} informative SNPs, {sum(nonzero)} cells retained"
+            "Donor {donor}: {sum(informative_snps)} informative SNPs, {sum(has_expression)} cells retained"
         )
     }
 
-    expr_matrix[, nonzero, drop = FALSE]
+    expr_matrix[, has_expression, drop = FALSE]
 }
 
 .infer_xci <- function(
@@ -531,9 +531,9 @@ plot_inactive_x_assignment_heatmap <- function(fit, donor) {
     min_cov = 1,
     refit_after_filter = FALSE
 ) {
-    keep_outlier <- .filter_outlier_genes(ref_mat, alt_mat, min_cells, min_cov)
-    ref_mat <- ref_mat[keep_outlier, , drop = FALSE]
-    alt_mat <- alt_mat[keep_outlier, , drop = FALSE]
+    passes_outlier_filter <- .filter_outlier_genes(ref_mat, alt_mat, min_cells, min_cov)
+    ref_mat <- ref_mat[passes_outlier_filter, , drop = FALSE]
+    alt_mat <- alt_mat[passes_outlier_filter, , drop = FALSE]
 
     dat <- .pivot_counts_to_long(ref_mat, alt_mat, min_cov)
     n_genes <- nrow(ref_mat)
@@ -543,13 +543,13 @@ plot_inactive_x_assignment_heatmap <- function(fit, donor) {
 
     # Post-convergence escapee filter: genes with LLR <= 0 are inconsistent with
     # current cell assignments; MAD filter on pi_g removes outlier escape fractions.
-    keep_escapee <- .filter_escapee_genes(dat, n_genes, best$h_g, best$pi_g, best$rho, best$post)
-    if (refit_after_filter && !all(keep_escapee)) {
+    passes_escapee_filter <- .filter_escapee_genes(dat, n_genes, best$h_g, best$pi_g, best$rho, best$post)
+    if (refit_after_filter && !all(passes_escapee_filter)) {
         # Re-run EM on the cleaned gene set for sharper posteriors.
-        n_removed <- sum(!keep_escapee)
+        n_removed <- sum(!passes_escapee_filter)
         logger::log_info("Removing {n_removed} escape genes after initial EM; re-running")
 
-        gene_indices <- which(keep_escapee)
+        gene_indices <- which(passes_escapee_filter)
         dat <- dat %>%
             dplyr::filter(gene %in% gene_indices) %>%
             dplyr::mutate(gene = match(gene, gene_indices))
@@ -570,8 +570,8 @@ plot_inactive_x_assignment_heatmap <- function(fit, donor) {
 
     # gene_keep: logical of length nrow(original ref_mat), TRUE = gene survived
     # both the outlier filter and the post-convergence escapee filter
-    gene_keep <- keep_outlier
-    gene_keep[keep_outlier] <- keep_escapee
+    gene_keep <- passes_outlier_filter
+    gene_keep[passes_outlier_filter] <- passes_escapee_filter
 
     c(best, list(gene_keep = gene_keep))
 }
@@ -656,14 +656,14 @@ plot_inactive_x_assignment_heatmap <- function(fit, donor) {
 }
 
 .m_step_phase <- function(dat, post, pi_g, rho, h_g) {
-    dat2 <- dat %>%
+    counts_with_posterior <- dat %>%
         dplyr::left_join(post %>% dplyr::select(cell, post_X1), by = "cell")
 
     # Expected log-likelihood under each phase: E_q[log p(ref | h, pi_g)]
     # h=0: X1-inactive cells (weight post_X1) see REF fraction pi_g (silenced);
     #       X2-inactive cells (weight 1-post_X1) see REF fraction 1 - pi_g (active)
     # h=1: REF and ALT roles are swapped
-    ll_by_gene <- dat2 %>%
+    ll_by_gene <- counts_with_posterior %>%
         dplyr::group_by(gene) %>%
         dplyr::summarise(
             ll_h0 = sum(
@@ -685,7 +685,7 @@ plot_inactive_x_assignment_heatmap <- function(fit, donor) {
 }
 
 .m_step_pi <- function(dat, post, h_g, pi_bounds = c(0.001, 0.499)) {
-    dat2 <- dat %>%
+    counts_with_posterior <- dat %>%
         dplyr::left_join(post %>% dplyr::select(cell, post_X1), by = "cell") %>%
         dplyr::mutate(
             # Soft-assigned inactive-allele read count:
@@ -700,7 +700,7 @@ plot_inactive_x_assignment_heatmap <- function(fit, donor) {
         )
 
     # MLE: inactive-allele fraction = (soft inactive reads) / (total reads)
-    pi_new <- dat2 %>%
+    pi_new <- counts_with_posterior %>%
         dplyr::group_by(gene) %>%
         dplyr::summarise(pi = sum(xi_ref_count) / sum(xi_total), .groups = "drop")
 
@@ -725,20 +725,20 @@ plot_inactive_x_assignment_heatmap <- function(fit, donor) {
     ref_majority <- rowSums(covered & (ref_mat > alt_mat))
 
     # Drop genes seen in too few cells — not enough information to estimate allelic skew
-    keep_by_count <- n_expressing >= min_cells
+    passes_count_filter <- n_expressing >= min_cells
 
     # Allelic skew: fraction of covered cells where REF > ALT, folded to [0.5, 1]
     # so that genes skewed toward either allele score equally high
-    skew <- ref_majority[keep_by_count] / n_expressing[keep_by_count]
+    skew <- ref_majority[passes_count_filter] / n_expressing[passes_count_filter]
     skew <- pmax(skew, 1 - skew)
 
     # Robust z-score: genes with unusually extreme skew relative to the rest are
     # likely systematic (e.g. mapping bias, escape from XCI) rather than informative
     z <- (skew - stats::median(skew)) / stats::mad(skew)
-    not_outlier <- abs(z) <= mad_threshold
+    passes_skew_filter <- abs(z) <= mad_threshold
 
     keep <- rep(FALSE, nrow(ref_mat))
-    keep[keep_by_count] <- not_outlier
+    keep[passes_count_filter] <- passes_skew_filter
     keep
 }
 
