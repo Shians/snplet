@@ -57,10 +57,18 @@ setGeneric("assign_inactive_x", function(x, n_inits = 10, confidence_threshold =
 #' @rdname assign_inactive_x
 #' @include SNPData-class.R
 setMethod("assign_inactive_x", signature(x = "SNPData"), function(x, n_inits = 10, confidence_threshold = 0.95, refit_after_filter = FALSE) {
-    x %>%
-        add_barcode_metadata(
-            .assign_inactive_x_by_donor(x, .assign_inactive_x_single_donor, n_inits, confidence_threshold, refit_after_filter)
+    unique_donors <- sort(unique(get_barcode_info(x)$donor))
+    result <- purrr::map(unique_donors, function(d) {
+        tryCatch(
+            .assign_inactive_x_single_donor(filter_samples(x, donor == d), n_inits, confidence_threshold, refit_after_filter),
+            error = function(e) {
+                logger::log_warn("Failed to assign inactive X for donor {d}: {conditionMessage(e)}")
+                tibble::tibble(cell_id = character(), inactive_x = character())
+            }
         )
+    }) %>%
+        dplyr::bind_rows()
+    add_barcode_metadata(x, result)
 })
 
 #' Assign inactive X chromosome to cells by clonotype
@@ -139,151 +147,20 @@ setMethod(
                 "All clonotype values are NA. Cannot perform clonotype-level X-inactivation assignment. Add clonotype data using add_barcode_metadata() or import_cellsnp() with vdj_file parameter."
             )
         }
-        x %>%
-            add_barcode_metadata(
-                .assign_inactive_x_by_donor(
-                    x,
-                    .assign_inactive_x_single_donor_by_clonotype,
-                    n_inits,
-                    confidence_threshold,
-                    refit_after_filter
-                )
+        unique_donors <- sort(unique(get_barcode_info(x)$donor))
+        result <- purrr::map(unique_donors, function(d) {
+            tryCatch(
+                .assign_inactive_x_single_donor_by_clonotype(filter_samples(x, donor == d), n_inits, confidence_threshold, refit_after_filter),
+                error = function(e) {
+                    logger::log_warn("Failed to assign inactive X for donor {d}: {conditionMessage(e)}")
+                    tibble::tibble(cell_id = character(), inactive_x = character())
+                }
             )
+        }) %>%
+            dplyr::bind_rows()
+        add_barcode_metadata(x, result)
     }
 )
-
-#' Plot inactive X chromosome heatmap for a donor
-#'
-#' Visualizes allelic imbalance patterns at informative heterozygous SNPs to
-#' reveal X-inactivation structure. Cells are clustered based on their allelic
-#' bias signatures, which should separate into two groups corresponding to the
-#' two inactive X states.
-#'
-#' @details
-#' This function creates a heatmap showing the sign of allelic expression at
-#' heterozygous SNPs across cells from a single donor. The heatmap uses:
-#' \itemize{
-#'   \item Rows: Informative heterozygous SNPs on the X chromosome (one per gene)
-#'   \item Columns: Individual cells/barcodes
-#'   \item Values: Sign of allelic imbalance (+1 for REF bias, -1 for ALT bias, 0 for balanced)
-#'   \item Clustering: Hierarchical clustering with complete linkage and Euclidean distance
-#' }
-#'
-#' The clustering should reveal two main groups of cells, each showing opposite
-#' allelic bias patterns across SNPs. This bimodal pattern reflects which of the
-#' two parental X chromosomes is inactive in each cell.
-#'
-#' Only SNPs with at least 2 reads coverage in at least 1% of cells are included
-#' to focus on informative loci.
-#'
-#' @param x SNPData object containing X chromosome SNP data
-#' @param donor Character string specifying which donor to visualize
-#'
-#' @return A ComplexHeatmap object showing the inactive X clustering pattern
-#'
-#' @export
-#'
-#' @examples
-#' \dontrun{
-#' # Plot inactive X pattern for a specific donor
-#' plot_inactive_x_heatmap(snp_data, donor = "donor1")
-#'
-#' # Save the plot
-#' pdf("inactive_x_heatmap.pdf", width = 10, height = 8)
-#' plot_inactive_x_heatmap(snp_data, donor = "donor1")
-#' dev.off()
-#' }
-setGeneric("plot_inactive_x_heatmap", function(x, donor) standardGeneric("plot_inactive_x_heatmap"))
-
-#' @rdname plot_inactive_x_heatmap
-#' @include SNPData-class.R
-setMethod("plot_inactive_x_heatmap", signature(x = "SNPData"), function(x, donor) {
-    logger::with_log_threshold(
-        {
-            expr_matrix <- .prepare_expr_matrix(
-                filter_barcodes(x, donor == .env$donor),
-                min_coverage = 2,
-                min_sample_prop = 0.01
-            )
-        },
-        threshold = logger::WARN
-    )
-
-    ComplexHeatmap::Heatmap(
-        as.matrix(expr_matrix),
-        clustering_distance_columns = "euclidean",
-        clustering_method_columns = "ward.D2",
-        show_row_names = FALSE,
-        show_column_names = FALSE,
-        name = paste("Donor", donor, "Inactive X Heatmap")
-    )
-})
-
-#' Plot inactive X chromosome heatmap for a donor at clonotype level
-#'
-#' Visualizes allelic imbalance patterns at informative heterozygous SNPs to
-#' reveal X-inactivation structure at the clonotype level. Clonotypes are
-#' clustered based on their allelic bias signatures, which should separate into
-#' two groups corresponding to the two inactive X states.
-#'
-#' @details
-#' This function creates a heatmap showing the sign of allelic expression at
-#' heterozygous SNPs across clonotypes from a single donor. The heatmap uses:
-#' \itemize{
-#'   \item Rows: Informative heterozygous SNPs on the X chromosome (one per gene)
-#'   \item Columns: Clonotypes (aggregated from individual cells)
-#'   \item Values: Sign of allelic imbalance (+1 for REF bias, -1 for ALT bias, 0 for balanced)
-#'   \item Clustering: Hierarchical clustering with complete linkage and Euclidean distance
-#' }
-#'
-#' The clustering should reveal two main groups of clonotypes, each showing opposite
-#' allelic bias patterns across SNPs. This bimodal pattern reflects which of the
-#' two parental X chromosomes is inactive in cells from each clonotype.
-#'
-#' Only SNPs with at least 2 reads coverage in at least 1% of clonotypes are included
-#' to focus on informative loci. Counts are aggregated at the clonotype level before
-#' computing allelic imbalance.
-#'
-#' @param x SNPData object containing X chromosome SNP data with clonotype information
-#' @param donor Character string specifying which donor to visualize
-#'
-#' @return A ComplexHeatmap object showing the inactive X clustering pattern at clonotype level
-#'
-#' @export
-#'
-#' @examples
-#' \dontrun{
-#' # Plot inactive X pattern for a specific donor at clonotype level
-#' plot_inactive_x_heatmap_by_clonotype(snp_data, donor = "donor1")
-#'
-#' # Save the plot
-#' pdf("inactive_x_heatmap_clonotype.pdf", width = 10, height = 8)
-#' plot_inactive_x_heatmap_by_clonotype(snp_data, donor = "donor1")
-#' dev.off()
-#' }
-setGeneric("plot_inactive_x_heatmap_by_clonotype", function(x, donor) {
-    standardGeneric("plot_inactive_x_heatmap_by_clonotype")
-})
-
-#' @rdname plot_inactive_x_heatmap_by_clonotype
-#' @include SNPData-class.R
-setMethod("plot_inactive_x_heatmap_by_clonotype", signature(x = "SNPData"), function(x, donor) {
-    expr_matrix <- .prepare_expr_matrix(
-        filter_barcodes(x, donor == .env$donor),
-        min_coverage = 2,
-        min_sample_prop = 0.01,
-        level = "clonotype"
-    )
-
-    ComplexHeatmap::Heatmap(
-        as.matrix(expr_matrix),
-        clustering_distance_columns = "euclidean",
-        clustering_method_columns = "ward.D2",
-        show_row_names = FALSE,
-        show_column_names = FALSE,
-        name = paste("Donor", donor, "Inactive X Heatmap (Clonotype)")
-    )
-})
 
 #' Fit X-chromosome inactivation model
 #'
@@ -322,7 +199,7 @@ setGeneric("fit_inactive_x", function(x, n_inits = 10, confidence_threshold = 0.
 #' @rdname fit_inactive_x
 #' @include SNPData-class.R
 setMethod("fit_inactive_x", signature(x = "SNPData"), function(x, n_inits = 10, confidence_threshold = 0.95, refit_after_filter = FALSE) {
-    unique_donors <- unique(get_barcode_info(x)$donor)
+    unique_donors <- sort(unique(get_barcode_info(x)$donor))
 
     result <- purrr::map(unique_donors, function(d) {
         tryCatch(
@@ -437,23 +314,6 @@ plot_inactive_x_assignment_heatmap <- function(fit, donor) {
     )
 }
 
-.assign_inactive_x_by_donor <- function(x, per_donor_fn, n_inits, confidence_threshold, refit_after_filter = FALSE) {
-    unique_donors <- unique(get_barcode_info(x)$donor)
-
-    purrr::map(unique_donors, ~ filter_samples(x, donor == .x)) %>%
-        magrittr::set_names(unique_donors) %>%
-        purrr::map(function(donor_data) {
-            tryCatch(
-                per_donor_fn(donor_data, n_inits, confidence_threshold, refit_after_filter),
-                error = function(e) {
-                    d <- unique(get_barcode_info(donor_data)$donor)
-                    logger::log_warn("Failed to assign inactive X for donor {d}: {conditionMessage(e)}")
-                    tibble::tibble(cell_id = character(), inactive_x = character())
-                }
-            )
-        }) %>%
-        dplyr::bind_rows()
-}
 
 .fit_xci_donor <- function(snp_data, n_inits = 10, confidence_threshold = 0.95, refit_after_filter = FALSE) {
     donor <- unique(get_barcode_info(snp_data)$donor)
@@ -502,26 +362,11 @@ plot_inactive_x_assignment_heatmap <- function(fit, donor) {
 }
 
 .assign_inactive_x_single_donor <- function(snp_data, n_inits = 10, confidence_threshold = 0.95, refit_after_filter = FALSE) {
-    donor <- unique(get_barcode_info(snp_data)$donor)
-    logger::log_info("Assigning inactive X for donor {donor}")
-
-    snp_data <- .filter_to_informative_het_snps(snp_data)
-
-    ref_mat <- ref_count(snp_data)
-    alt_mat <- alt_count(snp_data)
-    cell_ids <- colnames(ref_mat)
-
-    if (nrow(ref_mat) == 0 || ncol(ref_mat) == 0) {
-        logger::log_warn("Skipping inactive X assignment for donor {donor}: insufficient data")
-        return(tibble::tibble(cell_id = character(), inactive_x = character()))
-    }
-
-    res <- .infer_xci(ref_mat, alt_mat, n_inits = n_inits, confidence_threshold = confidence_threshold, refit_after_filter = refit_after_filter)
-
-    res$post %>%
+    fit <- .fit_xci_donor(snp_data, n_inits, confidence_threshold, refit_after_filter)
+    if (is.null(fit)) return(tibble::tibble(cell_id = character(), inactive_x = character()))
+    fit$assignments %>%
         dplyr::filter(assignment != "unassigned") %>%
-        dplyr::mutate(cell_id = cell_ids[cell], inactive_x = assignment) %>%
-        dplyr::select(cell_id, inactive_x)
+        dplyr::select(cell_id, inactive_x = assignment)
 }
 
 .assign_inactive_x_single_donor_by_clonotype <- function(snp_data, n_inits = 10, confidence_threshold = 0.95, refit_after_filter = FALSE) {
@@ -571,21 +416,15 @@ plot_inactive_x_assignment_heatmap <- function(fit, donor) {
         dplyr::filter(zygosity == "het") %>%
         dplyr::pull(snp_id)
 
-    logger::with_log_threshold(
-        {
-            snp_data <- snp_data %>%
-                filter_snps(snp_id %in% het_snp_ids)
+    snp_data <- snp_data %>%
+        filter_snps(snp_id %in% het_snp_ids)
 
-            top_snp_per_gene <- get_snp_info(snp_data) %>%
-                dplyr::arrange(dplyr::desc(coverage)) %>%
-                dplyr::slice_head(n = 1, by = "gene_name")
+    top_snp_per_gene <- get_snp_info(snp_data) %>%
+        dplyr::arrange(dplyr::desc(coverage)) %>%
+        dplyr::slice_head(n = 1, by = "gene_name")
 
-            snp_data <- snp_data %>%
-                filter_snps(snp_id %in% top_snp_per_gene$snp_id)
-        },
-        threshold = logger::WARN
-    )
-    snp_data
+    snp_data %>%
+        filter_snps(snp_id %in% top_snp_per_gene$snp_id)
 }
 
 .get_informative_snps <- function(coverage_mat, min_coverage, min_sample_prop) {
