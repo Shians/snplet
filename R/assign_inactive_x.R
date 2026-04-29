@@ -1,35 +1,43 @@
 #' Assign inactive X chromosome to cells
 #'
 #' Identifies which X chromosome is inactive in female cells based on allelic
-#' imbalance patterns at heterozygous SNPs. Uses hierarchical clustering to
-#' assign cells into two groups representing the two possible X-inactivation
-#' states.
+#' imbalance at heterozygous SNPs using an Expectation-Maximisation (EM)
+#' algorithm with a beta-binomial likelihood.
 #'
 #' @details
 #' X-chromosome inactivation (XCI) is a dosage compensation mechanism in female
 #' mammals where one of the two X chromosomes is randomly silenced in each cell.
-#' This function infers which X is inactive by analyzing allelic expression
-#' patterns at heterozygous SNPs on the X chromosome.
+#' This function infers which X is inactive by fitting an EM model to allelic
+#' read counts at heterozygous SNPs on the X chromosome.
 #'
 #' The algorithm works as follows:
 #' \enumerate{
 #'   \item Filters to heterozygous SNPs on the X chromosome for each donor
 #'   \item Selects the SNP with highest coverage per gene to avoid redundancy
-#'   \item Identifies informative SNPs with sufficient coverage across cells
-#'   \item Computes an expression-like matrix capturing allelic imbalance
-#'   \item Performs hierarchical clustering on the sign of allelic imbalance
-#'   \item Assigns cells to two clusters (X1 or X2) representing inactive X states
+#'   \item Removes outlier genes with atypical allelic skew
+#'   \item Runs a beta-binomial EM algorithm with multiple random initialisations
+#'   \item Assigns cells to X1 or X2 based on posterior probability
 #' }
 #'
-#' Cells within each cluster should show consistent allelic bias patterns,
-#' reflecting which parental X chromosome is active vs. inactive.
+#' Cells that do not meet \code{confidence_threshold} receive \code{NA} in
+#' the \code{inactive_x} column.
 #'
 #' @param x SNPData object containing X chromosome SNP data with donor
 #'   assignments and heterozygosity information
+#' @param n_inits Number of random initialisations for the EM algorithm.
+#'   The run with the highest log-likelihood is returned. Default 10.
+#' @param confidence_threshold Posterior probability threshold for hard
+#'   assignment. Cells with \code{post_X1 >= confidence_threshold} are
+#'   assigned "X1", those with \code{post_X1 <= 1 - confidence_threshold}
+#'   are assigned "X2", and the remainder receive \code{NA}. Default 0.95.
+#' @param refit_after_filter Logical; if TRUE, re-run the EM algorithm after
+#'   filtering genes with inconsistent allelic patterns. Provides sharper
+#'   posteriors on the cleaned gene set. Default FALSE.
 #'
 #' @return SNPData object with an additional \code{inactive_x} column in
 #'   barcode metadata, with values "X1" or "X2" indicating the inferred
-#'   inactive X chromosome state
+#'   inactive X chromosome state. Cells that do not meet the confidence
+#'   threshold receive \code{NA}.
 #'
 #' @export
 #'
@@ -42,231 +50,29 @@
 #' get_barcode_info(snp_data) %>%
 #'   count(donor, inactive_x)
 #' }
-setGeneric("assign_inactive_x", function(x) standardGeneric("assign_inactive_x"))
+setGeneric("assign_inactive_x", function(x, n_inits = 10, confidence_threshold = 0.95, refit_after_filter = FALSE) {
+    standardGeneric("assign_inactive_x")
+})
 
 #' @rdname assign_inactive_x
 #' @include SNPData-class.R
-setMethod("assign_inactive_x", signature(x = "SNPData"), function(x) {
-    unique_donors <- unique(get_barcode_info(x)$donor)
-
-    unique_donor_snp_data <- map(
-        unique_donors,
-        ~filter_samples(x, donor == .x)
-    ) %>%
-        magrittr::set_names(unique_donors)
-
-    # assign inactive x for each donor and combine results
-    barcode_inactive_x_df <- unique_donor_snp_data %>%
-        map(function(donor_data) {
-            tryCatch(
-                .assign_inactive_x_single_donor(donor_data),
-                error = function(e) {
-                    d <- unique(get_barcode_info(donor_data)$donor)
-                    logger::log_warn("Failed to assign inactive X for donor {d}: {conditionMessage(e)}")
-                    tibble(cell_id = character(), inactive_x = character())
-                }
-            )
-        }) %>%
-        bind_rows()
-
-    # add inactive_x to barcode_info
+setMethod("assign_inactive_x", signature(x = "SNPData"), function(x, n_inits = 10, confidence_threshold = 0.95, refit_after_filter = FALSE) {
     x %>%
-        add_barcode_metadata(barcode_inactive_x_df)
+        add_barcode_metadata(
+            .assign_inactive_x_by_donor(x, .assign_inactive_x_single_donor, n_inits, confidence_threshold, refit_after_filter)
+        )
 })
-
-.assign_inactive_x_single_donor <- function(
-    snp_data
-) {
-    donor <- unique(get_barcode_info(snp_data)$donor)
-
-    expr_matrix <- .prepare_expr_matrix(
-        snp_data,
-        min_coverage = 2,
-        min_sample_prop = 0.01
-    )
-
-    if (is.null(expr_matrix)) {
-        logger::log_warn("Skipping inactive X assignment for donor {donor}: insufficient data")
-        return(tibble(cell_id = character(), inactive_x = character()))
-    }
-
-    .assign_cluster(expr_matrix, n_clusters = 2)
-}
-
-.assign_inactive_x_single_donor_by_clonotype <- function(
-    snp_data
-) {
-    donor <- unique(get_barcode_info(snp_data)$donor)
-
-    expr_matrix <- .prepare_expr_matrix_by_clonotype(
-        snp_data,
-        min_coverage = 2,
-        min_sample_prop = 0.01
-    )
-
-    if (is.null(expr_matrix)) {
-        logger::log_warn("Skipping inactive X assignment for donor {donor}: insufficient data")
-        return(tibble(cell_id = character(), inactive_x = character()))
-    }
-
-    # Assign clusters to clonotypes
-    clonotype_cluster_df <- .assign_cluster(expr_matrix, n_clusters = 2) %>%
-        dplyr::rename(clonotype = cell_id)
-
-    # Project clonotype assignments back to cells
-    barcode_info <- get_barcode_info(snp_data)
-    cell_cluster_df <- dplyr::select(barcode_info, cell_id, clonotype) %>%
-        dplyr::left_join(
-            clonotype_cluster_df,
-            by = c("clonotype"),
-            multiple = "first"
-        ) %>%
-        dplyr::select(cell_id, inactive_x)
-
-    logger::log_success("Inactive X assignment complete for donor {donor}")
-    cell_cluster_df
-}
-
-.get_informative_snps <- function(coverage_mat, min_coverage, min_sample_prop) {
-    barcodes_with_sufficient_coverage <- rowSums(coverage_mat >= min_coverage)
-    barcode_threshold <- ncol(coverage_mat) * min_sample_prop
-    barcodes_with_sufficient_coverage >= barcode_threshold
-}
-
-.filter_to_informative_het_snps <- function(snp_data) {
-    het_snp_ids <- snp_data %>%
-        donor_het_status_df() %>%
-        filter(zygosity == "het") %>%
-        pull(snp_id)
-
-    logger::with_log_threshold({
-        snp_data <- snp_data %>%
-            filter_snps(snp_id %in% het_snp_ids)
-
-        top_snp_per_gene <- get_snp_info(snp_data) %>%
-            arrange(desc(coverage)) %>%
-            slice_head(n = 1, by = "gene_name")
-
-        snp_data <- snp_data %>%
-            filter_snps(snp_id %in% top_snp_per_gene$snp_id)
-    }, threshold = logger::WARN)
-    snp_data
-}
-
-.assign_cluster <- function(expr_mat, n_clusters) {
-    n_samples <- ncol(expr_mat)
-    if (n_samples == 0) {
-        stop("No cells/clonotypes available for inactive X clustering")
-    }
-    if (n_clusters < 1) {
-        stop("n_clusters must be at least 1")
-    }
-    if (n_samples < n_clusters) {
-        stop(sprintf(
-            "Cannot assign %d clusters with only %d cells/clonotypes",
-            n_clusters,
-            n_samples
-        ))
-    }
-
-    dist_mat <- dist(t(as.matrix(expr_mat)), method = "euclidean")
-    hc <- hclust(dist_mat, method = "ward.D2")
-    cluster_assignments <- cutree(hc, k = n_clusters)
-    tibble(
-        cell_id = names(cluster_assignments),
-        inactive_x = paste0("X", cluster_assignments)
-    )
-}
-
-.prepare_expr_matrix <- function(
-    snp_data,
-    min_coverage = 2,
-    min_sample_prop = 0.01
-) {
-    donor <- unique(get_barcode_info(snp_data)$donor)
-    logger::log_info("Assigning inactive X for donor {donor}")
-
-    snp_data <- .filter_to_informative_het_snps(snp_data)
-
-    coverage_mat <- snplet::coverage(snp_data)
-
-    informative_snps <- .get_informative_snps(
-        coverage_mat,
-        min_coverage = min_coverage,
-        min_sample_prop = min_sample_prop
-    )
-    if (sum(informative_snps) == 0) {
-        logger::log_warn("No informative SNPs found for donor {donor}")
-        return(NULL)
-    }
-    expr_matrix <- to_expr_matrix(snp_data)[informative_snps, , drop = FALSE]
-    nonzero_cells <- colSums(abs(expr_matrix)) > 0
-    if (sum(nonzero_cells) < 2) {
-        logger::log_warn("Fewer than 2 cells with non-zero expression for donor {donor}")
-        return(NULL)
-    }
-    logger::log_info("Donor {donor}: {sum(informative_snps)} informative SNPs, {sum(nonzero_cells)} cells retained")
-    expr_matrix[, nonzero_cells, drop = FALSE]
-}
-
-.prepare_expr_matrix_by_clonotype <- function(
-    snp_data,
-    min_coverage = 2,
-    min_sample_prop = 0.01
-) {
-    donor <- unique(get_barcode_info(snp_data)$donor)
-    logger::log_info("Assigning inactive X for donor {donor} at clonotype level")
-
-    snp_data <- .filter_to_informative_het_snps(snp_data)
-
-    # Filter out cells with NA clonotypes
-    barcode_info <- get_barcode_info(snp_data)
-    non_na_clonotypes <- !is.na(barcode_info$clonotype)
-    if (!any(non_na_clonotypes)) {
-        stop(glue::glue("No cells with non-NA clonotype values for donor {donor}"))
-    }
-
-    snp_data <- snp_data[, non_na_clonotypes]
-    clonotypes_filtered <- barcode_info$clonotype[non_na_clonotypes]
-
-    # Compute expression matrix at clonotype level using canonical formula
-    expr_matrix <- to_expr_matrix(snp_data, level = "clonotype")
-
-    # Get coverage for informative SNP selection
-    coverage_mat <- groupedRowSums(snplet::coverage(snp_data), clonotypes_filtered)
-
-    informative_snps <- .get_informative_snps(
-        coverage_mat,
-        min_coverage = min_coverage,
-        min_sample_prop = min_sample_prop
-    )
-
-    if (sum(informative_snps) == 0) {
-        logger::log_warn("No informative SNPs found for donor {donor}")
-        return(NULL)
-    }
-    expr_matrix_filtered <- expr_matrix[informative_snps, , drop = FALSE]
-
-    # Filter to clonotypes with non-zero expression
-    nonzero_clonotypes <- colSums(abs(expr_matrix_filtered)) > 0
-    if (sum(nonzero_clonotypes) < 2) {
-        logger::log_warn("Fewer than 2 clonotypes with non-zero expression for donor {donor}")
-        return(NULL)
-    }
-    n_clonotypes <- length(unique(clonotypes_filtered))
-    logger::log_info("Donor {donor}: {sum(informative_snps)} informative SNPs, {sum(nonzero_clonotypes)}/{n_clonotypes} clonotypes retained")
-    expr_matrix_filtered[, nonzero_clonotypes, drop = FALSE]
-}
 
 #' Assign inactive X chromosome to cells by clonotype
 #'
 #' Identifies which X chromosome is inactive in female cells based on allelic
-#' imbalance patterns at heterozygous SNPs, aggregating to the clonotype level
-#' before assigning and then projecting back to individual cells.
+#' imbalance at heterozygous SNPs, aggregating counts to the clonotype level
+#' before running the EM model and projecting assignments back to individual cells.
 #'
 #' @details
-#' This function is similar to \code{\link{assign_inactive_x}} but performs
-#' clustering at the clonotype level rather than the cell level. This approach:
+#' This function is similar to \code{\link{assign_inactive_x}} but runs the
+#' beta-binomial EM on clonotype-aggregated counts rather than per-cell counts.
+#' This approach:
 #' \itemize{
 #'   \item Increases statistical power by aggregating counts across clonally related cells
 #'   \item Reduces noise from sparse cell-level data
@@ -278,19 +84,28 @@ setMethod("assign_inactive_x", signature(x = "SNPData"), function(x) {
 #'   \item Filters to heterozygous SNPs on the X chromosome for each donor
 #'   \item Selects the SNP with highest coverage per gene to avoid redundancy
 #'   \item Aggregates ALT and REF counts by clonotype
-#'   \item Identifies informative SNPs with sufficient coverage across clonotypes
-#'   \item Computes an expression-like matrix capturing allelic imbalance at clonotype level
-#'   \item Performs hierarchical clustering on the sign of allelic imbalance
-#'   \item Assigns clonotypes to two clusters (X1 or X2) representing inactive X states
+#'   \item Removes outlier genes with atypical allelic skew
+#'   \item Runs a beta-binomial EM algorithm with multiple random initialisations
+#'   \item Assigns clonotypes to X1 or X2 based on posterior probability
 #'   \item Projects clonotype assignments back to individual cells
 #' }
 #'
 #' @param x SNPData object containing X chromosome SNP data with donor
 #'   assignments, clonotype information, and heterozygosity information
+#' @param n_inits Number of random initialisations for the EM algorithm.
+#'   The run with the highest log-likelihood is returned. Default 10.
+#' @param confidence_threshold Posterior probability threshold for hard
+#'   assignment. Clonotypes with \code{post_X1 >= confidence_threshold} are
+#'   assigned "X1", those with \code{post_X1 <= 1 - confidence_threshold}
+#'   are assigned "X2", and the remainder receive \code{NA}. Default 0.95.
+#' @param refit_after_filter Logical; if TRUE, re-run the EM algorithm after
+#'   filtering genes with inconsistent allelic patterns. Provides sharper
+#'   posteriors on the cleaned gene set. Default FALSE.
 #'
 #' @return SNPData object with an additional \code{inactive_x} column in
 #'   barcode metadata, with values "X1" or "X2" indicating the inferred
-#'   inactive X chromosome state
+#'   inactive X chromosome state. Cells from clonotypes that do not meet the
+#'   confidence threshold receive \code{NA}.
 #'
 #' @export
 #'
@@ -303,48 +118,39 @@ setMethod("assign_inactive_x", signature(x = "SNPData"), function(x) {
 #' get_barcode_info(snp_data) %>%
 #'   count(donor, clonotype, inactive_x)
 #' }
-setGeneric("assign_inactive_x_by_clonotype", function(x) standardGeneric("assign_inactive_x_by_clonotype"))
+setGeneric("assign_inactive_x_by_clonotype", function(x, n_inits = 10, confidence_threshold = 0.95, refit_after_filter = FALSE) {
+    standardGeneric("assign_inactive_x_by_clonotype")
+})
 
 #' @rdname assign_inactive_x_by_clonotype
 #' @include SNPData-class.R
-setMethod("assign_inactive_x_by_clonotype", signature(x = "SNPData"), function(x) {
-    # Check if clonotype column exists
-    barcode_info <- get_barcode_info(x)
-    if (!"clonotype" %in% colnames(barcode_info)) {
-        stop("Clonotype information not available. Add clonotype data using add_barcode_metadata() or import_cellsnp() with vdj_file parameter.")
-    }
-
-    # Check if all clonotype values are NA
-    if (all(is.na(barcode_info$clonotype))) {
-        stop("All clonotype values are NA. Cannot perform clonotype-level X-inactivation assignment. Add clonotype data using add_barcode_metadata() or import_cellsnp() with vdj_file parameter.")
-    }
-
-    unique_donors <- unique(get_barcode_info(x)$donor)
-
-    unique_donor_snp_data <- map(
-        unique_donors,
-        ~filter_samples(x, donor == .x)
-    ) %>%
-        magrittr::set_names(unique_donors)
-
-    # assign inactive x for each donor and combine results
-    barcode_inactive_x_df <- unique_donor_snp_data %>%
-        map(function(donor_data) {
-            tryCatch(
-                .assign_inactive_x_single_donor_by_clonotype(donor_data),
-                error = function(e) {
-                    d <- unique(get_barcode_info(donor_data)$donor)
-                    logger::log_warn("Failed to assign inactive X for donor {d}: {conditionMessage(e)}")
-                    tibble(cell_id = character(), inactive_x = character())
-                }
+setMethod(
+    "assign_inactive_x_by_clonotype",
+    signature(x = "SNPData"),
+    function(x, n_inits = 10, confidence_threshold = 0.95, refit_after_filter = FALSE) {
+        barcode_info <- get_barcode_info(x)
+        if (!"clonotype" %in% colnames(barcode_info)) {
+            stop(
+                "Clonotype information not available. Add clonotype data using add_barcode_metadata() or import_cellsnp() with vdj_file parameter."
             )
-        }) %>%
-        bind_rows()
-
-    # add inactive_x to barcode_info
-    x %>%
-        add_barcode_metadata(barcode_inactive_x_df)
-})
+        }
+        if (all(is.na(barcode_info$clonotype))) {
+            stop(
+                "All clonotype values are NA. Cannot perform clonotype-level X-inactivation assignment. Add clonotype data using add_barcode_metadata() or import_cellsnp() with vdj_file parameter."
+            )
+        }
+        x %>%
+            add_barcode_metadata(
+                .assign_inactive_x_by_donor(
+                    x,
+                    .assign_inactive_x_single_donor_by_clonotype,
+                    n_inits,
+                    confidence_threshold,
+                    refit_after_filter
+                )
+            )
+    }
+)
 
 #' Plot inactive X chromosome heatmap for a donor
 #'
@@ -392,12 +198,14 @@ setGeneric("plot_inactive_x_heatmap", function(x, donor) standardGeneric("plot_i
 #' @rdname plot_inactive_x_heatmap
 #' @include SNPData-class.R
 setMethod("plot_inactive_x_heatmap", signature(x = "SNPData"), function(x, donor) {
-    logger::with_log_threshold({
-        expr_matrix <- .prepare_expr_matrix(
-        filter_barcodes(x, donor == .env$donor),
-        min_coverage = 2,
-        min_sample_prop = 0.01
-    )},
+    logger::with_log_threshold(
+        {
+            expr_matrix <- .prepare_expr_matrix(
+                filter_barcodes(x, donor == .env$donor),
+                min_coverage = 2,
+                min_sample_prop = 0.01
+            )
+        },
         threshold = logger::WARN
     )
 
@@ -453,15 +261,18 @@ setMethod("plot_inactive_x_heatmap", signature(x = "SNPData"), function(x, donor
 #' plot_inactive_x_heatmap_by_clonotype(snp_data, donor = "donor1")
 #' dev.off()
 #' }
-setGeneric("plot_inactive_x_heatmap_by_clonotype", function(x, donor) standardGeneric("plot_inactive_x_heatmap_by_clonotype"))
+setGeneric("plot_inactive_x_heatmap_by_clonotype", function(x, donor) {
+    standardGeneric("plot_inactive_x_heatmap_by_clonotype")
+})
 
 #' @rdname plot_inactive_x_heatmap_by_clonotype
 #' @include SNPData-class.R
 setMethod("plot_inactive_x_heatmap_by_clonotype", signature(x = "SNPData"), function(x, donor) {
-    expr_matrix <- .prepare_expr_matrix_by_clonotype(
+    expr_matrix <- .prepare_expr_matrix(
         filter_barcodes(x, donor == .env$donor),
         min_coverage = 2,
-        min_sample_prop = 0.01
+        min_sample_prop = 0.01,
+        level = "clonotype"
     )
 
     ComplexHeatmap::Heatmap(
@@ -473,3 +284,598 @@ setMethod("plot_inactive_x_heatmap_by_clonotype", signature(x = "SNPData"), func
         name = paste("Donor", donor, "Inactive X Heatmap (Clonotype)")
     )
 })
+
+#' Fit X-chromosome inactivation model
+#'
+#' Runs the beta-binomial EM algorithm for each donor and returns a full fit
+#' object containing per-cell assignments, per-gene haplotypes, and the final
+#' allele count matrices used in the model. Use this when diagnostic outputs
+#' are needed; for barcode annotation only, use \code{\link{assign_inactive_x}}.
+#'
+#' @param x SNPData object containing X chromosome SNP data with donor
+#'   assignments and heterozygosity information
+#' @param n_inits Number of random initialisations for the EM algorithm.
+#'   Default 10.
+#' @param confidence_threshold Posterior probability threshold for hard
+#'   assignment. Default 0.95.
+#' @param refit_after_filter Logical; if TRUE, re-run the EM algorithm after
+#'   filtering genes with inconsistent allelic patterns. Provides sharper
+#'   posteriors on the cleaned gene set. Default FALSE.
+#'
+#' @return An \code{xci_fit} object (named list by donor). Use
+#'   \code{\link{xci_assignments}}, \code{\link{xci_haplotypes}}, and
+#'   \code{\link{plot_inactive_x_assignment_heatmap}} to extract results.
+#'
+#' @export
+#'
+#' @examples
+#' \dontrun{
+#' fit <- fit_inactive_x(snp_data)
+#' xci_assignments(fit)
+#' xci_haplotypes(fit)
+#' plot_inactive_x_assignment_heatmap(fit, donor = "donor1")
+#' }
+setGeneric("fit_inactive_x", function(x, n_inits = 10, confidence_threshold = 0.95, refit_after_filter = FALSE) {
+    standardGeneric("fit_inactive_x")
+})
+
+#' @rdname fit_inactive_x
+#' @include SNPData-class.R
+setMethod("fit_inactive_x", signature(x = "SNPData"), function(x, n_inits = 10, confidence_threshold = 0.95, refit_after_filter = FALSE) {
+    unique_donors <- unique(get_barcode_info(x)$donor)
+
+    result <- purrr::map(unique_donors, function(d) {
+        tryCatch(
+            .fit_xci_donor(filter_samples(x, donor == d), n_inits, confidence_threshold, refit_after_filter),
+            error = function(e) {
+                logger::log_warn("Failed to fit XCI for donor {d}: {conditionMessage(e)}")
+                NULL
+            }
+        )
+    }) %>%
+        magrittr::set_names(unique_donors)
+
+    structure(result, class = "xci_fit")
+})
+
+#' Extract cell assignments from an XCI fit
+#'
+#' @param fit An \code{xci_fit} object from \code{\link{fit_inactive_x}}
+#'
+#' @return A tibble with columns \code{donor}, \code{cell_id}, \code{post_X1},
+#'   \code{post_X2}, and \code{assignment}.
+#'
+#' @export
+xci_assignments <- function(fit) {
+    stopifnot(inherits(fit, "xci_fit"))
+    purrr::keep(fit, ~ !is.null(.x)) %>%
+        purrr::map(~ .x$assignments) %>%
+        dplyr::bind_rows(.id = "donor")
+}
+
+#' Extract SNP haplotypes from an XCI fit
+#'
+#' Returns the inferred phase and escape fraction for each SNP in the final
+#' gene set used by the EM model.
+#'
+#' @param fit An \code{xci_fit} object from \code{\link{fit_inactive_x}}
+#'
+#' @return A tibble with columns \code{donor}, \code{snp_id}, \code{gene_name},
+#'   \code{allele_on_x1} ("REF" or "ALT"), and \code{pi_g} (estimated escape
+#'   fraction from the inactive chromosome).
+#'
+#' @export
+xci_haplotypes <- function(fit) {
+    stopifnot(inherits(fit, "xci_fit"))
+    purrr::keep(fit, ~ !is.null(.x)) %>%
+        purrr::map(~ .x$haplotypes) %>%
+        dplyr::bind_rows(.id = "donor")
+}
+
+#' Plot assignment heatmap from an XCI fit
+#'
+#' Visualizes the REF allele fraction at the final EM-selected genes for a
+#' single donor. Cells are ordered by assignment (X1 then X2 then unassigned)
+#' and annotated at the top. Rows are the genes that survived both the outlier
+#' filter and the post-convergence escapee filter.
+#'
+#' @param fit An \code{xci_fit} object from \code{\link{fit_inactive_x}}
+#' @param donor Character string specifying which donor to visualize
+#'
+#' @return A ComplexHeatmap object
+#'
+#' @export
+plot_inactive_x_assignment_heatmap <- function(fit, donor) {
+    stopifnot(inherits(fit, "xci_fit"))
+    donor_fit <- fit[[donor]]
+    if (is.null(donor_fit)) {
+        stop(paste0("No fit available for donor: ", donor))
+    }
+
+    ref_mat <- donor_fit$ref_mat
+    alt_mat <- donor_fit$alt_mat
+    assignments <- donor_fit$assignments
+
+    # REF allele fraction; NA where uncovered
+    cov_mat <- ref_mat + alt_mat
+    frac_mat <- ref_mat / cov_mat
+    frac_mat[cov_mat == 0] <- NA
+
+    # Drop rows that are entirely NA — they carry no signal and break hclust
+    row_has_data <- rowSums(!is.na(frac_mat)) > 0
+    frac_mat <- frac_mat[row_has_data, , drop = FALSE]
+
+    # Order cells: X1 → X2 → unassigned
+    idx <- order(assignments$post_X1, decreasing = TRUE)
+    frac_mat <- frac_mat[, assignments$cell_id[idx], drop = FALSE]
+
+    col_ann <- ComplexHeatmap::HeatmapAnnotation(
+        assignment = assignments$assignment[idx],
+        posterior_X1 = assignments$post_X1[idx],
+        col = list(
+            assignment = c(X1 = "#4e79a7", X2 = "#f28e2b", unassigned = "grey70"),
+            posterior_X1 = circlize::colorRamp2(c(0, 0.1, 0.9, 1), c("#e9a3c9", "white", "white", "#a1d76a"))
+        ),
+        show_annotation_name = TRUE
+    )
+
+    # Impute NAs with 0.5 (balanced) only for row clustering so that sparse
+    # coverage does not produce NaN distances; the display matrix keeps NAs.
+    frac_for_cluster <- frac_mat
+    frac_for_cluster[is.na(frac_for_cluster)] <- 0.5
+    row_dend <- stats::hclust(stats::dist(as.matrix(frac_for_cluster)), method = "ward.D2")
+
+    ComplexHeatmap::Heatmap(
+        as.matrix(frac_mat),
+        top_annotation = col_ann,
+        cluster_columns = FALSE,
+        cluster_rows = row_dend,
+        show_row_names = FALSE,
+        show_column_names = FALSE,
+        name = "REF fraction",
+        na_col = "grey95"
+    )
+}
+
+.assign_inactive_x_by_donor <- function(x, per_donor_fn, n_inits, confidence_threshold, refit_after_filter = FALSE) {
+    unique_donors <- unique(get_barcode_info(x)$donor)
+
+    purrr::map(unique_donors, ~ filter_samples(x, donor == .x)) %>%
+        magrittr::set_names(unique_donors) %>%
+        purrr::map(function(donor_data) {
+            tryCatch(
+                per_donor_fn(donor_data, n_inits, confidence_threshold, refit_after_filter),
+                error = function(e) {
+                    d <- unique(get_barcode_info(donor_data)$donor)
+                    logger::log_warn("Failed to assign inactive X for donor {d}: {conditionMessage(e)}")
+                    tibble::tibble(cell_id = character(), inactive_x = character())
+                }
+            )
+        }) %>%
+        dplyr::bind_rows()
+}
+
+.fit_xci_donor <- function(snp_data, n_inits = 10, confidence_threshold = 0.95, refit_after_filter = FALSE) {
+    donor <- unique(get_barcode_info(snp_data)$donor)
+    logger::log_info("Fitting XCI model for donor {donor}")
+
+    snp_data <- .filter_to_informative_het_snps(snp_data)
+
+    ref_mat <- ref_count(snp_data)
+    alt_mat <- alt_count(snp_data)
+    cell_ids <- colnames(ref_mat)
+    snp_info <- get_snp_info(snp_data)
+
+    if (nrow(ref_mat) == 0 || ncol(ref_mat) == 0) {
+        logger::log_warn("Insufficient data for donor {donor}")
+        return(NULL)
+    }
+
+    res <- .infer_xci(ref_mat, alt_mat, n_inits = n_inits, confidence_threshold = confidence_threshold, refit_after_filter = refit_after_filter)
+
+    assignments <- res$post %>%
+        dplyr::mutate(cell_id = cell_ids[cell], post_X2 = 1 - post_X1) %>%
+        dplyr::select(cell_id, post_X1, post_X2, assignment)
+
+    snp_info_final <- snp_info[res$gene_keep, ]
+    haplotypes <- tibble::tibble(
+        snp_id = snp_info_final$snp_id,
+        gene_name = snp_info_final$gene_name,
+        allele_on_x1 = ifelse(res$h_g == 0, "REF", "ALT"),
+        pi_g = res$pi_g
+    )
+
+    ref_mat_final <- ref_mat[res$gene_keep, , drop = FALSE]
+    alt_mat_final <- alt_mat[res$gene_keep, , drop = FALSE]
+    rownames(ref_mat_final) <- snp_info_final$snp_id
+    rownames(alt_mat_final) <- snp_info_final$snp_id
+    colnames(ref_mat_final) <- cell_ids
+    colnames(alt_mat_final) <- cell_ids
+
+    list(
+        donor = donor,
+        assignments = assignments,
+        haplotypes = haplotypes,
+        ref_mat = ref_mat_final,
+        alt_mat = alt_mat_final
+    )
+}
+
+.assign_inactive_x_single_donor <- function(snp_data, n_inits = 10, confidence_threshold = 0.95, refit_after_filter = FALSE) {
+    donor <- unique(get_barcode_info(snp_data)$donor)
+    logger::log_info("Assigning inactive X for donor {donor}")
+
+    snp_data <- .filter_to_informative_het_snps(snp_data)
+
+    ref_mat <- ref_count(snp_data)
+    alt_mat <- alt_count(snp_data)
+    cell_ids <- colnames(ref_mat)
+
+    if (nrow(ref_mat) == 0 || ncol(ref_mat) == 0) {
+        logger::log_warn("Skipping inactive X assignment for donor {donor}: insufficient data")
+        return(tibble::tibble(cell_id = character(), inactive_x = character()))
+    }
+
+    res <- .infer_xci(ref_mat, alt_mat, n_inits = n_inits, confidence_threshold = confidence_threshold, refit_after_filter = refit_after_filter)
+
+    res$post %>%
+        dplyr::filter(assignment != "unassigned") %>%
+        dplyr::mutate(cell_id = cell_ids[cell], inactive_x = assignment) %>%
+        dplyr::select(cell_id, inactive_x)
+}
+
+.assign_inactive_x_single_donor_by_clonotype <- function(snp_data, n_inits = 10, confidence_threshold = 0.95, refit_after_filter = FALSE) {
+    donor <- unique(get_barcode_info(snp_data)$donor)
+    logger::log_info("Assigning inactive X for donor {donor} at clonotype level")
+
+    snp_data <- .filter_to_informative_het_snps(snp_data)
+
+    barcode_info <- get_barcode_info(snp_data)
+    non_na_clonotypes <- !is.na(barcode_info$clonotype)
+    if (!any(non_na_clonotypes)) {
+        stop(glue::glue("No cells with non-NA clonotype values for donor {donor}"))
+    }
+    snp_data <- snp_data[, non_na_clonotypes]
+    clonotypes <- get_barcode_info(snp_data)$clonotype
+
+    ref_mat <- groupedRowSums(ref_count(snp_data), clonotypes)
+    alt_mat <- groupedRowSums(alt_count(snp_data), clonotypes)
+    clonotype_ids <- colnames(ref_mat)
+
+    if (nrow(ref_mat) == 0 || ncol(ref_mat) == 0) {
+        logger::log_warn("Skipping inactive X assignment for donor {donor}: insufficient data")
+        return(tibble::tibble(cell_id = character(), inactive_x = character()))
+    }
+
+    res <- .infer_xci(ref_mat, alt_mat, n_inits = n_inits, confidence_threshold = confidence_threshold, refit_after_filter = refit_after_filter)
+
+    clonotype_assignment <- res$post %>%
+        dplyr::filter(assignment != "unassigned") %>%
+        dplyr::mutate(clonotype = clonotype_ids[cell]) %>%
+        dplyr::select(clonotype, inactive_x = assignment)
+
+    # Project clonotype assignments back to cells
+    barcode_info <- get_barcode_info(snp_data)
+    dplyr::select(barcode_info, cell_id, clonotype) %>%
+        dplyr::inner_join(clonotype_assignment, by = "clonotype", multiple = "first") %>%
+        dplyr::select(cell_id, inactive_x)
+}
+
+# ----------------------------------------------------------------------------
+# Helpers — data preparation
+# ----------------------------------------------------------------------------
+
+.filter_to_informative_het_snps <- function(snp_data) {
+    het_snp_ids <- snp_data %>%
+        donor_het_status_df() %>%
+        dplyr::filter(zygosity == "het") %>%
+        dplyr::pull(snp_id)
+
+    logger::with_log_threshold(
+        {
+            snp_data <- snp_data %>%
+                filter_snps(snp_id %in% het_snp_ids)
+
+            top_snp_per_gene <- get_snp_info(snp_data) %>%
+                dplyr::arrange(dplyr::desc(coverage)) %>%
+                dplyr::slice_head(n = 1, by = "gene_name")
+
+            snp_data <- snp_data %>%
+                filter_snps(snp_id %in% top_snp_per_gene$snp_id)
+        },
+        threshold = logger::WARN
+    )
+    snp_data
+}
+
+.get_informative_snps <- function(coverage_mat, min_coverage, min_sample_prop) {
+    barcodes_with_sufficient_coverage <- rowSums(coverage_mat >= min_coverage)
+    barcode_threshold <- ncol(coverage_mat) * min_sample_prop
+    barcodes_with_sufficient_coverage >= barcode_threshold
+}
+
+.prepare_expr_matrix <- function(snp_data, min_coverage = 2, min_sample_prop = 0.01, level = "cell") {
+    donor <- unique(get_barcode_info(snp_data)$donor)
+    by_clonotype <- level == "clonotype"
+
+    snp_data <- .filter_to_informative_het_snps(snp_data)
+
+    if (by_clonotype) {
+        barcode_info <- get_barcode_info(snp_data)
+        non_na <- !is.na(barcode_info$clonotype)
+        if (!any(non_na)) {
+            stop(glue::glue("No cells with non-NA clonotype values for donor {donor}"))
+        }
+        snp_data <- snp_data[, non_na]
+        groups <- get_barcode_info(snp_data)$clonotype
+        coverage_mat <- groupedRowSums(snplet::coverage(snp_data), groups)
+        expr_matrix <- to_expr_matrix(snp_data, level = "clonotype")
+    } else {
+        coverage_mat <- snplet::coverage(snp_data)
+        expr_matrix <- to_expr_matrix(snp_data)
+    }
+
+    informative_snps <- .get_informative_snps(coverage_mat, min_coverage, min_sample_prop)
+    if (sum(informative_snps) == 0) {
+        logger::log_warn("No informative SNPs found for donor {donor}")
+        return(NULL)
+    }
+
+    expr_matrix <- expr_matrix[informative_snps, , drop = FALSE]
+    nonzero <- colSums(abs(expr_matrix)) > 0
+    if (sum(nonzero) < 2) {
+        unit <- if (by_clonotype) "clonotypes" else "cells"
+        logger::log_warn("Fewer than 2 {unit} with non-zero expression for donor {donor}")
+        return(NULL)
+    }
+
+    if (by_clonotype) {
+        n_total <- length(unique(groups))
+        logger::log_info(
+            "Donor {donor}: {sum(informative_snps)} informative SNPs, {sum(nonzero)}/{n_total} clonotypes retained"
+        )
+    } else {
+        logger::log_info(
+            "Donor {donor}: {sum(informative_snps)} informative SNPs, {sum(nonzero)} cells retained"
+        )
+    }
+
+    expr_matrix[, nonzero, drop = FALSE]
+}
+
+# ----------------------------------------------------------------------------
+# Helpers — EM algorithm
+# ----------------------------------------------------------------------------
+
+.infer_xci <- function(
+    ref_mat,
+    alt_mat,
+    n_inits = 10,
+    confidence_threshold = 0.95,
+    min_cells = 10,
+    min_cov = 1,
+    refit_after_filter = FALSE
+) {
+    keep_outlier <- .filter_outlier_genes(ref_mat, alt_mat, min_cells, min_cov)
+    ref_mat <- ref_mat[keep_outlier, , drop = FALSE]
+    alt_mat <- alt_mat[keep_outlier, , drop = FALSE]
+
+    dat <- .pivot_counts_to_long(ref_mat, alt_mat, min_cov)
+    n_genes <- nrow(ref_mat)
+
+    fits <- lapply(seq_len(n_inits), function(s) .run_em(dat, n_genes, init_seed = s))
+    best <- fits[[which.max(sapply(fits, `[[`, "ll"))]]
+
+    # Post-convergence escapee filter: genes with LLR <= 0 are inconsistent with
+    # current cell assignments; MAD filter on pi_g removes outlier escape fractions.
+    keep_escapee <- .filter_escapee_genes(dat, n_genes, best$h_g, best$pi_g, best$rho, best$post)
+    if (refit_after_filter && !all(keep_escapee)) {
+        # Re-run EM on the cleaned gene set for sharper posteriors.
+        n_removed <- sum(!keep_escapee)
+        logger::log_info("Removing {n_removed} escape genes after initial EM; re-running")
+
+        gene_indices <- which(keep_escapee)
+        dat <- dat %>%
+            dplyr::filter(gene %in% gene_indices) %>%
+            dplyr::mutate(gene = match(gene, gene_indices))
+        n_genes <- length(gene_indices)
+
+        fits <- lapply(seq_len(n_inits), function(s) .run_em(dat, n_genes, init_seed = s))
+        best <- fits[[which.max(sapply(fits, `[[`, "ll"))]]
+    }
+
+    best$post <- best$post %>%
+        dplyr::mutate(
+            assignment = dplyr::case_when(
+                post_X1 >= confidence_threshold ~ "X1",
+                post_X1 <= 1 - confidence_threshold ~ "X2",
+                TRUE ~ "unassigned"
+            )
+        )
+
+    # gene_keep: logical of length nrow(original ref_mat), TRUE = gene survived
+    # both the outlier filter and the post-convergence escapee filter
+    gene_keep <- keep_outlier
+    gene_keep[keep_outlier] <- keep_escapee
+
+    c(best, list(gene_keep = gene_keep))
+}
+
+.compute_gene_llr <- function(dat, post, h_g, pi_g, rho) {
+    p_if_X1 <- ifelse(h_g[dat$gene] == 0, pi_g[dat$gene], 1 - pi_g[dat$gene])
+    p_if_X2 <- 1 - p_if_X1
+
+    ll_X1 <- .loglik_obs(dat$ref, dat$n, p_if_X1, rho)
+    ll_X2 <- .loglik_obs(dat$ref, dat$n, p_if_X2, rho)
+
+    dat %>%
+        dplyr::left_join(post %>% dplyr::select(cell, post_X1), by = "cell") %>%
+        # Expected LLR per observation: weighted by P(X1-inactive) for each cell.
+        # Positive contribution means the observation is consistent with current assignments.
+        dplyr::mutate(llr = post_X1 * (ll_X1 - ll_X2)) %>%
+        dplyr::group_by(gene) %>%
+        dplyr::summarise(llr = sum(llr), .groups = "drop")
+}
+
+.filter_escapee_genes <- function(dat, n_genes, h_g, pi_g, rho, post, mad_threshold = 2) {
+    gene_llr <- .compute_gene_llr(dat, post, h_g, pi_g, rho)
+
+    # Genes absent from dat have no observations above min_cov — exclude them
+    keep_llr <- rep(FALSE, n_genes)
+    keep_llr[gene_llr$gene[gene_llr$llr > 0]] <- TRUE # LLR > 0: data supports current assignment
+
+    # Secondary pass: remove genes with unusually high escape fraction relative
+    # to the rest of the sample. Guard against zero MAD (all pi_g identical).
+    pi_mad <- stats::mad(pi_g)
+    keep_pi <- if (pi_mad > 0) {
+        # Robust z-score relative to the sample's own escape distribution
+        (pi_g - stats::median(pi_g)) / pi_mad <= mad_threshold
+    } else {
+        rep(TRUE, n_genes) # all pi_g identical — no outliers possible
+    }
+
+    keep_llr & keep_pi
+}
+
+.run_em <- function(dat, n_genes, max_iter = 50, tol = 1e-4, init_seed = 1) {
+    set.seed(init_seed)
+    h_g <- sample(0:1, n_genes, replace = TRUE) # random phase initialisation
+    pi_g <- rep(0.05, n_genes) # start conservatively: assume 5% escape fraction
+    rho <- 0.05 # fixed beta-binomial overdispersion
+
+    ll_prev <- -Inf
+    for (iter in seq_len(max_iter)) {
+        post <- .e_step(dat, h_g, pi_g, rho)
+        h_g <- .m_step_phase(dat, post, pi_g, rho, h_g)
+        pi_g <- .m_step_pi(dat, post, h_g)
+        # log-sum-exp trick: log(1 + exp(lor)) in numerically stable form
+        ll_current <- sum(log1p(exp(-abs(post$lor))) + pmax(post$lor, 0))
+        if (abs(ll_current - ll_prev) < tol) {
+            break
+        }
+        ll_prev <- ll_current
+    }
+    list(post = post, h_g = h_g, pi_g = pi_g, rho = rho, ll = ll_current)
+}
+
+.e_step <- function(dat, h_g, pi_g, rho, prior = 0.5) {
+    # p(REF | X1 inactive): if h=0 (X1 carries REF), REF is silenced → pi_g (small)
+    #                        if h=1 (X1 carries ALT), REF is active  → 1 - pi_g (large)
+    p_if_X1 <- ifelse(h_g[dat$gene] == 0, pi_g[dat$gene], 1 - pi_g[dat$gene])
+    p_if_X2 <- 1 - p_if_X1 # p(REF | X2 inactive) is the complement by symmetry
+
+    ll_X1 <- .loglik_obs(dat$ref, dat$n, p_if_X1, rho)
+    ll_X2 <- .loglik_obs(dat$ref, dat$n, p_if_X2, rho)
+
+    logit_prior <- log(prior / (1 - prior)) # log(1) = 0 for equal prior
+    cell_ll <- dat %>%
+        dplyr::mutate(ll_X1 = ll_X1, ll_X2 = ll_X2) %>%
+        dplyr::group_by(cell) %>%
+        dplyr::summarise(sum_X1 = sum(ll_X1), sum_X2 = sum(ll_X2), .groups = "drop")
+
+    # log-odds ratio: Σ_g [loglik(X1) - loglik(X2)] + logit(prior)
+    lor <- cell_ll$sum_X1 - cell_ll$sum_X2 + logit_prior
+    cell_ll$post_X1 <- 1 / (1 + exp(-lor)) # sigmoid converts LOR to posterior
+    cell_ll$lor <- lor
+    cell_ll
+}
+
+.m_step_phase <- function(dat, post, pi_g, rho, h_g) {
+    dat2 <- dat %>%
+        dplyr::left_join(post %>% dplyr::select(cell, post_X1), by = "cell")
+
+    # Expected log-likelihood under each phase: E_q[log p(ref | h, pi_g)]
+    # h=0: X1-inactive cells (weight post_X1) see REF fraction pi_g (silenced);
+    #       X2-inactive cells (weight 1-post_X1) see REF fraction 1 - pi_g (active)
+    # h=1: REF and ALT roles are swapped
+    ll_by_gene <- dat2 %>%
+        dplyr::group_by(gene) %>%
+        dplyr::summarise(
+            ll_h0 = sum(
+                post_X1 *
+                    VGAM::dbetabinom(ref, n, pi_g[gene[1]], rho, log = TRUE) +
+                    (1 - post_X1) * VGAM::dbetabinom(ref, n, 1 - pi_g[gene[1]], rho, log = TRUE)
+            ),
+            ll_h1 = sum(
+                post_X1 *
+                    VGAM::dbetabinom(ref, n, 1 - pi_g[gene[1]], rho, log = TRUE) +
+                    (1 - post_X1) * VGAM::dbetabinom(ref, n, pi_g[gene[1]], rho, log = TRUE)
+            ),
+            .groups = "drop"
+        )
+
+    h_g_new <- h_g
+    h_g_new[ll_by_gene$gene] <- as.integer(ll_by_gene$ll_h1 > ll_by_gene$ll_h0)
+    h_g_new
+}
+
+.m_step_pi <- function(dat, post, h_g, pi_bounds = c(0.001, 0.499)) {
+    dat2 <- dat %>%
+        dplyr::left_join(post %>% dplyr::select(cell, post_X1), by = "cell") %>%
+        dplyr::mutate(
+            # Soft-assigned inactive-allele read count:
+            # h=0 (X1 carries REF): X1-inactive cells contribute REF, X2-inactive contribute ALT
+            # h=1 (X1 carries ALT): roles reversed
+            xi_ref_count = ifelse(
+                h_g[gene] == 0,
+                post_X1 * ref + (1 - post_X1) * alt,
+                post_X1 * alt + (1 - post_X1) * ref
+            ),
+            xi_total = n
+        )
+
+    # MLE: inactive-allele fraction = (soft inactive reads) / (total reads)
+    pi_new <- dat2 %>%
+        dplyr::group_by(gene) %>%
+        dplyr::summarise(pi = sum(xi_ref_count) / sum(xi_total), .groups = "drop")
+
+    pi_g_new <- rep(0.05, length(h_g))
+    # Clamp to (0.001, 0.499) so pi_g stays interpretable as a minor fraction
+    pi_g_new[pi_new$gene] <- pmax(pi_bounds[1], pmin(pi_bounds[2], pi_new$pi))
+    pi_g_new
+}
+
+.loglik_obs <- function(ref, n, p, rho) {
+    # Beta-binomial: rho > 0 adds overdispersion relative to binomial; rho = 0 reduces to binomial
+    VGAM::dbetabinom(ref, size = n, prob = p, rho = rho, log = TRUE)
+}
+
+.filter_outlier_genes <- function(ref_mat, alt_mat, min_cells = 10, min_cov = 1, mad_threshold = 2) {
+    # Coverage per cell-gene pair
+    n_mat <- ref_mat + alt_mat
+    covered <- n_mat >= min_cov
+
+    # Per gene: how many cells have sufficient coverage, and how many of those are REF-majority
+    n_expressing <- rowSums(covered)
+    ref_majority <- rowSums(covered & (ref_mat > alt_mat))
+
+    # Drop genes seen in too few cells — not enough information to estimate allelic skew
+    keep_by_count <- n_expressing >= min_cells
+
+    # Allelic skew: fraction of covered cells where REF > ALT, folded to [0.5, 1]
+    # so that genes skewed toward either allele score equally high
+    skew <- ref_majority[keep_by_count] / n_expressing[keep_by_count]
+    skew <- pmax(skew, 1 - skew)
+
+    # Robust z-score: genes with unusually extreme skew relative to the rest are
+    # likely systematic (e.g. mapping bias, escape from XCI) rather than informative
+    z <- (skew - stats::median(skew)) / stats::mad(skew)
+    not_outlier <- abs(z) <= mad_threshold
+
+    keep <- rep(FALSE, nrow(ref_mat))
+    keep[keep_by_count] <- not_outlier
+    keep
+}
+
+.pivot_counts_to_long <- function(ref_mat, alt_mat, min_cov = 3) {
+    n_mat <- ref_mat + alt_mat
+    # Matrix::which handles sparse lgCMatrix; base which() does not dispatch S4
+    idx <- Matrix::which(n_mat >= min_cov, arr.ind = TRUE)
+    tibble::tibble(
+        gene = idx[, 1],
+        cell = idx[, 2],
+        ref = ref_mat[idx],
+        alt = alt_mat[idx],
+        n = n_mat[idx]
+    )
+}

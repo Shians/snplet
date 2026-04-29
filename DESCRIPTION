@@ -39,7 +39,8 @@ Imports:
     scales,
     stringr,
     tibble,
-    tidyr
+    tidyr,
+    VGAM
 Suggests:
     ComplexHeatmap,
     testthat,
