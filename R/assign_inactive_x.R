@@ -367,8 +367,8 @@ plot_inactive_x_assignment_heatmap <- function(fit, donor) {
     haplotypes <- tibble::tibble(
         snp_id = snp_info_filtered$snp_id,
         gene_name = snp_info_filtered$gene_name,
-        allele_on_x1 = ifelse(xci_result$h_g == 0, "REF", "ALT"),
-        pi_g = xci_result$pi_g
+        allele_on_x1 = ifelse(xci_result$h_g == 0, "REF", "ALT")[xci_result$gene_keep],
+        pi_g = xci_result$pi_g[xci_result$gene_keep]
     )
 
     ref_mat_filtered <- ref_mat[xci_result$gene_keep, , drop = FALSE]
