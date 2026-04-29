@@ -61,20 +61,24 @@ setMethod(
     signature(x = "SNPData"),
     function(x, n_inits = 10, confidence_threshold = 0.95, refit_after_filter = FALSE) {
         unique_donors <- sort(unique(get_barcode_info(x)$donor))
-        result <- purrr::map(unique_donors, function(d) {
-            tryCatch(
-                .assign_inactive_x_single_donor(
-                    filter_samples(x, donor == d),
-                    n_inits,
-                    confidence_threshold,
-                    refit_after_filter
-                ),
-                error = function(e) {
-                    logger::log_warn("Failed to assign inactive X for donor {d}: {conditionMessage(e)}")
-                    tibble::tibble(cell_id = character(), inactive_x = character())
-                }
-            )
-        }) %>%
+        result <- furrr::future_map(
+            unique_donors,
+            function(d) {
+                tryCatch(
+                    .assign_inactive_x_single_donor(
+                        filter_samples(x, donor == d),
+                        n_inits,
+                        confidence_threshold,
+                        refit_after_filter
+                    ),
+                    error = function(e) {
+                        logger::log_warn("Failed to assign inactive X for donor {d}: {conditionMessage(e)}")
+                        tibble::tibble(cell_id = character(), inactive_x = character())
+                    }
+                )
+            },
+            .options = furrr::furrr_options(packages = "snplet", seed = TRUE)
+        ) %>%
             dplyr::bind_rows()
         add_barcode_metadata(x, result)
     }
@@ -160,20 +164,24 @@ setMethod(
             )
         }
         unique_donors <- sort(unique(get_barcode_info(x)$donor))
-        result <- purrr::map(unique_donors, function(d) {
-            tryCatch(
-                .assign_inactive_x_single_donor_by_clonotype(
-                    filter_samples(x, donor == d),
-                    n_inits,
-                    confidence_threshold,
-                    refit_after_filter
-                ),
-                error = function(e) {
-                    logger::log_warn("Failed to assign inactive X for donor {d}: {conditionMessage(e)}")
-                    tibble::tibble(cell_id = character(), inactive_x = character())
-                }
-            )
-        }) %>%
+        result <- furrr::future_map(
+            unique_donors,
+            function(d) {
+                tryCatch(
+                    .assign_inactive_x_single_donor_by_clonotype(
+                        filter_samples(x, donor == d),
+                        n_inits,
+                        confidence_threshold,
+                        refit_after_filter
+                    ),
+                    error = function(e) {
+                        logger::log_warn("Failed to assign inactive X for donor {d}: {conditionMessage(e)}")
+                        tibble::tibble(cell_id = character(), inactive_x = character())
+                    }
+                )
+            },
+            .options = furrr::furrr_options(packages = "snplet", seed = TRUE)
+        ) %>%
             dplyr::bind_rows()
         add_barcode_metadata(x, result)
     }
@@ -221,15 +229,19 @@ setMethod(
     function(x, n_inits = 10, confidence_threshold = 0.95, refit_after_filter = FALSE) {
         unique_donors <- sort(unique(get_barcode_info(x)$donor))
 
-        result <- purrr::map(unique_donors, function(d) {
-            tryCatch(
-                .fit_xci_donor(filter_samples(x, donor == d), n_inits, confidence_threshold, refit_after_filter),
-                error = function(e) {
-                    logger::log_warn("Failed to fit XCI for donor {d}: {conditionMessage(e)}")
-                    NULL
-                }
-            )
-        }) %>%
+        result <- furrr::future_map(
+            unique_donors,
+            function(d) {
+                tryCatch(
+                    .fit_xci_donor(filter_samples(x, donor == d), n_inits, confidence_threshold, refit_after_filter),
+                    error = function(e) {
+                        logger::log_warn("Failed to fit XCI for donor {d}: {conditionMessage(e)}")
+                        NULL
+                    }
+                )
+            },
+            .options = furrr::furrr_options(packages = "snplet", seed = TRUE)
+        ) %>%
             magrittr::set_names(unique_donors)
 
         structure(result, class = "xci_fit")

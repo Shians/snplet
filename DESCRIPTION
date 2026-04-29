@@ -32,6 +32,8 @@ Imports:
     magrittr,
     mclust,
     plyranges,
+    furrr,
+    future,
     purrr,
     R.utils,
     readr,

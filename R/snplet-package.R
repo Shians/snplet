@@ -21,6 +21,8 @@
 #' @importFrom readr read_tsv read_csv write_tsv write_csv cols col_character col_integer
 #' @importFrom plyranges as_granges join_overlap_left
 #' @importFrom fs path
+#' @importFrom furrr future_map
+#' @importFrom future nbrOfWorkers
 #' @importFrom purrr map map2_dbl
 #' @importFrom R.utils gzip
 #' @importFrom grid unit
