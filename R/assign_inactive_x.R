@@ -56,20 +56,29 @@ setGeneric("assign_inactive_x", function(x, n_inits = 10, confidence_threshold =
 
 #' @rdname assign_inactive_x
 #' @include SNPData-class.R
-setMethod("assign_inactive_x", signature(x = "SNPData"), function(x, n_inits = 10, confidence_threshold = 0.95, refit_after_filter = FALSE) {
-    unique_donors <- sort(unique(get_barcode_info(x)$donor))
-    result <- purrr::map(unique_donors, function(d) {
-        tryCatch(
-            .assign_inactive_x_single_donor(filter_samples(x, donor == d), n_inits, confidence_threshold, refit_after_filter),
-            error = function(e) {
-                logger::log_warn("Failed to assign inactive X for donor {d}: {conditionMessage(e)}")
-                tibble::tibble(cell_id = character(), inactive_x = character())
-            }
-        )
-    }) %>%
-        dplyr::bind_rows()
-    add_barcode_metadata(x, result)
-})
+setMethod(
+    "assign_inactive_x",
+    signature(x = "SNPData"),
+    function(x, n_inits = 10, confidence_threshold = 0.95, refit_after_filter = FALSE) {
+        unique_donors <- sort(unique(get_barcode_info(x)$donor))
+        result <- purrr::map(unique_donors, function(d) {
+            tryCatch(
+                .assign_inactive_x_single_donor(
+                    filter_samples(x, donor == d),
+                    n_inits,
+                    confidence_threshold,
+                    refit_after_filter
+                ),
+                error = function(e) {
+                    logger::log_warn("Failed to assign inactive X for donor {d}: {conditionMessage(e)}")
+                    tibble::tibble(cell_id = character(), inactive_x = character())
+                }
+            )
+        }) %>%
+            dplyr::bind_rows()
+        add_barcode_metadata(x, result)
+    }
+)
 
 #' Assign inactive X chromosome to cells by clonotype
 #'
@@ -126,9 +135,12 @@ setMethod("assign_inactive_x", signature(x = "SNPData"), function(x, n_inits = 1
 #' get_barcode_info(snp_data) %>%
 #'   count(donor, clonotype, inactive_x)
 #' }
-setGeneric("assign_inactive_x_by_clonotype", function(x, n_inits = 10, confidence_threshold = 0.95, refit_after_filter = FALSE) {
-    standardGeneric("assign_inactive_x_by_clonotype")
-})
+setGeneric(
+    "assign_inactive_x_by_clonotype",
+    function(x, n_inits = 10, confidence_threshold = 0.95, refit_after_filter = FALSE) {
+        standardGeneric("assign_inactive_x_by_clonotype")
+    }
+)
 
 #' @rdname assign_inactive_x_by_clonotype
 #' @include SNPData-class.R
@@ -150,7 +162,12 @@ setMethod(
         unique_donors <- sort(unique(get_barcode_info(x)$donor))
         result <- purrr::map(unique_donors, function(d) {
             tryCatch(
-                .assign_inactive_x_single_donor_by_clonotype(filter_samples(x, donor == d), n_inits, confidence_threshold, refit_after_filter),
+                .assign_inactive_x_single_donor_by_clonotype(
+                    filter_samples(x, donor == d),
+                    n_inits,
+                    confidence_threshold,
+                    refit_after_filter
+                ),
                 error = function(e) {
                     logger::log_warn("Failed to assign inactive X for donor {d}: {conditionMessage(e)}")
                     tibble::tibble(cell_id = character(), inactive_x = character())
@@ -198,22 +215,26 @@ setGeneric("fit_inactive_x", function(x, n_inits = 10, confidence_threshold = 0.
 
 #' @rdname fit_inactive_x
 #' @include SNPData-class.R
-setMethod("fit_inactive_x", signature(x = "SNPData"), function(x, n_inits = 10, confidence_threshold = 0.95, refit_after_filter = FALSE) {
-    unique_donors <- sort(unique(get_barcode_info(x)$donor))
+setMethod(
+    "fit_inactive_x",
+    signature(x = "SNPData"),
+    function(x, n_inits = 10, confidence_threshold = 0.95, refit_after_filter = FALSE) {
+        unique_donors <- sort(unique(get_barcode_info(x)$donor))
 
-    result <- purrr::map(unique_donors, function(d) {
-        tryCatch(
-            .fit_xci_donor(filter_samples(x, donor == d), n_inits, confidence_threshold, refit_after_filter),
-            error = function(e) {
-                logger::log_warn("Failed to fit XCI for donor {d}: {conditionMessage(e)}")
-                NULL
-            }
-        )
-    }) %>%
-        magrittr::set_names(unique_donors)
+        result <- purrr::map(unique_donors, function(d) {
+            tryCatch(
+                .fit_xci_donor(filter_samples(x, donor == d), n_inits, confidence_threshold, refit_after_filter),
+                error = function(e) {
+                    logger::log_warn("Failed to fit XCI for donor {d}: {conditionMessage(e)}")
+                    NULL
+                }
+            )
+        }) %>%
+            magrittr::set_names(unique_donors)
 
-    structure(result, class = "xci_fit")
-})
+        structure(result, class = "xci_fit")
+    }
+)
 
 #' Extract cell assignments from an XCI fit
 #'
@@ -314,7 +335,6 @@ plot_inactive_x_assignment_heatmap <- function(fit, donor) {
     )
 }
 
-
 .fit_xci_donor <- function(snp_data, n_inits = 10, confidence_threshold = 0.95, refit_after_filter = FALSE) {
     donor <- unique(get_barcode_info(snp_data)$donor)
     logger::log_info("Fitting XCI model for donor {donor}")
@@ -331,7 +351,13 @@ plot_inactive_x_assignment_heatmap <- function(fit, donor) {
         return(NULL)
     }
 
-    res <- .infer_xci(ref_mat, alt_mat, n_inits = n_inits, confidence_threshold = confidence_threshold, refit_after_filter = refit_after_filter)
+    res <- .infer_xci(
+        ref_mat,
+        alt_mat,
+        n_inits = n_inits,
+        confidence_threshold = confidence_threshold,
+        refit_after_filter = refit_after_filter
+    )
 
     assignments <- res$post %>%
         dplyr::mutate(cell_id = cell_ids[cell], post_X2 = 1 - post_X1) %>%
@@ -361,15 +387,27 @@ plot_inactive_x_assignment_heatmap <- function(fit, donor) {
     )
 }
 
-.assign_inactive_x_single_donor <- function(snp_data, n_inits = 10, confidence_threshold = 0.95, refit_after_filter = FALSE) {
+.assign_inactive_x_single_donor <- function(
+    snp_data,
+    n_inits = 10,
+    confidence_threshold = 0.95,
+    refit_after_filter = FALSE
+) {
     fit <- .fit_xci_donor(snp_data, n_inits, confidence_threshold, refit_after_filter)
-    if (is.null(fit)) return(tibble::tibble(cell_id = character(), inactive_x = character()))
+    if (is.null(fit)) {
+        return(tibble::tibble(cell_id = character(), inactive_x = character()))
+    }
     fit$assignments %>%
         dplyr::filter(assignment != "unassigned") %>%
         dplyr::select(cell_id, inactive_x = assignment)
 }
 
-.assign_inactive_x_single_donor_by_clonotype <- function(snp_data, n_inits = 10, confidence_threshold = 0.95, refit_after_filter = FALSE) {
+.assign_inactive_x_single_donor_by_clonotype <- function(
+    snp_data,
+    n_inits = 10,
+    confidence_threshold = 0.95,
+    refit_after_filter = FALSE
+) {
     donor <- unique(get_barcode_info(snp_data)$donor)
     logger::log_info("Assigning inactive X for donor {donor} at clonotype level")
 
@@ -392,7 +430,13 @@ plot_inactive_x_assignment_heatmap <- function(fit, donor) {
         return(tibble::tibble(cell_id = character(), inactive_x = character()))
     }
 
-    res <- .infer_xci(ref_mat, alt_mat, n_inits = n_inits, confidence_threshold = confidence_threshold, refit_after_filter = refit_after_filter)
+    res <- .infer_xci(
+        ref_mat,
+        alt_mat,
+        n_inits = n_inits,
+        confidence_threshold = confidence_threshold,
+        refit_after_filter = refit_after_filter
+    )
 
     clonotype_assignment <- res$post %>%
         dplyr::filter(assignment != "unassigned") %>%
@@ -405,10 +449,6 @@ plot_inactive_x_assignment_heatmap <- function(fit, donor) {
         dplyr::inner_join(clonotype_assignment, by = "clonotype", multiple = "first") %>%
         dplyr::select(cell_id, inactive_x)
 }
-
-# ----------------------------------------------------------------------------
-# Helpers — data preparation
-# ----------------------------------------------------------------------------
 
 .filter_to_informative_het_snps <- function(snp_data) {
     het_snp_ids <- snp_data %>%
@@ -481,10 +521,6 @@ plot_inactive_x_assignment_heatmap <- function(fit, donor) {
 
     expr_matrix[, nonzero, drop = FALSE]
 }
-
-# ----------------------------------------------------------------------------
-# Helpers — EM algorithm
-# ----------------------------------------------------------------------------
 
 .infer_xci <- function(
     ref_mat,
