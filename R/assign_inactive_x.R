@@ -586,8 +586,9 @@ plot_inactive_x_assignment_heatmap <- function(fit, donor) {
         post <- .e_step(dat, h_g, pi_g, rho)
         h_g <- .m_step_phase(dat, post, pi_g, rho, h_g)
         pi_g <- .m_step_pi(dat, post, h_g)
-        # log-sum-exp trick: log(1 + exp(lor)) in numerically stable form
-        ll_current <- sum(log1p(exp(-abs(post$lor))) + pmax(post$lor, 0))
+        # log-likelihood: sum of log(sigmoid(lor)) for each cell
+        # Numerically stable: log(sigmoid(lor)) = pmin(0, lor) - log(1 + exp(-|lor|))
+        ll_current <- sum(pmin(0, post$lor) - log1p(exp(-abs(post$lor))))
         if (abs(ll_current - ll_prev) < tol) {
             break
         }
