@@ -584,8 +584,7 @@ plot_inactive_x_assignment_heatmap <- function(fit, donor) {
 }
 
 .run_em <- function(dat, n_genes, max_iter = 50, tol = 1e-4, init_seed = 1) {
-    set.seed(init_seed)
-    h_g <- sample(0:1, n_genes, replace = TRUE) # random phase initialisation
+    h_g <- withr::with_seed(init_seed, sample(0:1, n_genes, replace = TRUE)) # random phase initialisation
     pi_g <- rep(0.05, n_genes) # start conservatively: assume 5% escape fraction
     rho <- 0.05 # fixed beta-binomial overdispersion
 
