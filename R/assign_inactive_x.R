@@ -708,9 +708,15 @@ plot_inactive_x_assignment_heatmap <- function(fit, donor) {
     skew <- pmax(skew, 1 - skew)
 
     # Robust z-score: genes with unusually extreme skew relative to the rest are
-    # likely systematic (e.g. mapping bias, escape from XCI) rather than informative
-    z <- (skew - stats::median(skew)) / stats::mad(skew)
-    passes_skew_filter <- abs(z) <= mad_threshold
+    # likely systematic (e.g. mapping bias, escape from XCI) rather than informative.
+    # Guard against zero MAD (all skew values identical).
+    skew_mad <- stats::mad(skew)
+    passes_skew_filter <- if (skew_mad > 0) {
+        z <- (skew - stats::median(skew)) / skew_mad
+        abs(z) <= mad_threshold
+    } else {
+        rep(TRUE, length(skew)) # all skew identical — no outliers possible
+    }
 
     keep <- rep(FALSE, nrow(ref_mat))
     keep[passes_count_filter] <- passes_skew_filter
