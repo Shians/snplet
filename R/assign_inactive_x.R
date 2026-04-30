@@ -294,6 +294,7 @@ xci_haplotypes <- function(fit) {
 #'
 #' @return A ComplexHeatmap object
 #'
+#' @importFrom circlize colorRamp2
 #' @export
 plot_inactive_x_assignment_heatmap <- function(fit, donor) {
     stopifnot(inherits(fit, "xci_fit"))
