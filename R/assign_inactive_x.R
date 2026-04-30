@@ -479,12 +479,6 @@ plot_inactive_x_assignment_heatmap <- function(fit, donor) {
         filter_snps(snp_id %in% top_snp_per_gene$snp_id)
 }
 
-.get_informative_snps <- function(coverage_mat, min_coverage, min_sample_prop) {
-    barcodes_with_sufficient_coverage <- rowSums(coverage_mat >= min_coverage)
-    barcode_threshold <- ncol(coverage_mat) * min_sample_prop
-    barcodes_with_sufficient_coverage >= barcode_threshold
-}
-
 .infer_xci <- function(
     ref_mat,
     alt_mat,
