@@ -458,7 +458,7 @@ plot_inactive_x_assignment_heatmap <- function(fit, donor) {
     # Project clonotype assignments back to cells
     barcode_info <- get_barcode_info(snp_data)
     dplyr::select(barcode_info, cell_id, clonotype) %>%
-        dplyr::inner_join(clonotype_assignment, by = "clonotype", multiple = "first") %>%
+        dplyr::inner_join(clonotype_assignment, by = "clonotype") %>%
         dplyr::select(cell_id, inactive_x)
 }
 
