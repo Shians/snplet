@@ -507,6 +507,8 @@ plot_inactive_x_assignment_heatmap <- function(fit, donor) {
     # Post-convergence escapee filter: genes with LLR <= 0 are inconsistent with
     # current cell assignments; MAD filter on pi_g removes outlier escape fractions.
     passes_escapee_filter <- .filter_escapee_genes(dat, n_genes, best$h_g, best$pi_g, best$rho, best$post)
+    escaped_gene_indices <- which(passes_escapee_filter)
+
     if (refit_after_filter && !all(passes_escapee_filter)) {
         # Re-run EM on the cleaned gene set for sharper posteriors.
         n_removed <- sum(!passes_escapee_filter)
@@ -520,6 +522,9 @@ plot_inactive_x_assignment_heatmap <- function(fit, donor) {
 
         fits <- lapply(seq_len(n_inits), function(s) .run_em(dat, n_genes, init_seed = s))
         best <- fits[[which.max(sapply(fits, `[[`, "ll"))]]
+
+        # After refit, all genes in dat passed the escapee filter, so mark them all TRUE
+        passes_escapee_filter <- rep(TRUE, n_genes)
     }
 
     best$post <- best$post %>%
@@ -534,7 +539,13 @@ plot_inactive_x_assignment_heatmap <- function(fit, donor) {
     # gene_keep: logical of length nrow(original ref_mat), TRUE = gene survived
     # both the outlier filter and the post-convergence escapee filter
     gene_keep <- passes_outlier_filter
-    gene_keep[passes_outlier_filter] <- passes_escapee_filter
+    if (refit_after_filter) {
+        # Map filtered gene indices back to original space
+        gene_keep[escaped_gene_indices] <- passes_escapee_filter
+    } else {
+        # Direct assignment works when no refit (passes_escapee_filter has same length as filtered genes)
+        gene_keep[passes_outlier_filter] <- passes_escapee_filter
+    }
 
     c(best, list(gene_keep = gene_keep))
 }
