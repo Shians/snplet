@@ -379,8 +379,8 @@ plot_inactive_x_assignment_heatmap <- function(fit, donor) {
     haplotypes <- tibble::tibble(
         snp_id = snp_info_filtered$snp_id,
         gene_name = snp_info_filtered$gene_name,
-        allele_on_x1 = ifelse(xci_result$h_g == 0, "REF", "ALT")[xci_result$gene_keep],
-        pi_g = xci_result$pi_g[xci_result$gene_keep]
+        allele_on_x1 = ifelse(xci_result$h_g == 0, "REF", "ALT"),
+        pi_g = xci_result$pi_g
     )
 
     ref_mat_filtered <- ref_mat[xci_result$gene_keep, , drop = FALSE]
@@ -540,6 +540,9 @@ plot_inactive_x_assignment_heatmap <- function(fit, donor) {
         # Direct assignment works when no refit (passes_escapee_filter has same length as filtered genes)
         gene_keep[passes_outlier_filter] <- passes_escapee_filter
     }
+
+    best$h_g  <- best$h_g[passes_escapee_filter]
+    best$pi_g <- best$pi_g[passes_escapee_filter]
 
     c(best, list(gene_keep = gene_keep))
 }
