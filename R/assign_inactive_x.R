@@ -485,55 +485,6 @@ plot_inactive_x_assignment_heatmap <- function(fit, donor) {
     barcodes_with_sufficient_coverage >= barcode_threshold
 }
 
-.prepare_expr_matrix <- function(snp_data, min_coverage = 2, min_sample_prop = 0.01, level = "cell") {
-    donor <- unique(get_barcode_info(snp_data)$donor)
-    is_clonotype_level <- level == "clonotype"
-
-    snp_data <- .filter_to_informative_het_snps(snp_data)
-
-    if (is_clonotype_level) {
-        barcode_info <- get_barcode_info(snp_data)
-        has_clonotype <- !is.na(barcode_info$clonotype)
-        if (!any(has_clonotype)) {
-            stop(glue::glue("No cells with non-NA clonotype values for donor {donor}"))
-        }
-        snp_data <- snp_data[, has_clonotype]
-        clonotypes <- get_barcode_info(snp_data)$clonotype
-        coverage_mat <- groupedRowSums(snplet::coverage(snp_data), clonotypes)
-        expr_matrix <- to_expr_matrix(snp_data, level = "clonotype")
-    } else {
-        coverage_mat <- snplet::coverage(snp_data)
-        expr_matrix <- to_expr_matrix(snp_data)
-    }
-
-    informative_snps <- .get_informative_snps(coverage_mat, min_coverage, min_sample_prop)
-    if (sum(informative_snps) == 0) {
-        logger::log_warn("No informative SNPs found for donor {donor}")
-        return(NULL)
-    }
-
-    expr_matrix <- expr_matrix[informative_snps, , drop = FALSE]
-    has_expression <- colSums(abs(expr_matrix)) > 0
-    if (sum(has_expression) < 2) {
-        sample_unit <- if (is_clonotype_level) "clonotypes" else "cells"
-        logger::log_warn("Fewer than 2 {sample_unit} with non-zero expression for donor {donor}")
-        return(NULL)
-    }
-
-    if (is_clonotype_level) {
-        n_total <- length(unique(clonotypes))
-        logger::log_info(
-            "Donor {donor}: {sum(informative_snps)} informative SNPs, {sum(has_expression)}/{n_total} clonotypes retained"
-        )
-    } else {
-        logger::log_info(
-            "Donor {donor}: {sum(informative_snps)} informative SNPs, {sum(has_expression)} cells retained"
-        )
-    }
-
-    expr_matrix[, has_expression, drop = FALSE]
-}
-
 .infer_xci <- function(
     ref_mat,
     alt_mat,
