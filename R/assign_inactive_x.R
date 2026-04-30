@@ -163,7 +163,7 @@ setMethod(
                 "All clonotype values are NA. Cannot perform clonotype-level X-inactivation assignment. Add clonotype data using add_barcode_metadata() or import_cellsnp() with vdj_file parameter."
             )
         }
-        unique_donors <- sort(unique(get_barcode_info(x)$donor))
+        unique_donors <- sort(unique(barcode_info$donor))
         result <- furrr::future_map(
             unique_donors,
             function(d) {
