@@ -406,17 +406,46 @@ test_that("test_maf handles boundary p parameter values", {
     expect_true(all(result_p_one$p_val >= 0 & result_p_one$p_val <= 1))
 })
 
-test_that("test_maf handles negative count values", {
-    negative_df <- data.frame(
+test_that("test_maf rejects negative ref_count values", {
+    negative_ref_df <- data.frame(
         ref_count = c(-5, 10),
+        alt_count = c(2, 3),
+        total_count = c(12, 20)
+    )
+
+    # Verify error when ref_count is negative
+    expect_error(
+        test_maf(negative_ref_df),
+        "ref_count < 0"
+    )
+})
+
+test_that("test_maf rejects negative alt_count values", {
+    negative_alt_df <- data.frame(
+        ref_count = c(5, 10),
         alt_count = c(2, -3),
         total_count = c(12, 20)
     )
 
-    result <- test_maf(negative_df)
+    # Verify error when alt_count is negative
+    expect_error(
+        test_maf(negative_alt_df),
+        "alt_count < 0"
+    )
+})
 
-    # Verify function processes negative values (behavior may vary)
-    expect_s3_class(result, "data.frame")
+test_that("test_maf rejects negative total_count values", {
+    negative_total_df <- data.frame(
+        ref_count = c(5, 10),
+        alt_count = c(2, 3),
+        total_count = c(12, -20)
+    )
+
+    # Verify error when total_count is negative
+    expect_error(
+        test_maf(negative_total_df),
+        "total_count < 0"
+    )
 })
 
 test_that("test_maf handles non-numeric values in count columns", {

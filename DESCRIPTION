@@ -1,7 +1,7 @@
 Package: snplet
 Type: Package
 Title: Package for handling SNP based allele-specific expression analysis
-Version: 0.3.35
+Version: 0.4.4
 Authors@R: c(
     person(
       "Shian", "Su",
@@ -32,6 +32,8 @@ Imports:
     magrittr,
     mclust,
     plyranges,
+    furrr,
+    future,
     purrr,
     R.utils,
     readr,
@@ -39,9 +41,11 @@ Imports:
     scales,
     stringr,
     tibble,
-    tidyr
-Suggests:
+    tidyr,
+    VGAM,
     ComplexHeatmap,
+    circlize
+Suggests:
     testthat,
     withr
 License: Apache License (>= 2)

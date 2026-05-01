@@ -41,7 +41,9 @@ setMethod("to_expr_matrix", signature(x = "SNPData"), function(x, level = c("bar
 
     if (level != "barcode" && !level %in% colnames(barcode_info)) {
         if (level == "clonotype") {
-            stop("Clonotype information not available. Add clonotype data using add_barcode_metadata() or import_cellsnp() with vdj_file parameter.")
+            stop(
+                "Clonotype information not available. Add clonotype data using add_barcode_metadata() or import_cellsnp() with vdj_file parameter."
+            )
         } else {
             stop("No ", level, " column in barcode_info.")
         }
@@ -57,13 +59,9 @@ setMethod("to_expr_matrix", signature(x = "SNPData"), function(x, level = c("bar
         colnames(mat) <- colnames(ref)
         return(mat)
     } else if (level == "clonotype") {
-        clono <- barcode_info$clonotype
-        # Check if all clonotype values are NA
-        if (all(is.na(clono))) {
-            stop("All clonotype values are NA. Cannot perform clonotype-level aggregation. Add clonotype data using add_barcode_metadata() or import_cellsnp() with vdj_file parameter.")
-        }
-        ref <- groupedRowSums(ref_count(x), clono)
-        alt <- groupedRowSums(alt_count(x), clono)
+        grouped <- .prepare_grouped_counts(x, barcode_info$clonotype, "clonotype")
+        ref <- groupedRowSums(ref_count(grouped$x), grouped$groups)
+        alt <- groupedRowSums(alt_count(grouped$x), grouped$groups)
         depth <- ref + alt
         prop <- (ref - alt) / (depth + 1)
         mat <- prop * log1p(depth)
@@ -71,9 +69,9 @@ setMethod("to_expr_matrix", signature(x = "SNPData"), function(x, level = c("bar
         colnames(mat) <- colnames(ref)
         return(mat)
     } else if (level == "donor") {
-        donor <- barcode_info$donor
-        ref <- groupedRowSums(ref_count(x), donor)
-        alt <- groupedRowSums(alt_count(x), donor)
+        grouped <- .prepare_grouped_counts(x, barcode_info$donor, "donor")
+        ref <- groupedRowSums(ref_count(grouped$x), grouped$groups)
+        alt <- groupedRowSums(alt_count(grouped$x), grouped$groups)
         depth <- ref + alt
         prop <- (ref - alt) / (depth + 1)
         mat <- prop * log1p(depth)
@@ -82,3 +80,25 @@ setMethod("to_expr_matrix", signature(x = "SNPData"), function(x, level = c("bar
         return(mat)
     }
 })
+
+#' @keywords internal
+.prepare_grouped_counts <- function(x, groups, level) {
+    if (all(is.na(groups))) {
+        if (level == "clonotype") {
+            stop(
+                "All clonotype values are NA. Cannot perform clonotype-level aggregation. Add clonotype data using add_barcode_metadata() or import_cellsnp() with vdj_file parameter."
+            )
+        }
+        stop(
+            "All donor values are NA. Cannot perform donor-level aggregation. Add donor data using add_barcode_metadata() or import_cellsnp() with vireo_file parameter."
+        )
+    }
+
+    keep <- !is.na(groups)
+    if (any(!keep)) {
+        x <- x[, keep, drop = FALSE]
+        groups <- groups[keep]
+    }
+
+    list(x = x, groups = groups)
+}

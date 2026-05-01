@@ -22,6 +22,37 @@ test_maf <- function(x, p = 0.10) {
         stop(glue::glue("Missing required columns: {missing_list}"))
     }
 
+    # validate that all counts are non-negative
+    negative_ref <- which(x$ref_count < 0)
+    if (length(negative_ref) > 0) {
+        if (length(negative_ref) <= 5) {
+            row_list <- paste0(negative_ref, collapse = ", ")
+        } else {
+            row_list <- paste0(paste0(head(negative_ref, 5), collapse = ", "), ", ...")
+        }
+        stop(glue::glue("Invalid data: ref_count < 0 in row(s): {row_list}"))
+    }
+
+    negative_alt <- which(x$alt_count < 0)
+    if (length(negative_alt) > 0) {
+        if (length(negative_alt) <= 5) {
+            row_list <- paste0(negative_alt, collapse = ", ")
+        } else {
+            row_list <- paste0(paste0(head(negative_alt, 5), collapse = ", "), ", ...")
+        }
+        stop(glue::glue("Invalid data: alt_count < 0 in row(s): {row_list}"))
+    }
+
+    negative_total <- which(x$total_count < 0)
+    if (length(negative_total) > 0) {
+        if (length(negative_total) <= 5) {
+            row_list <- paste0(negative_total, collapse = ", ")
+        } else {
+            row_list <- paste0(paste0(head(negative_total, 5), collapse = ", "), ", ...")
+        }
+        stop(glue::glue("Invalid data: total_count < 0 in row(s): {row_list}"))
+    }
+
     # validate that ref_count + alt_count <= total_count
     invalid_rows <- which(x$ref_count + x$alt_count > x$total_count)
     if (length(invalid_rows) > 0) {

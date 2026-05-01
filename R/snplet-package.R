@@ -1,7 +1,7 @@
-#' @importFrom Matrix Matrix rowSums colSums readMM writeMM rowMeans sparseMatrix
+#' @importFrom Matrix Matrix rowSums colSums readMM writeMM sparseMatrix
 #' @importFrom dplyr mutate inner_join filter left_join select rename distinct
 #' @importFrom dplyr first summarise if_else count arrange desc slice any_of pull
-#' @importFrom dplyr slice_head slice_sample bind_rows
+#' @importFrom dplyr slice_head slice_sample bind_rows case_when group_by
 #' @importFrom tidyr pivot_longer contains everything
 #' @importFrom tibble as_tibble tibble
 #' @importFrom rlang enquos get_expr
@@ -21,10 +21,13 @@
 #' @importFrom readr read_tsv read_csv write_tsv write_csv cols col_character col_integer
 #' @importFrom plyranges as_granges join_overlap_left
 #' @importFrom fs path
+#' @importFrom furrr future_map
+#' @importFrom future nbrOfWorkers
 #' @importFrom purrr map map2_dbl
 #' @importFrom R.utils gzip
 #' @importFrom grid unit
-#' @importFrom stats median quantile p.adjust pbeta setNames cor as.dist hclust cutree dist
+#' @importFrom VGAM dbetabinom
+#' @importFrom stats median quantile p.adjust pbeta setNames cor as.dist hclust cutree dist mad
 #' @importFrom utils head
 #' @importFrom DelayedArray colsum
 #' @importFrom mclust Mclust predict.Mclust

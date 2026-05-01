@@ -4,11 +4,13 @@ utils::globalVariables(c(
     ".env",
     ".snp_row",
     "adj_p_val",
+    "allele_on_x1",
     "alt",
     "barcode",
     "binom_p_value",
     "cell",
     "cell_id",
+    "gene",
     "chrom",
     "chrom_canonical",
     "clonotype",
@@ -28,6 +30,18 @@ utils::globalVariables(c(
     "p_val",
     "pos",
     "ref",
+    "assignment",
+    "ll_X1",
+    "ll_X2",
+    "llr",
+    "lor",
+    "pi",
+    "post_X1",
+    "post_X2",
+    "sum_X1",
+    "sum_X2",
+    "xi_ref_count",
+    "xi_total",
     "seqnames",
     "signif_snps_clonotype",
     "snp_id",
@@ -57,33 +71,29 @@ percentile_summary <- function(x, percentiles = c(0.1, 0.25, 0.75, 0.9, 0.95, 0.
     out
 }
 
-groupedRowMeans <- function(x, groups) {
-    # calculate the mean of each group
-    out <- matrix(NA, ncol = length(unique(groups)), nrow = nrow(x))
-    colnames(out) <- sort(unique(groups))
-    rownames(out) <- rownames(x)
-
-    for (i in unique(groups)) {
-        out[, i] <- Matrix::rowMeans(
-            x[, groups == i, drop = FALSE],
-            na.rm = TRUE
+groupedRowSums <- function(x, groups) {
+    if (length(groups) != ncol(x)) {
+        stop(
+            "Length of groups must match the number of columns in x. ",
+            "Got ", length(groups), " groups for ", ncol(x), " columns."
         )
     }
 
-    out
-}
+    if (anyNA(groups)) {
+        stop("groups must not contain NA values.")
+    }
 
-groupedRowSums <- function(x, groups) {
-    # calculate the sum of each group
-    out <- matrix(NA, ncol = length(unique(groups)), nrow = nrow(x))
-    colnames(out) <- sort(unique(groups))
-    rownames(out) <- rownames(x)
+    groups <- as.character(groups)
+    group_levels <- sort(unique(groups))
+    out <- matrix(
+        NA_real_,
+        nrow = nrow(x),
+        ncol = length(group_levels),
+        dimnames = list(rownames(x), group_levels)
+    )
 
-    for (i in unique(groups)) {
-        out[, i] <- Matrix::rowSums(
-            x[, groups == i, drop = FALSE],
-            na.rm = TRUE
-        )
+    for (group_name in group_levels) {
+        out[, group_name] <- Matrix::rowSums(x[, groups == group_name, drop = FALSE], na.rm = TRUE)
     }
 
     out
@@ -246,6 +256,7 @@ detect_chr_style <- function(chr_names) {
 #' # Returns c("chr1", "chrX")
 #' }
 #'
+#' @importFrom magrittr set_names
 #' @export
 normalize_chr_names <- function(chr_names, from_style = "auto") {
     if (from_style == "auto") {
@@ -264,7 +275,7 @@ normalize_chr_names <- function(chr_names, from_style = "auto") {
     chr_table <- .load_chr_table()
 
     # Create lookup from from_style -> ucsc (canonical)
-    lookup <- stats::setNames(chr_table$ucsc, chr_table[[from_style]])
+    lookup <- magrittr::set_names(chr_table$ucsc, chr_table[[from_style]])
 
     # Map chromosomes, keeping NA for unmatched values
     normalized <- lookup[chr_names]

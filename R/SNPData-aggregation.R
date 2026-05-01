@@ -61,6 +61,101 @@ setGeneric("barcode_count_df", function(x, test_maf = TRUE) standardGeneric("bar
     result
 }
 
+.prepare_grouped_metadata <- function(barcode_info, group_by) {
+    if (!group_by %in% colnames(barcode_info)) {
+        if (group_by == "donor") {
+            missing_message <- "Donor information not available. Add donor data using add_barcode_metadata() or import_cellsnp() with vireo_file parameter."
+        } else if (group_by == "clonotype") {
+            missing_message <- "Clonotype information not available. Add clonotype data using add_barcode_metadata() or import_cellsnp() with vdj_file parameter."
+        } else {
+            missing_message <- glue::glue("Column '{group_by}' not found in barcode_info.")
+        }
+        stop(missing_message)
+    }
+
+    groups <- barcode_info[[group_by]]
+    if (any(is.na(groups))) {
+        na_count <- sum(is.na(groups))
+        logger::log_warn(
+            "Found {na_count} NA values in '{group_by}' column. These will be excluded from aggregation."
+        )
+        keep_samples <- !is.na(groups)
+        barcode_info <- barcode_info[keep_samples, , drop = FALSE]
+        groups <- groups[keep_samples]
+    }
+
+    if (length(groups) == 0) {
+        if (group_by == "donor") {
+            all_na_message <- "All donor values are NA. Cannot perform donor-level aggregation. Add donor data using add_barcode_metadata() or import_cellsnp() with vireo_file parameter."
+        } else if (group_by == "clonotype") {
+            all_na_message <- "All clonotype values are NA. Cannot perform clonotype-level aggregation. Add clonotype data using add_barcode_metadata() or import_cellsnp() with vdj_file parameter."
+        } else {
+            all_na_message <- glue::glue("All values are NA for '{group_by}'.")
+        }
+        stop(all_na_message)
+    }
+
+    list(barcode_info = barcode_info, groups = groups)
+}
+
+.aggregate_grouped_counts <- function(x, group_by, test_maf = TRUE, add_most_likely_donor = FALSE) {
+    if (add_most_likely_donor && group_by != "clonotype") {
+        stop("add_most_likely_donor is only supported when group_by is 'clonotype'.")
+    }
+
+    barcode_info <- get_barcode_info(x)
+    metadata <- .prepare_grouped_metadata(barcode_info = barcode_info, group_by = group_by)
+
+    logger::log_info("Extracting reference counts")
+    ref_count_grouped <- groupedRowSums(
+        ref_count(x[, metadata$barcode_info$cell_id, drop = FALSE]),
+        metadata$groups
+    )
+    if (group_by == "donor") {
+        ref_count_grouped <- ref_count_grouped[
+            ,
+            !colnames(ref_count_grouped) %in% c("unassigned", "doublet"),
+            drop = FALSE
+        ]
+    }
+
+    logger::log_info("Extracting alternate counts")
+    alt_count_grouped <- groupedRowSums(
+        alt_count(x[, metadata$barcode_info$cell_id, drop = FALSE]),
+        metadata$groups
+    )
+    if (group_by == "donor") {
+        alt_count_grouped <- alt_count_grouped[
+            ,
+            !colnames(alt_count_grouped) %in% c("unassigned", "doublet"),
+            drop = FALSE
+        ]
+    }
+
+    logger::log_info("Processing reference and alternate counts")
+    out <- .build_long_count_df(ref_count_grouped, alt_count_grouped, group_by, get_snp_info(x))
+
+    if (group_by == "clonotype" && isTRUE(add_most_likely_donor)) {
+        most_likely_donor <- barcode_info %>%
+            dplyr::filter(!is.na(clonotype) & !is.na(donor)) %>%
+            dplyr::select(clonotype, donor) %>%
+            dplyr::count(donor, clonotype) %>%
+            dplyr::arrange(dplyr::desc(n), .by = clonotype) %>%
+            dplyr::slice(1, .by = clonotype) %>%
+            dplyr::select(clonotype, donor)
+
+        out <- out %>%
+            dplyr::left_join(most_likely_donor, by = "clonotype")
+    }
+
+    if (isTRUE(test_maf)) {
+        out <- test_maf(out)
+    }
+
+    logger::log_success("{stringr::str_to_title(group_by)} level counts calculated")
+    out
+}
+
 barcode_count_df_impl <- function(x, test_maf = TRUE) {
     logger::log_info("Calculating barcode/cell level counts")
 
@@ -99,32 +194,7 @@ setMethod(
 setGeneric("donor_count_df", function(x, test_maf = TRUE) standardGeneric("donor_count_df"))
 
 donor_count_df_impl <- function(x, test_maf = TRUE) {
-    logger::log_info("Calculating donor level counts")
-
-    logger::log_info("Extracting reference counts")
-    ref_count_grouped <- groupedRowSums(ref_count(x), get_barcode_info(x)$donor)
-    ref_count_grouped <- ref_count_grouped[
-        ,
-        !colnames(ref_count_grouped) %in% c("unassigned", "doublet"),
-        drop = FALSE
-    ]
-
-    logger::log_info("Extracting alternate counts")
-    alt_count_grouped <- groupedRowSums(alt_count(x), get_barcode_info(x)$donor)
-    alt_count_grouped <- alt_count_grouped[
-        ,
-        !colnames(alt_count_grouped) %in% c("unassigned", "doublet"),
-        drop = FALSE
-    ]
-
-    logger::log_info("Processing reference and alternate counts")
-    out <- .build_long_count_df(ref_count_grouped, alt_count_grouped, "donor", get_snp_info(x))
-    if (isTRUE(test_maf)) {
-        out <- test_maf(out)
-    }
-
-    logger::log_success("Donor level counts calculated")
-    out
+    aggregate_count_df(x, "donor", test_maf = test_maf)
 }
 
 #' @rdname donor_count_df
@@ -153,42 +223,7 @@ setMethod(
 setGeneric("clonotype_count_df", function(x, test_maf = TRUE) standardGeneric("clonotype_count_df"))
 
 clonotype_count_df_impl <- function(x, test_maf = TRUE) {
-    logger::log_info("Calculating clonotype level counts")
-
-    # Check if clonotype column exists
-    barcode_info <- get_barcode_info(x)
-    if (!"clonotype" %in% colnames(barcode_info)) {
-        stop("Clonotype information not available. Add clonotype data using add_barcode_metadata() or import_cellsnp() with vdj_file parameter.")
-    }
-
-    # Check if all clonotype values are NA
-    if (all(is.na(barcode_info$clonotype))) {
-        stop("All clonotype values are NA. Cannot perform clonotype-level aggregation. Add clonotype data using add_barcode_metadata() or import_cellsnp() with vdj_file parameter.")
-    }
-
-    logger::log_info("Extracting reference counts")
-    ref_count_grouped <- groupedRowSums(ref_count(x), barcode_info$clonotype)
-
-    logger::log_info("Extracting alternate counts")
-    alt_count_grouped <- groupedRowSums(alt_count(x), barcode_info$clonotype)
-
-    logger::log_info("Processing reference and alternate counts")
-    most_likely_donor <- barcode_info %>%
-        dplyr::filter(!is.na(clonotype) & !is.na(donor)) %>%
-        dplyr::select(clonotype, donor) %>%
-        dplyr::count(donor, clonotype) %>%
-        dplyr::arrange(dplyr::desc(n), .by = clonotype) %>%
-        dplyr::slice(1, .by = clonotype) %>%
-        dplyr::select(clonotype, donor)
-
-    out <- .build_long_count_df(ref_count_grouped, alt_count_grouped, "clonotype", get_snp_info(x)) %>%
-        dplyr::left_join(most_likely_donor, by = "clonotype")
-    if (isTRUE(test_maf)) {
-        out <- test_maf(out)
-    }
-
-    logger::log_success("Clonotype level counts calculated")
-    out
+    aggregate_count_df(x, "clonotype", test_maf = test_maf)
 }
 
 #' @rdname clonotype_count_df
@@ -223,43 +258,21 @@ setGeneric("aggregate_count_df", function(x, group_by, test_maf = TRUE) standard
 
 aggregate_count_df_impl <- function(x, group_by, test_maf = TRUE) {
     logger::log_info("Calculating {group_by} level counts")
-
-    # Check that group_by column exists in barcode_info
-    if (!group_by %in% colnames(get_barcode_info(x))) {
-        available_cols <- paste0(colnames(get_barcode_info(x)), collapse = ", ")
-        stop(glue::glue("Column '{group_by}' not found in barcode_info. Available columns: {available_cols}"))
-    }
-
-    # Get grouping variable
-    groups <- get_barcode_info(x)[[group_by]]
-
-    # Check for missing values in grouping variable
-    if (any(is.na(groups))) {
-        logger::log_warn(
-            "Found {sum(is.na(groups))} NA values in '{group_by}' column. These will be excluded from aggregation."
+    if (group_by == "clonotype") {
+        .aggregate_grouped_counts(
+            x = x,
+            group_by = group_by,
+            test_maf = test_maf,
+            add_most_likely_donor = TRUE
         )
-        # Filter out samples with NA values
-        keep_samples <- !is.na(groups)
-        x_filtered <- x[, keep_samples]
-        groups <- groups[keep_samples]
     } else {
-        x_filtered <- x
+        .aggregate_grouped_counts(
+            x = x,
+            group_by = group_by,
+            test_maf = test_maf,
+            add_most_likely_donor = FALSE
+        )
     }
-
-    logger::log_info("Extracting reference counts")
-    ref_count_grouped <- groupedRowSums(ref_count(x_filtered), groups)
-
-    logger::log_info("Extracting alternate counts")
-    alt_count_grouped <- groupedRowSums(alt_count(x_filtered), groups)
-
-    logger::log_info("Processing reference and alternate counts")
-    out <- .build_long_count_df(ref_count_grouped, alt_count_grouped, group_by, get_snp_info(x_filtered))
-    if (isTRUE(test_maf)) {
-        out <- test_maf(out)
-    }
-
-    logger::log_success("{stringr::str_to_title(group_by)} level counts calculated")
-    out
 }
 
 #' @rdname aggregate_count_df

@@ -390,6 +390,26 @@ test_that("to_expr_matrix() handles all NA donors gracefully", {
     )
 })
 
+test_that("to_expr_matrix() skips partial NA donors", {
+    snp_data <- create_test_snp_data()
+    snp_data@barcode_info$donor[1] <- NA_character_
+
+    result <- to_expr_matrix(snp_data, level = "donor")
+
+    expect_equal(ncol(result), 1)
+    expect_equal(colnames(result), "donor_2")
+})
+
+test_that("to_expr_matrix() skips partial NA clonotypes", {
+    snp_data <- create_test_snp_data()
+    snp_data@barcode_info$clonotype[1] <- NA_character_
+
+    result <- to_expr_matrix(snp_data, level = "clonotype")
+
+    expect_equal(ncol(result), 1)
+    expect_equal(colnames(result), "clonotype_2")
+})
+
 # ==============================================================================
 # Test: Aggregation Produces Fewer Columns Than Input
 # ==============================================================================
