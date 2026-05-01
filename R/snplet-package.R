@@ -1,4 +1,4 @@
-#' @importFrom Matrix Matrix rowSums colSums readMM writeMM rowMeans sparseMatrix
+#' @importFrom Matrix Matrix rowSums colSums readMM writeMM sparseMatrix
 #' @importFrom dplyr mutate inner_join filter left_join select rename distinct
 #' @importFrom dplyr first summarise if_else count arrange desc slice any_of pull
 #' @importFrom dplyr slice_head slice_sample bind_rows case_when group_by
