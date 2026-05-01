@@ -312,6 +312,11 @@ plot_inactive_x_assignment_heatmap <- function(fit, donor) {
     frac_mat <- ref_mat / cov_mat
     frac_mat[cov_mat == 0] <- NA
 
+    # Replace SNP ID row names with gene names
+    haplotypes <- donor_fit$haplotypes
+    gene_name_map <- stats::setNames(haplotypes$gene_name, haplotypes$snp_id)
+    rownames(frac_mat) <- gene_name_map[rownames(frac_mat)]
+
     # Drop rows that are entirely NA — they carry no signal and break hclust
     row_has_data <- rowSums(!is.na(frac_mat)) > 0
     frac_mat <- frac_mat[row_has_data, , drop = FALSE]
@@ -341,7 +346,7 @@ plot_inactive_x_assignment_heatmap <- function(fit, donor) {
         top_annotation = col_ann,
         cluster_columns = FALSE,
         cluster_rows = row_dend,
-        show_row_names = FALSE,
+        show_row_names = TRUE,
         show_column_names = FALSE,
         name = "REF fraction",
         na_col = "grey95"
