@@ -348,6 +348,7 @@ plot_inactive_x_assignment_heatmap <- function(fit, donor) {
     )
 }
 
+#' @keywords internal
 .fit_xci_donor <- function(snp_data, n_inits = 10, confidence_threshold = 0.95, refit_after_filter = FALSE) {
     donor <- unique(get_barcode_info(snp_data)$donor)
     logger::log_info("Fitting XCI model for donor {donor}")
@@ -400,6 +401,7 @@ plot_inactive_x_assignment_heatmap <- function(fit, donor) {
     )
 }
 
+#' @keywords internal
 .assign_inactive_x_single_donor <- function(
     snp_data,
     n_inits = 10,
@@ -415,6 +417,7 @@ plot_inactive_x_assignment_heatmap <- function(fit, donor) {
         dplyr::select(cell_id, inactive_x = assignment)
 }
 
+#' @keywords internal
 .assign_inactive_x_single_donor_by_clonotype <- function(
     snp_data,
     n_inits = 10,
@@ -463,6 +466,7 @@ plot_inactive_x_assignment_heatmap <- function(fit, donor) {
         dplyr::select(cell_id, inactive_x)
 }
 
+#' @keywords internal
 .filter_to_informative_het_snps <- function(snp_data) {
     het_snp_ids <- snp_data %>%
         donor_het_status_df() %>%
@@ -480,6 +484,7 @@ plot_inactive_x_assignment_heatmap <- function(fit, donor) {
         filter_snps(snp_id %in% top_snp_per_gene$snp_id)
 }
 
+#' @keywords internal
 .infer_xci <- function(
     ref_mat,
     alt_mat,
@@ -548,6 +553,7 @@ plot_inactive_x_assignment_heatmap <- function(fit, donor) {
     c(best, list(gene_keep = gene_keep))
 }
 
+#' @keywords internal
 .compute_gene_llr <- function(dat, post, h_g, pi_g, rho) {
     p_if_X1 <- ifelse(h_g[dat$gene] == 0, pi_g[dat$gene], 1 - pi_g[dat$gene])
     p_if_X2 <- 1 - p_if_X1
@@ -564,6 +570,7 @@ plot_inactive_x_assignment_heatmap <- function(fit, donor) {
         dplyr::summarise(llr = sum(llr), .groups = "drop")
 }
 
+#' @keywords internal
 .filter_escapee_genes <- function(dat, n_genes, h_g, pi_g, rho, post, mad_threshold = 2) {
     gene_llr <- .compute_gene_llr(dat, post, h_g, pi_g, rho)
 
@@ -584,6 +591,7 @@ plot_inactive_x_assignment_heatmap <- function(fit, donor) {
     keep_llr & keep_pi
 }
 
+#' @keywords internal
 .run_em <- function(dat, n_genes, max_iter = 50, tol = 1e-4, init_seed = 1) {
     h_g <- withr::with_seed(init_seed, sample(0:1, n_genes, replace = TRUE)) # random phase initialisation
     pi_g <- rep(0.05, n_genes) # start conservatively: assume 5% escape fraction
@@ -605,6 +613,7 @@ plot_inactive_x_assignment_heatmap <- function(fit, donor) {
     list(post = post, h_g = h_g, pi_g = pi_g, rho = rho, ll = ll_current)
 }
 
+#' @keywords internal
 .e_step <- function(dat, h_g, pi_g, rho, prior = 0.5) {
     # p(REF | X1 inactive): if h=0 (X1 carries REF), REF is silenced → pi_g (small)
     #                        if h=1 (X1 carries ALT), REF is active  → 1 - pi_g (large)
@@ -627,6 +636,7 @@ plot_inactive_x_assignment_heatmap <- function(fit, donor) {
     cell_ll
 }
 
+#' @keywords internal
 .m_step_phase <- function(dat, post, pi_g, rho, h_g) {
     counts_with_posterior <- dat %>%
         dplyr::left_join(post %>% dplyr::select(cell, post_X1), by = "cell")
@@ -656,6 +666,7 @@ plot_inactive_x_assignment_heatmap <- function(fit, donor) {
     h_g_new
 }
 
+#' @keywords internal
 .m_step_pi <- function(dat, post, h_g, pi_bounds = c(0.001, 0.499)) {
     counts_with_posterior <- dat %>%
         dplyr::left_join(post %>% dplyr::select(cell, post_X1), by = "cell") %>%
@@ -682,11 +693,13 @@ plot_inactive_x_assignment_heatmap <- function(fit, donor) {
     pi_g_new
 }
 
+#' @keywords internal
 .loglik_obs <- function(ref, n, p, rho) {
     # Beta-binomial: rho > 0 adds overdispersion relative to binomial; rho = 0 reduces to binomial
     VGAM::dbetabinom(ref, size = n, prob = p, rho = rho, log = TRUE)
 }
 
+#' @keywords internal
 .filter_outlier_genes <- function(ref_mat, alt_mat, min_cells = 10, min_cov = 1, mad_threshold = 2) {
     # Coverage per cell-gene pair
     n_mat <- ref_mat + alt_mat
@@ -720,6 +733,7 @@ plot_inactive_x_assignment_heatmap <- function(fit, donor) {
     keep
 }
 
+#' @keywords internal
 .pivot_counts_to_long <- function(ref_mat, alt_mat, min_cov = 3) {
     n_mat <- ref_mat + alt_mat
     # Matrix::which handles sparse lgCMatrix; base which() does not dispatch S4
