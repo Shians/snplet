@@ -131,3 +131,51 @@ test_that("check_file works correctly", {
         "Required file not found:"
     )
 })
+
+test_that("percentile_summary handles extreme percentiles", {
+    # Setup - Test data
+    x <- c(1, 2, 3, 4, 5)
+
+    # Test with all percentiles below 0.5
+    result <- percentile_summary(x, percentiles = c(0.1, 0.2, 0.3, 0.4))
+
+    # Verify median is not included for all-low percentiles
+    expect_false("median" %in% names(result))
+
+    # Verify min and max are always included
+    expect_true("min" %in% names(result))
+    expect_true("max" %in% names(result))
+})
+
+test_that("percentile_summary handles empty input", {
+    # Test with empty vector
+    expect_warning(
+        result <- percentile_summary(numeric(0))
+    )
+
+    # Verify result contains expected structure
+    expect_true(is.numeric(result))
+    expect_true(all(c("min", "median", "max") %in% names(result)))
+})
+
+test_that("groupedRowSums preserves matrix sparsity", {
+    # Setup - Sparse matrix with values
+    sparse_matrix <- Matrix::Matrix(
+        matrix(c(1, 0, 0, 0, 2, 0, 3, 0, 0), nrow = 3, ncol = 3),
+        sparse = TRUE
+    )
+
+    # Test with sparse matrix
+    groups <- c("A", "B", "A")
+    result <- groupedRowSums(sparse_matrix, groups)
+
+    # Verify result structure
+    expect_equal(nrow(result), 3)
+    expect_equal(ncol(result), 2)
+
+    # Verify calculations are correct with sparse matrices
+    # Row 1: A columns (1,3) = 1+3, B column (2) = 0
+    expect_equal(as.numeric(result[1, "A"]), 4)
+    # Row 2: A columns (1,3) = 0+0, B column (2) = 2
+    expect_equal(as.numeric(result[2, "B"]), 2)
+})

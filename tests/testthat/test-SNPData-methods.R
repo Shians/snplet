@@ -1875,3 +1875,48 @@ test_that("get_donor_het_snpdata errors when no heterozygous SNPs remain", {
         "No SNPs remain after filtering"
     )
 })
+
+# ==============================================================================
+# Tests for Edge Cases in Aggregation
+# ==============================================================================
+
+test_that("aggregate_count_df works with custom grouping columns", {
+    # Setup - Add custom grouping column to barcode_info
+    snp_data <- SNPData(
+        alt_count = test_alt_count,
+        ref_count = test_ref_count,
+        snp_info = test_snp_info,
+        barcode_info = cbind(
+            test_barcode_info,
+            custom_group = c("group_A", "group_A")
+        )
+    )
+
+    # Test aggregation by custom column
+    result <- aggregate_count_df(snp_data, "custom_group", test_maf = FALSE)
+
+    # Verify result is a data frame
+    expect_s3_class(result, "data.frame")
+
+    # Verify custom_group column exists in result
+    expect_true("custom_group" %in% colnames(result))
+})
+
+test_that("aggregate_count_df handles all NA values for custom columns", {
+    # Setup - Add custom column with all NA values
+    snp_data <- SNPData(
+        alt_count = test_alt_count,
+        ref_count = test_ref_count,
+        snp_info = test_snp_info,
+        barcode_info = cbind(
+            test_barcode_info,
+            custom_group = c(NA_character_, NA_character_)
+        )
+    )
+
+    # Test that all NA values in custom column raise appropriate error
+    expect_error(
+        aggregate_count_df(snp_data, "custom_group", test_maf = FALSE),
+        "All values are NA for 'custom_group'"
+    )
+})
