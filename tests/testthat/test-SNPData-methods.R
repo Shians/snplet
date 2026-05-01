@@ -22,6 +22,18 @@ create_snpdata_with_na_donor <- function() {
     )
 }
 
+# Helper function to build SNPData with a single NA clonotype for edge cases
+create_snpdata_with_na_clonotype <- function() {
+    barcode_info <- test_barcode_info
+    barcode_info$clonotype[1] <- NA
+    SNPData(
+        alt_count = test_alt_count,
+        ref_count = test_ref_count,
+        snp_info = test_snp_info,
+        barcode_info = barcode_info
+    )
+}
+
 # Helper function to validate MAF columns and calculations
 expect_maf_columns_added <- function(result_df) {
     expected_maf_cols <- c("minor_allele_count", "p_val", "adj_p_val")
@@ -106,6 +118,21 @@ test_that("donor_count_df aggregates by donor correctly", {
     expect_true(all(expected_donor_cols %in% colnames(donor_df)))
 })
 
+test_that("donor_count_df skips rows with NA donor values", {
+    # Setup
+    snp_data_na <- create_snpdata_with_na_donor()
+
+    # Test donor_count_df with partial NA donor metadata
+    donor_df <- donor_count_df(snp_data_na, test_maf = FALSE)
+
+    # Verify donor_count_df still returns a tibble
+    expect_s3_class(donor_df, "tbl_df")
+    # Check that NA donor rows are excluded
+    expect_equal(nrow(donor_df), 2)
+    # Verify only the non-NA donor remains
+    expect_equal(unique(donor_df$donor), "donor_1")
+})
+
 test_that("clonotype_count_df includes donor column", {
     # Setup
     snp_data <- SNPData(
@@ -133,6 +160,21 @@ test_that("clonotype_count_df includes donor column", {
     )
     # Verify all expected columns are present in clonotype data frame
     expect_true(all(expected_clonotype_cols %in% colnames(clonotype_df)))
+})
+
+test_that("clonotype_count_df skips rows with NA clonotype values", {
+    # Setup
+    snp_data_na <- create_snpdata_with_na_clonotype()
+
+    # Test clonotype_count_df with partial NA clonotype metadata
+    clonotype_df <- clonotype_count_df(snp_data_na, test_maf = FALSE)
+
+    # Verify clonotype_count_df still returns a tibble
+    expect_s3_class(clonotype_df, "tbl_df")
+    # Check that NA clonotype rows are excluded
+    expect_equal(nrow(clonotype_df), 2)
+    # Verify only the non-NA clonotype remains
+    expect_equal(unique(clonotype_df$clonotype), "clonotype_2")
 })
 
 test_that("SNPData constructor drops duplicate SNP IDs", {
@@ -491,6 +533,48 @@ test_that("aggregate_count_df handles edge cases correctly", {
     expect_true(any(grepl("NA values", log_lines)))
     # Check that result excludes NA groups
     expect_equal(nrow(result_na), 2) # 2 SNPs x 1 non-NA donor
+})
+
+test_that("aggregate_count_df skips partial NA donors and clonotypes", {
+    # Setup - create SNPData objects with partial NA metadata
+    snp_data_na_donor <- create_snpdata_with_na_donor()
+    snp_data_na_clonotype <- create_snpdata_with_na_clonotype()
+
+    # Verify donor aggregation drops NA donor values
+    donor_result <- suppressWarnings(
+        aggregate_count_df(snp_data_na_donor, "donor", test_maf = FALSE)
+    )
+    expect_s3_class(donor_result, "tbl_df")
+    expect_equal(nrow(donor_result), 2)
+    expect_equal(unique(donor_result$donor), "donor_1")
+
+    # Verify clonotype aggregation drops NA clonotype values
+    clonotype_result <- suppressWarnings(
+        aggregate_count_df(snp_data_na_clonotype, "clonotype", test_maf = FALSE)
+    )
+    expect_s3_class(clonotype_result, "tbl_df")
+    expect_equal(nrow(clonotype_result), 2)
+    expect_equal(unique(clonotype_result$clonotype), "clonotype_2")
+})
+
+test_that(".aggregate_grouped_counts rejects donor mode donor lookup", {
+    # Setup
+    snp_data <- SNPData(
+        alt_count = test_alt_count,
+        ref_count = test_ref_count,
+        snp_info = test_snp_info,
+        barcode_info = test_barcode_info
+    )
+
+    # Verify donor mode cannot request clonotype donor annotation
+    expect_error(
+        snplet:::.aggregate_grouped_counts(
+            snp_data,
+            group_by = "donor",
+            add_most_likely_donor = TRUE
+        ),
+        "add_most_likely_donor is only supported when group_by is 'clonotype'"
+    )
 })
 
 test_that("test_maf=TRUE adds correct statistical columns to barcode_count_df", {
