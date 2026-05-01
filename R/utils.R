@@ -260,6 +260,7 @@ detect_chr_style <- function(chr_names) {
 #' # Returns c("chr1", "chrX")
 #' }
 #'
+#' @importFrom magrittr set_names
 #' @export
 normalize_chr_names <- function(chr_names, from_style = "auto") {
     if (from_style == "auto") {
@@ -278,7 +279,7 @@ normalize_chr_names <- function(chr_names, from_style = "auto") {
     chr_table <- .load_chr_table()
 
     # Create lookup from from_style -> ucsc (canonical)
-    lookup <- stats::setNames(chr_table$ucsc, chr_table[[from_style]])
+    lookup <- magrittr::set_names(chr_table$ucsc, chr_table[[from_style]])
 
     # Map chromosomes, keeping NA for unmatched values
     normalized <- lookup[chr_names]
