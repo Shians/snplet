@@ -42,9 +42,10 @@ Imports:
     stringr,
     tibble,
     tidyr,
-    VGAM
-Suggests:
+    VGAM,
     ComplexHeatmap,
+    circlize
+Suggests:
     testthat,
     withr
 License: Apache License (>= 2)
