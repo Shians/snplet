@@ -837,7 +837,7 @@ test_that("aggregate_count_df errors when group_by clonotype but column missing"
     # Verify aggregate_count_df errors with appropriate message
     expect_error(
         aggregate_count_df(snp_data, "clonotype"),
-        "Column 'clonotype' not found in barcode_info"
+        "Clonotype information not available"
     )
 })
 
@@ -858,13 +858,13 @@ test_that("aggregate_count_df handles all NA clonotypes with warning and error",
     )
 
     # Test that aggregate_count_df handles all NA values
-    # When all values are NA, they are filtered out causing an error in pivot
-    # Verify error occurs when all samples filtered out
+    # When all values are NA, they are filtered out causing an error
+    # Verify error occurs when all clonotype values are NA
     expect_error(
         suppressWarnings(
             aggregate_count_df(snp_data, "clonotype", test_maf = FALSE)
         ),
-        "must select at least one column"
+        "All clonotype values are NA"
     )
 })
 
