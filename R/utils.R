@@ -71,33 +71,29 @@ percentile_summary <- function(x, percentiles = c(0.1, 0.25, 0.75, 0.9, 0.95, 0.
     out
 }
 
-groupedRowMeans <- function(x, groups) {
-    # calculate the mean of each group
-    out <- matrix(NA, ncol = length(unique(groups)), nrow = nrow(x))
-    colnames(out) <- sort(unique(groups))
-    rownames(out) <- rownames(x)
-
-    for (i in unique(groups)) {
-        out[, i] <- Matrix::rowMeans(
-            x[, groups == i, drop = FALSE],
-            na.rm = TRUE
+groupedRowSums <- function(x, groups) {
+    if (length(groups) != ncol(x)) {
+        stop(
+            "Length of groups must match the number of columns in x. ",
+            "Got ", length(groups), " groups for ", ncol(x), " columns."
         )
     }
 
-    out
-}
+    if (anyNA(groups)) {
+        stop("groups must not contain NA values.")
+    }
 
-groupedRowSums <- function(x, groups) {
-    # calculate the sum of each group
-    out <- matrix(NA, ncol = length(unique(groups)), nrow = nrow(x))
-    colnames(out) <- sort(unique(groups))
-    rownames(out) <- rownames(x)
+    groups <- as.character(groups)
+    group_levels <- sort(unique(groups))
+    out <- matrix(
+        NA_real_,
+        nrow = nrow(x),
+        ncol = length(group_levels),
+        dimnames = list(rownames(x), group_levels)
+    )
 
-    for (i in unique(groups)) {
-        out[, i] <- Matrix::rowSums(
-            x[, groups == i, drop = FALSE],
-            na.rm = TRUE
-        )
+    for (group_name in group_levels) {
+        out[, group_name] <- Matrix::rowSums(x[, groups == group_name, drop = FALSE], na.rm = TRUE)
     }
 
     out
