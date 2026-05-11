@@ -179,3 +179,93 @@ test_that("groupedRowSums preserves matrix sparsity", {
     # Row 2: A columns (1,3) = 0+0, B column (2) = 2
     expect_equal(as.numeric(result[2, "B"]), 2)
 })
+
+# ==============================================================================
+
+test_that("binom_test matches binom.test for alternative = 'greater'", {
+    # Setup: a grid of (x, n) values and a fixed null probability
+    n_vals <- c(1, 5, 10, 25, 100)
+    p_null <- 0.3
+
+    cases <- do.call(rbind, lapply(n_vals, function(n) {
+        data.frame(x = 0:n, n = n)
+    }))
+
+    # Reference p-values from stats::binom.test
+    expected <- mapply(
+        function(x, n) stats::binom.test(x, n, p = p_null, alternative = "greater")$p.value,
+        cases$x, cases$n
+    )
+
+    # Vectorised wrapper
+    actual <- binom_test(cases$x, cases$n, p = p_null, alternative = "greater")
+
+    # Verify all p-values match binom.test exactly across the grid
+    expect_equal(actual, expected)
+})
+
+test_that("binom_test matches binom.test for alternative = 'less'", {
+    # Setup: a grid of (x, n) values and a fixed null probability
+    n_vals <- c(1, 5, 10, 25, 100)
+    p_null <- 0.7
+
+    cases <- do.call(rbind, lapply(n_vals, function(n) {
+        data.frame(x = 0:n, n = n)
+    }))
+
+    # Reference p-values from stats::binom.test
+    expected <- mapply(
+        function(x, n) stats::binom.test(x, n, p = p_null, alternative = "less")$p.value,
+        cases$x, cases$n
+    )
+
+    # Vectorised wrapper
+    actual <- binom_test(cases$x, cases$n, p = p_null, alternative = "less")
+
+    # Verify all p-values match binom.test exactly across the grid
+    expect_equal(actual, expected)
+})
+
+test_that("binom_test handles boundary cases x = 0 and x = n", {
+    # Verify p-value is 1 when x = 0 under 'greater' (P(X >= 0) = 1)
+    expect_equal(binom_test(0, 10, 0.5, alternative = "greater"), 1)
+    # Verify p-value is 1 when x = n under 'less' (P(X <= n) = 1)
+    expect_equal(binom_test(10, 10, 0.5, alternative = "less"), 1)
+
+    # Confirm boundary results agree with binom.test
+    expect_equal(
+        binom_test(0, 10, 0.5, alternative = "greater"),
+        stats::binom.test(0, 10, 0.5, alternative = "greater")$p.value
+    )
+    expect_equal(
+        binom_test(10, 10, 0.5, alternative = "less"),
+        stats::binom.test(10, 10, 0.5, alternative = "less")$p.value
+    )
+})
+
+test_that("binom_test recycles p across vectorised inputs", {
+    # Setup: vary p alongside x and n
+    x <- c(2, 5, 8)
+    n <- c(10, 10, 10)
+    p <- c(0.1, 0.5, 0.9)
+
+    expected <- mapply(
+        function(x, n, p) stats::binom.test(x, n, p, alternative = "greater")$p.value,
+        x, n, p
+    )
+
+    actual <- binom_test(x, n, p, alternative = "greater")
+
+    # Verify recycled p produces matching p-values element-wise
+    expect_equal(actual, expected)
+})
+
+test_that("binom_test rejects invalid inputs", {
+    # Ensure x outside [0, n] is rejected
+    expect_error(binom_test(-1, 10, 0.5), "0 <= x <= n")
+    expect_error(binom_test(11, 10, 0.5), "0 <= x <= n")
+    # Ensure p outside [0, 1] is rejected
+    expect_error(binom_test(2, 10, 1.5), "p must be in")
+    # Confirm two-sided is not an accepted alternative
+    expect_error(binom_test(2, 10, 0.5, alternative = "two.sided"))
+})
