@@ -128,6 +128,67 @@ make_snp_id <- function(chrom, pos, ref, alt) {
     paste(chrom, pos, ref, alt, sep = ":")
 }
 
+#' Vectorised exact binomial test using the beta distribution
+#'
+#' Computes one-sided exact binomial test p-values matching
+#' `stats::binom.test(x, n, p, alternative)$p.value`, but vectorised over
+#' `x` and `n` and substantially faster.
+#'
+#' The equivalence relies on the identity between the binomial CDF and the
+#' regularised incomplete beta function:
+#'
+#' \deqn{P(X \ge x) = I_p(x, n - x + 1) = \mathrm{pbeta}(p, x, n - x + 1)}
+#' \deqn{P(X \le x) = 1 - I_p(x + 1, n - x) = \mathrm{pbeta}(p, x + 1, n - x, lower = FALSE)}
+#'
+#' where \eqn{X \sim \mathrm{Binomial}(n, p)}. So:
+#' \itemize{
+#'   \item `alternative = "greater"`:
+#'     `binom.test` p-value is `P(X >= x)` =
+#'     `pbeta(p, x, n - x + 1)`. Edge case: when `x == 0`, the p-value is 1.
+#'   \item `alternative = "less"`:
+#'     `binom.test` p-value is `P(X <= x)` =
+#'     `pbeta(p, x + 1, n - x, lower.tail = FALSE)`. Edge case: when `x == n`,
+#'     the p-value is 1.
+#' }
+#'
+#' Two-sided tests are not supported because `binom.test`'s two-sided p-value
+#' sums tail probabilities `<=` the observed point probability, which cannot
+#' be expressed as a single `pbeta` call.
+#'
+#' @param x Integer vector of successes.
+#' @param n Integer vector of trials. Recycled with `x`.
+#' @param p Numeric scalar or vector giving the hypothesised probability of
+#'   success under the null. Recycled with `x` and `n`.
+#' @param alternative One of `"greater"` or `"less"`.
+#'
+#' @return Numeric vector of p-values, the same length as the recycled inputs.
+#'
+#' @keywords internal
+binom_test <- function(x, n, p, alternative = c("greater", "less")) {
+    alternative <- match.arg(alternative)
+
+    if (any(x < 0, na.rm = TRUE) || any(x > n, na.rm = TRUE)) {
+        stop("x must satisfy 0 <= x <= n")
+    }
+    if (any(p < 0 | p > 1, na.rm = TRUE)) {
+        stop("p must be in [0, 1]")
+    }
+
+    if (alternative == "greater") {
+        # P(X >= x) under Binomial(n, p); pbeta returns 0 at shape1 = 0,
+        # but the true p-value at x = 0 is 1.
+        p_val <- stats::pbeta(p, x, n - x + 1, lower.tail = TRUE)
+        p_val[x == 0] <- 1
+    } else {
+        # P(X <= x); pbeta returns 0 at shape2 = 0, but the true p-value at
+        # x = n is 1.
+        p_val <- stats::pbeta(p, x + 1, n - x, lower.tail = FALSE)
+        p_val[x == n] <- 1
+    }
+
+    p_val
+}
+
 #' Check if a file exists
 #' @param path Path to the file to check
 check_file <- function(path) {
