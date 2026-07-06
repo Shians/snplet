@@ -9,19 +9,24 @@ fit_inactive_x(
   x,
   n_inits = 10,
   confidence_threshold = 0.95,
-  refit_after_filter = FALSE
+  refit_after_filter = FALSE,
+  by = c("cell", "clonotype"),
+  store = FALSE
 )
 
 \S4method{fit_inactive_x}{SNPData}(
   x,
   n_inits = 10,
   confidence_threshold = 0.95,
-  refit_after_filter = FALSE
+  refit_after_filter = FALSE,
+  by = c("cell", "clonotype"),
+  store = FALSE
 )
 }
 \arguments{
 \item{x}{SNPData object containing X chromosome SNP data with donor
-assignments and heterozygosity information}
+assignments and heterozygosity information. For \code{by = "clonotype"},
+clonotype information must also be present.}
 
 \item{n_inits}{Number of random initialisations for the EM algorithm.
 Default 10.}
@@ -32,17 +37,34 @@ assignment. Default 0.95.}
 \item{refit_after_filter}{Logical; if TRUE, re-run the EM algorithm after
 filtering genes with inconsistent allelic patterns. Provides sharper
 posteriors on the cleaned gene set. Default FALSE.}
+
+\item{by}{Modelling unit. \code{"cell"} runs the EM on per-cell counts;
+\code{"clonotype"} aggregates ALT/REF counts by clonotype first and
+projects assignments back to cells. Default \code{"cell"}.}
+
+\item{store}{Logical; if TRUE, return the input SNPData object with the
+diagnostics written into its metadata slots rather than returning an
+\code{xci_fit} object. Barcode metadata gains \code{inactive_x} and
+\code{xci_post_X1}; SNP metadata gains \code{xci_informative},
+\code{xci_allele_on_x1}, and \code{xci_escape_fraction}. These columns survive
+subsetting because they live in the object's indexable slots. Default
+FALSE.}
 }
 \value{
-An \code{xci_fit} object (named list by donor). Use
-  \code{\link{xci_assignments}}, \code{\link{xci_haplotypes}}, and
-  \code{\link{plot_inactive_x_assignment_heatmap}} to extract results.
+If \code{store = FALSE}, an \code{xci_fit} object (named list by
+  donor); use \code{\link{xci_assignments}}, \code{\link{xci_haplotypes}},
+  and \code{\link{plot_inactive_x_assignment_heatmap}} to extract results.
+  If \code{store = TRUE}, the input SNPData object with diagnostics written
+  into its metadata slots; the same accessors and heatmap function accept
+  the returned SNPData object.
 }
 \description{
 Runs the beta-binomial EM algorithm for each donor and returns a full fit
-object containing per-cell assignments, per-gene haplotypes, and the final
-allele count matrices used in the model. Use this when diagnostic outputs
-are needed; for barcode annotation only, use \code{\link{assign_inactive_x}}.
+object containing per-unit assignments, per-gene haplotypes, and the final
+allele count matrices used in the model. The modelling unit is either the
+cell (\code{by = "cell"}) or the clonotype (\code{by = "clonotype"}). Use
+this when diagnostic outputs are needed; for barcode annotation only, use
+\code{\link{assign_inactive_x}}.
 }
 \examples{
 \dontrun{
@@ -50,5 +72,10 @@ fit <- fit_inactive_x(snp_data)
 xci_assignments(fit)
 xci_haplotypes(fit)
 plot_inactive_x_assignment_heatmap(fit, donor = "donor1")
+
+# Clonotype-level fit, diagnostics stored back into the object
+snp_data <- fit_inactive_x(snp_data, by = "clonotype", store = TRUE)
+xci_assignments(snp_data)
+plot_inactive_x_assignment_heatmap(snp_data, donor = "donor1")
 }
 }

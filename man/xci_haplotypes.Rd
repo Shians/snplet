@@ -2,17 +2,26 @@
 % Please edit documentation in R/assign_inactive_x.R
 \name{xci_haplotypes}
 \alias{xci_haplotypes}
-\title{Extract SNP haplotypes from an XCI fit}
+\alias{xci_haplotypes,xci_fit-method}
+\alias{xci_haplotypes,SNPData-method}
+\title{Extract SNP haplotypes from an XCI fit or a stored SNPData object}
 \usage{
-xci_haplotypes(fit)
+xci_haplotypes(x)
+
+\S4method{xci_haplotypes}{xci_fit}(x)
+
+\S4method{xci_haplotypes}{SNPData}(x)
 }
 \arguments{
-\item{fit}{An \code{xci_fit} object from \code{\link{fit_inactive_x}}}
+\item{x}{An \code{xci_fit} object from \code{\link{fit_inactive_x}}, or a
+SNPData object that had diagnostics stored via
+\code{fit_inactive_x(..., store = TRUE)}.}
 }
 \value{
-A tibble with columns \code{donor}, \code{snp_id}, \code{gene_name},
-  \code{allele_on_x1} ("REF" or "ALT"), and \code{pi_g} (estimated escape
-  fraction from the inactive chromosome).
+A tibble with the inferred phase (\code{allele_on_x1}, "REF" or
+  "ALT") and estimated escape fraction (\code{escape_fraction}) for each informative
+  SNP. An \code{xci_fit} additionally carries \code{donor} and
+  \code{gene_name}.
 }
 \description{
 Returns the inferred phase and escape fraction for each SNP in the final

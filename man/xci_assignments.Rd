@@ -2,17 +2,28 @@
 % Please edit documentation in R/assign_inactive_x.R
 \name{xci_assignments}
 \alias{xci_assignments}
-\title{Extract cell assignments from an XCI fit}
+\alias{xci_assignments,xci_fit-method}
+\alias{xci_assignments,SNPData-method}
+\title{Extract assignments from an XCI fit or a stored SNPData object}
 \usage{
-xci_assignments(fit)
+xci_assignments(x)
+
+\S4method{xci_assignments}{xci_fit}(x)
+
+\S4method{xci_assignments}{SNPData}(x)
 }
 \arguments{
-\item{fit}{An \code{xci_fit} object from \code{\link{fit_inactive_x}}}
+\item{x}{An \code{xci_fit} object from \code{\link{fit_inactive_x}}, or a
+SNPData object that had diagnostics stored via
+\code{fit_inactive_x(..., store = TRUE)}.}
 }
 \value{
-A tibble with columns \code{donor}, \code{cell_id}, \code{post_X1},
-  \code{post_X2}, and \code{assignment}.
+A tibble of assignments. For an \code{xci_fit} the columns are
+  \code{donor}, \code{cell_id}, \code{post_X1}, \code{post_X2}, and
+  \code{assignment} (for a clonotype-level fit, \code{cell_id} holds the
+  clonotype ID). For a SNPData object the columns are \code{cell_id},
+  \code{donor}, \code{inactive_x}, and \code{xci_post_X1}.
 }
 \description{
-Extract cell assignments from an XCI fit
+Extract assignments from an XCI fit or a stored SNPData object
 }

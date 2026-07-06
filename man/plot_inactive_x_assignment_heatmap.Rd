@@ -2,12 +2,20 @@
 % Please edit documentation in R/assign_inactive_x.R
 \name{plot_inactive_x_assignment_heatmap}
 \alias{plot_inactive_x_assignment_heatmap}
-\title{Plot assignment heatmap from an XCI fit}
+\alias{plot_inactive_x_assignment_heatmap,xci_fit-method}
+\alias{plot_inactive_x_assignment_heatmap,SNPData-method}
+\title{Plot assignment heatmap from an XCI fit or a stored SNPData object}
 \usage{
-plot_inactive_x_assignment_heatmap(fit, donor)
+plot_inactive_x_assignment_heatmap(x, donor)
+
+\S4method{plot_inactive_x_assignment_heatmap}{xci_fit}(x, donor)
+
+\S4method{plot_inactive_x_assignment_heatmap}{SNPData}(x, donor)
 }
 \arguments{
-\item{fit}{An \code{xci_fit} object from \code{\link{fit_inactive_x}}}
+\item{x}{An \code{xci_fit} object from \code{\link{fit_inactive_x}}, or a
+SNPData object that had diagnostics stored via
+\code{fit_inactive_x(..., store = TRUE)}.}
 
 \item{donor}{Character string specifying which donor to visualize}
 }
@@ -16,7 +24,7 @@ A ComplexHeatmap object
 }
 \description{
 Visualizes the REF allele fraction at the final EM-selected genes for a
-single donor. Cells are ordered by assignment (X1 then X2 then unassigned)
-and annotated at the top. Rows are the genes that survived both the outlier
+single donor. Columns (cells or clonotypes) are ordered by posterior and
+annotated at the top. Rows are the genes that survived both the outlier
 filter and the post-convergence escapee filter.
 }
