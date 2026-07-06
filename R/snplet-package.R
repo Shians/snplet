@@ -4,7 +4,7 @@
 #' @importFrom dplyr slice_head slice_sample bind_rows case_when group_by
 #' @importFrom tidyr pivot_longer contains everything
 #' @importFrom tibble as_tibble tibble
-#' @importFrom rlang enquos get_expr
+#' @importFrom rlang enquos get_expr sym
 #' @importFrom scales percent label_comma label_number cut_short_scale
 #' @importFrom logger log_info log_success log_warn
 #' @importFrom glue glue
