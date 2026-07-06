@@ -2,7 +2,7 @@
 % Please edit documentation in R/SNPData-het.R
 \name{filter_to_top_het_snp_per_gene}
 \alias{filter_to_top_het_snp_per_gene}
-\title{Filter count data to top heterozygous SNP per gene}
+\title{Filter donor count data to top heterozygous SNP per gene}
 \usage{
 filter_to_top_het_snp_per_gene(
   count_df,
@@ -13,8 +13,7 @@ filter_to_top_het_snp_per_gene(
 )
 }
 \arguments{
-\item{count_df}{A data.frame output from a count_df function (donor_count_df, barcode_count_df,
-clonotype_count_df, or aggregate_count_df)}
+\item{count_df}{A data.frame output from `donor_count_df` (must contain a `donor` column)}
 
 \item{snp_data}{A SNPData object used to determine heterozygosity status}
 
@@ -25,11 +24,13 @@ clonotype_count_df, or aggregate_count_df)}
 \item{minor_allele_prop}{Minor allele proportion used as the null threshold for monoallelic expression testing (default: 0.1).}
 }
 \value{
-A filtered tibble with one row per gene-group combination, containing the SNP with the highest total_count that is heterozygous for that group.
+A filtered tibble with one row per gene-donor combination, containing the SNP with the highest total_count that is heterozygous for that donor. Ties on total_count are broken deterministically by snp_id.
 }
 \description{
-Filters output from count_df functions (e.g. donor_count_df, barcode_count_df) to keep
-only the most expressed heterozygous SNP for each gene-group combination.
+Filters the output of `donor_count_df` to keep only the most expressed
+heterozygous SNP for each gene-donor combination. Heterozygosity is
+determined at the donor level via [donor_het_status_df], so `count_df` must
+be a donor-level count data frame.
 }
 \examples{
 \dontrun{
