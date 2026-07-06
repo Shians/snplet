@@ -75,7 +75,11 @@ groupedRowSums <- function(x, groups) {
     if (length(groups) != ncol(x)) {
         stop(
             "Length of groups must match the number of columns in x. ",
-            "Got ", length(groups), " groups for ", ncol(x), " columns."
+            "Got ",
+            length(groups),
+            " groups for ",
+            ncol(x),
+            " columns."
         )
     }
 
