@@ -109,3 +109,18 @@ scored), so the two reasons are visually distinct. When any no-coverage units
 are present they are further isolated into their own column slice, separated
 from the scored units by a gap.
 }
+\examples{
+\dontrun{
+# Diagnostics stored by assign_inactive_x() are read back automatically
+snp_data <- assign_inactive_x(snp_data)
+plot_inactive_x_assignment_heatmap(snp_data, donor = "donor1")
+}
+}
+\seealso{
+Other X-chromosome inactivation functions:
+\code{\link[=assign_inactive_x]{assign_inactive_x()}},
+\code{\link[=assign_inactive_x_by_clonotype]{assign_inactive_x_by_clonotype()}},
+\code{\link[=xci_assignments]{xci_assignments()}},
+\code{\link[=xci_haplotypes]{xci_haplotypes()}}
+}
+\concept{X-chromosome inactivation functions}

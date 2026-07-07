@@ -39,3 +39,8 @@ filtered_cells <- filter_barcodes(snp_data, donor_id == "donor_1")
 filtered_cells <- filter_barcodes(snp_data, library_size > 1000, non_zero_snps > 50)
 }
 }
+\seealso{
+Other filtering functions:
+\code{\link[=filter_snps]{filter_snps()}}
+}
+\concept{filtering functions}

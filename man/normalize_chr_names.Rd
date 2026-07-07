@@ -29,3 +29,9 @@ normalize_chr_names(c("NC_000067.6", "NC_000086.7"), from_style = "refseq_mouse"
 }
 
 }
+\seealso{
+Other chromosome naming functions:
+\code{\link[=convert_chr_style]{convert_chr_style()}},
+\code{\link[=detect_chr_style]{detect_chr_style()}}
+}
+\concept{chromosome naming functions}

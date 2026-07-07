@@ -25,3 +25,9 @@ detect_chr_style(c("NC_000067.6", "NC_000068.7"))  # Returns "refseq_mouse"
 }
 
 }
+\seealso{
+Other chromosome naming functions:
+\code{\link[=convert_chr_style]{convert_chr_style()}},
+\code{\link[=normalize_chr_names]{normalize_chr_names()}}
+}
+\concept{chromosome naming functions}

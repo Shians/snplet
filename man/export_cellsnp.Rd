@@ -21,3 +21,9 @@ snp_data <- get_example_snpdata()
 export_cellsnp(snp_data, "exported_cellsnp")
 }
 }
+\seealso{
+Other import and export functions:
+\code{\link[=get_example_snpdata]{get_example_snpdata()}},
+\code{\link[=import_cellsnp]{import_cellsnp()}}
+}
+\concept{import and export functions}

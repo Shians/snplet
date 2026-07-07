@@ -24,3 +24,9 @@ snp_data <- get_example_snpdata()
 # Filter out SNPs with NA gene names
 filtered_data <- remove_na_genes(snp_data)
 }
+\seealso{
+Other data cleaning functions:
+\code{\link[=remove_doublets]{remove_doublets()}},
+\code{\link[=remove_na_clonotypes]{remove_na_clonotypes()}}
+}
+\concept{data cleaning functions}

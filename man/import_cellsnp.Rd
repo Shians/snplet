@@ -50,3 +50,9 @@ snp_data <- import_cellsnp(
 )
 }
 }
+\seealso{
+Other import and export functions:
+\code{\link[=export_cellsnp]{export_cellsnp()}},
+\code{\link[=get_example_snpdata]{get_example_snpdata()}}
+}
+\concept{import and export functions}

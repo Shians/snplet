@@ -27,3 +27,9 @@ snp_stats <- calculate_snp_significance(snp_data)
 plot_maf_pval_track(snp_stats, facet = donor_id, x_range = c(1000000, 2000000))
 }
 }
+\seealso{
+Other genomic track plotting functions:
+\code{\link[=plot_gene_anno_track]{plot_gene_anno_track()}},
+\code{\link[=plot_maf_track]{plot_maf_track()}}
+}
+\concept{genomic track plotting functions}

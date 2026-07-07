@@ -12,6 +12,7 @@
 #' snp_data <- get_example_snpdata()
 #' barcode_count_df(snp_data)
 #' }
+#' @family count aggregation functions
 #' @rdname barcode_count_df
 setGeneric("barcode_count_df", function(x, test_maf = TRUE) standardGeneric("barcode_count_df"))
 
@@ -190,6 +191,7 @@ setMethod(
 #' snp_data <- get_example_snpdata()
 #' donor_count_df(snp_data)
 #' }
+#' @family count aggregation functions
 #' @rdname donor_count_df
 setGeneric("donor_count_df", function(x, test_maf = TRUE) standardGeneric("donor_count_df"))
 
@@ -219,6 +221,7 @@ setMethod(
 #' snp_data <- get_example_snpdata()
 #' clonotype_count_df(snp_data)
 #' }
+#' @family count aggregation functions
 #' @rdname clonotype_count_df
 setGeneric("clonotype_count_df", function(x, test_maf = TRUE) standardGeneric("clonotype_count_df"))
 
@@ -253,6 +256,7 @@ setMethod(
 #' # Aggregate by clonotype
 #' aggregate_count_df(snp_data, "clonotype")
 #' }
+#' @family count aggregation functions
 #' @rdname aggregate_count_df
 setGeneric("aggregate_count_df", function(x, group_by, test_maf = TRUE) standardGeneric("aggregate_count_df"))
 

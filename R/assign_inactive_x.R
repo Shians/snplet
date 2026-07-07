@@ -42,6 +42,7 @@
 #'   passed directly to \code{\link{plot_inactive_x_assignment_heatmap}},
 #'   \code{\link{xci_assignments}}, and \code{\link{xci_haplotypes}}.
 #'
+#' @family X-chromosome inactivation functions
 #' @export
 #'
 #' @examples
@@ -125,6 +126,7 @@ setMethod(
 #'   \code{\link{plot_inactive_x_assignment_heatmap}},
 #'   \code{\link{xci_assignments}}, and \code{\link{xci_haplotypes}}.
 #'
+#' @family X-chromosome inactivation functions
 #' @export
 #'
 #' @examples
@@ -254,15 +256,24 @@ setMethod(
     invisible(TRUE)
 }
 
-#' Extract assignments from a SNPData object with stored XCI diagnostics
+#' Extract per-cell inactive-X assignments
+#'
+#' Pulls the stored X-chromosome inactivation call and posterior for every cell
+#' out of a SNPData object's barcode metadata. Requires that
+#' \code{\link{assign_inactive_x}} or \code{\link{assign_inactive_x_by_clonotype}}
+#' has been run first; errors otherwise.
 #'
 #' @param x A SNPData object that had XCI diagnostics stored by
 #'   \code{\link{assign_inactive_x}} or
 #'   \code{\link{assign_inactive_x_by_clonotype}}.
 #'
-#' @return A tibble of assignments with columns \code{cell_id},
-#'   \code{donor}, \code{inactive_x}, and \code{xci_post_X1}.
+#' @return A tibble with one row per cell and columns \code{cell_id}
+#'   (character), \code{donor} (character; present only when the object carries
+#'   donor information), \code{inactive_x} (character "X1"/"X2", or \code{NA}
+#'   for cells below the confidence threshold), and \code{xci_post_X1} (numeric
+#'   posterior probability that X1 is the inactive chromosome).
 #'
+#' @family X-chromosome inactivation functions
 #' @export
 setGeneric("xci_assignments", function(x) standardGeneric("xci_assignments"))
 
@@ -286,10 +297,13 @@ setMethod("xci_assignments", signature(x = "SNPData"), function(x) {
 #'   \code{\link{assign_inactive_x}} or
 #'   \code{\link{assign_inactive_x_by_clonotype}}.
 #'
-#' @return A tibble with the inferred phase (\code{allele_on_x1}, "REF" or
-#'   "ALT") and estimated escape fraction (\code{escape_fraction}) for each
-#'   informative SNP.
+#' @return A tibble with one row per informative SNP and columns \code{snp_id}
+#'   (character), \code{gene_name} (character; present only when the object
+#'   carries gene annotation), \code{allele_on_x1} (character, "REF" or "ALT" —
+#'   the allele carried by the X1 haplotype), and \code{escape_fraction}
+#'   (numeric estimated fraction of reads from the inactive allele).
 #'
+#' @family X-chromosome inactivation functions
 #' @export
 setGeneric("xci_haplotypes", function(x) standardGeneric("xci_haplotypes"))
 
@@ -366,8 +380,16 @@ setMethod("xci_haplotypes", signature(x = "SNPData"), function(x) {
 #'   column axis is labelled with the modelling unit, "Cells" or "Clonotypes").
 #'   Prints normally but, being already drawn, is not composable with \code{+}.
 #'
+#' @family X-chromosome inactivation functions
 #' @importFrom circlize colorRamp2
 #' @export
+#'
+#' @examples
+#' \dontrun{
+#' # Diagnostics stored by assign_inactive_x() are read back automatically
+#' snp_data <- assign_inactive_x(snp_data)
+#' plot_inactive_x_assignment_heatmap(snp_data, donor = "donor1")
+#' }
 setGeneric(
     "plot_inactive_x_assignment_heatmap",
     function(
@@ -960,6 +982,20 @@ setMethod(
 
     n_start <- nrow(get_snp_info(snp_data))
 
+    # Restrict to X-chromosome SNPs. XCI is an X-chromosome phenomenon, so SNPs
+    # on other chromosomes carry no signal and would only add noise. Use the
+    # canonical (UCSC) chromosome name set at construction so the match is robust
+    # to the input naming style.
+    snp_info <- get_snp_info(snp_data)
+    if (!"chrom_canonical" %in% colnames(snp_info)) {
+        stop(
+            "No canonical chromosome names available. Ensure the SNPData object was built with a 'chrom' column so chrX SNPs can be selected."
+        )
+    }
+    snp_data <- snp_data %>%
+        filter_snps(chrom_canonical == "chrX")
+    n_chrx <- nrow(get_snp_info(snp_data))
+
     het_snp_ids <- snp_data %>%
         donor_het_status_df() %>%
         dplyr::filter(zygosity == "het") %>%
@@ -978,7 +1014,7 @@ setMethod(
     n_genes <- nrow(get_snp_info(snp_data))
 
     logger::log_info(
-        "[{donor}] het-SNP filter: {n_start} X SNPs -> {n_het} het -> {n_genes} genes (top SNP per gene)"
+        "[{donor}] het-SNP filter: {n_start} SNPs -> {n_chrx} chrX -> {n_het} het -> {n_genes} genes (top SNP per gene)"
     )
 
     snp_data

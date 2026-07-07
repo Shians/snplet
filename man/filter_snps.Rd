@@ -27,3 +27,8 @@ snp_data <- get_example_snpdata()
 filtered_snps <- filter_snps(snp_data, coverage > 10)
 }
 }
+\seealso{
+Other filtering functions:
+\code{\link[=filter_barcodes]{filter_barcodes()}}
+}
+\concept{filtering functions}

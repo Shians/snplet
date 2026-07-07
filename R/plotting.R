@@ -7,6 +7,7 @@
 #'        and 'gene_name'
 #' @param x_range A numeric vector of length 2 specifying the genomic range limits to display
 #' @return A ggplot object representing the gene annotation track
+#' @family genomic track plotting functions
 #' @export
 #'
 #' @examples
@@ -45,6 +46,7 @@ plot_gene_anno_track <- function(gene_anno, x_range) {
 #' @param facet A variable to use for faceting the plot
 #' @param x_range A numeric vector of length 2 specifying the genomic range limits to display
 #' @return A ggplot object showing MAF values across the genomic region
+#' @family genomic track plotting functions
 #' @export
 #'
 #' @examples
@@ -93,6 +95,7 @@ plot_maf_track <- function(allele_count_df, facet, x_range) {
 #' @param facet A variable to use for faceting the plot, supplied as a bare column name
 #' @param x_range A numeric vector of length 2 specifying the genomic range limits to display
 #' @return A ggplot object showing -log10(adjusted p-value) across the genomic region
+#' @family genomic track plotting functions
 #' @export
 #'
 #' @examples

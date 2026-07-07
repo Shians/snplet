@@ -15,11 +15,21 @@ xci_haplotypes(x)
 \code{\link{assign_inactive_x_by_clonotype}}.}
 }
 \value{
-A tibble with the inferred phase (\code{allele_on_x1}, "REF" or
-  "ALT") and estimated escape fraction (\code{escape_fraction}) for each
-  informative SNP.
+A tibble with one row per informative SNP and columns \code{snp_id}
+  (character), \code{gene_name} (character; present only when the object
+  carries gene annotation), \code{allele_on_x1} (character, "REF" or "ALT" —
+  the allele carried by the X1 haplotype), and \code{escape_fraction}
+  (numeric estimated fraction of reads from the inactive allele).
 }
 \description{
 Returns the inferred phase and escape fraction for each SNP in the final
 gene set used by the EM model.
 }
+\seealso{
+Other X-chromosome inactivation functions:
+\code{\link[=assign_inactive_x]{assign_inactive_x()}},
+\code{\link[=assign_inactive_x_by_clonotype]{assign_inactive_x_by_clonotype()}},
+\code{\link[=plot_inactive_x_assignment_heatmap]{plot_inactive_x_assignment_heatmap()}},
+\code{\link[=xci_assignments]{xci_assignments()}}
+}
+\concept{X-chromosome inactivation functions}

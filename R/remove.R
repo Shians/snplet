@@ -8,6 +8,7 @@
 #' @param drop_na Logical, whether to also remove cells with NA donor assignments (default TRUE)
 #'
 #' @return A filtered SNPData object with doublets removed
+#' @family data cleaning functions
 #' @export
 #'
 #' @examples
@@ -63,6 +64,7 @@ remove_doublets <- function(x, drop_na = TRUE) {
 #' @param gene_col The column name in snp_info containing gene names (default: "gene_name")
 #'
 #' @return A filtered SNPData object with NA gene SNPs removed
+#' @family data cleaning functions
 #' @export
 #'
 #' @examples
@@ -109,6 +111,7 @@ remove_na_genes <- function(x, gene_col = "gene_name") {
 #' @param clonotype_col The column name in barcode_info containing clonotype values (default: "clonotype")
 #'
 #' @return A filtered SNPData object with NA clonotype barcodes removed
+#' @family data cleaning functions
 #' @export
 #'
 #' @examples

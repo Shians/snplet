@@ -11,6 +11,7 @@
 #' @param clonotype_column Name of the column in vdj_file that contains clonotype information (only used if vdj_file provided)
 #'
 #' @return A SNPData object
+#' @family import and export functions
 #' @export
 #'
 #' @examples
@@ -283,6 +284,7 @@ merge_cell_annotations <- function(donor_info, vdj_info = NULL, barcode_column =
 #' testing and vignettes.
 #'
 #' @return A SNPData object constructed from example data included with the package.
+#' @family import and export functions
 #' @export
 #' @examples
 #' snp_data <- get_example_snpdata()

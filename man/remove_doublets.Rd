@@ -26,3 +26,9 @@ snp_data <- get_example_snpdata()
 filtered_data <- remove_doublets(snp_data)
 }
 }
+\seealso{
+Other data cleaning functions:
+\code{\link[=remove_na_clonotypes]{remove_na_clonotypes()}},
+\code{\link[=remove_na_genes]{remove_na_genes()}}
+}
+\concept{data cleaning functions}
