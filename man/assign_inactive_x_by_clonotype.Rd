@@ -39,7 +39,11 @@ posteriors on the cleaned gene set. Default FALSE.}
 SNPData object with an additional \code{inactive_x} column in
   barcode metadata, with values "X1" or "X2" indicating the inferred
   inactive X chromosome state. Cells from clonotypes that do not meet the
-  confidence threshold receive \code{NA}.
+  confidence threshold receive \code{NA}. The full XCI diagnostics are also
+  written into the object's metadata slots,
+  so the result can be passed directly to
+  \code{\link{plot_inactive_x_assignment_heatmap}},
+  \code{\link{xci_assignments}}, and \code{\link{xci_haplotypes}}.
 }
 \description{
 Identifies which X chromosome is inactive in female cells based on allelic
@@ -75,5 +79,8 @@ snp_data <- assign_inactive_x_by_clonotype(snp_data)
 # View results
 get_barcode_info(snp_data) \%>\%
   count(donor, clonotype, inactive_x)
+
+# Diagnostics are stored, so plotting works directly
+plot_inactive_x_assignment_heatmap(snp_data, donor = "donor1")
 }
 }
