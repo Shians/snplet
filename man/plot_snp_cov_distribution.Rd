@@ -22,3 +22,9 @@ snp_data <- read_cellsnp("/path/to/cellsnp")
 plot_snp_cov_distribution(snp_data)
 }
 }
+\seealso{
+Other distribution plotting functions:
+\code{\link[=plot_lib_size_distribution]{plot_lib_size_distribution()}},
+\code{\link[=plot_maf_distribution]{plot_maf_distribution()}}
+}
+\concept{distribution plotting functions}

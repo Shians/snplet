@@ -26,3 +26,10 @@ snp_data <- get_example_snpdata()
 clonotype_count_df(snp_data)
 }
 }
+\seealso{
+Other count aggregation functions:
+\code{\link[=aggregate_count_df]{aggregate_count_df()}},
+\code{\link[=barcode_count_df]{barcode_count_df()}},
+\code{\link[=donor_count_df]{donor_count_df()}}
+}
+\concept{count aggregation functions}

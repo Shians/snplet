@@ -20,3 +20,9 @@ in a given data frame using a density plot.
 df <- data.frame(maf = runif(1000, 0, 0.5))
 plot_maf_distribution(df)
 }
+\seealso{
+Other distribution plotting functions:
+\code{\link[=plot_lib_size_distribution]{plot_lib_size_distribution()}},
+\code{\link[=plot_snp_cov_distribution]{plot_snp_cov_distribution()}}
+}
+\concept{distribution plotting functions}

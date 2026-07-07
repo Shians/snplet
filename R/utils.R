@@ -247,6 +247,7 @@ check_file <- function(path) {
 #' detect_chr_style(c("NC_000067.6", "NC_000068.7"))  # Returns "refseq_mouse"
 #' }
 #'
+#' @family chromosome naming functions
 #' @export
 detect_chr_style <- function(chr_names) {
     if (length(chr_names) == 0) {
@@ -331,6 +332,7 @@ detect_chr_style <- function(chr_names) {
 #' }
 #'
 #' @importFrom magrittr set_names
+#' @family chromosome naming functions
 #' @export
 normalize_chr_names <- function(chr_names, from_style = "auto") {
     if (from_style == "auto") {
@@ -382,6 +384,7 @@ normalize_chr_names <- function(chr_names, from_style = "auto") {
 #' # Returns c("NC_000067.6", "NC_000086.7")
 #' }
 #'
+#' @family chromosome naming functions
 #' @export
 convert_chr_style <- function(chr_names, from_style = "auto", to_style = "ucsc") {
     # First normalize to canonical UCSC form

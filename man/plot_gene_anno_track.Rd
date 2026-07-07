@@ -25,3 +25,9 @@ gene_anno <- data.frame(pos = c(1000, 2000, 3000), gene_name = c("GENE1", "GENE2
 plot_gene_anno_track(gene_anno, x_range = c(500, 3500))
 }
 }
+\seealso{
+Other genomic track plotting functions:
+\code{\link[=plot_maf_pval_track]{plot_maf_pval_track()}},
+\code{\link[=plot_maf_track]{plot_maf_track()}}
+}
+\concept{genomic track plotting functions}

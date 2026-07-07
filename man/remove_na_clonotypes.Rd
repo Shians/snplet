@@ -24,3 +24,9 @@ snp_data <- get_example_snpdata()
 # Remove barcodes with NA clonotype values
 filtered_data <- remove_na_clonotypes(snp_data)
 }
+\seealso{
+Other data cleaning functions:
+\code{\link[=remove_doublets]{remove_doublets()}},
+\code{\link[=remove_na_genes]{remove_na_genes()}}
+}
+\concept{data cleaning functions}

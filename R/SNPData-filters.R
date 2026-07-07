@@ -70,6 +70,7 @@ check_filter_expr <- function(df, dots, df_name = "data.frame") {
 #' # Filter SNPs with coverage > 10
 #' filtered_snps <- filter_snps(snp_data, coverage > 10)
 #' }
+#' @family filtering functions
 #' @rdname filter_snps
 setGeneric("filter_snps", function(.data, ...) standardGeneric("filter_snps"))
 
@@ -127,6 +128,7 @@ setMethod(
 #' # Filter cells with multiple conditions
 #' filtered_cells <- filter_barcodes(snp_data, library_size > 1000, non_zero_snps > 50)
 #' }
+#' @family filtering functions
 #' @rdname filter_barcodes
 setGeneric("filter_barcodes", function(.data, ...) standardGeneric("filter_barcodes"))
 

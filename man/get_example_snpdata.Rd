@@ -17,3 +17,9 @@ testing and vignettes.
 \examples{
 snp_data <- get_example_snpdata()
 }
+\seealso{
+Other import and export functions:
+\code{\link[=export_cellsnp]{export_cellsnp()}},
+\code{\link[=import_cellsnp]{import_cellsnp()}}
+}
+\concept{import and export functions}

@@ -27,3 +27,9 @@ allele_df <- get_allele_counts(snp_data)
 plot_maf_track(allele_df, facet = donor_id, x_range = c(1000000, 2000000))
 }
 }
+\seealso{
+Other genomic track plotting functions:
+\code{\link[=plot_gene_anno_track]{plot_gene_anno_track()}},
+\code{\link[=plot_maf_pval_track]{plot_maf_pval_track()}}
+}
+\concept{genomic track plotting functions}

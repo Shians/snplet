@@ -5,6 +5,7 @@
 #'
 #' @param snpdata A SNPData object
 #' @param out_dir Output directory to write files
+#' @family import and export functions
 #' @export
 #'
 #' @examples

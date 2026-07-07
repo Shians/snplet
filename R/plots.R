@@ -5,6 +5,7 @@
 #'
 #' @param snp_data A SNPData object containing sample information with library size data
 #' @return A ggplot object showing the density distribution of library sizes
+#' @family distribution plotting functions
 #' @export
 #'
 #' @examples
@@ -32,6 +33,7 @@ plot_lib_size_distribution <- function(snp_data) {
 #'
 #' @param snp_data A SNPData object containing SNP information with coverage data
 #' @return A ggplot object showing the density distribution of SNP coverage on a log10 scale
+#' @family distribution plotting functions
 #' @export
 #'
 #' @examples
@@ -60,6 +62,7 @@ plot_snp_cov_distribution <- function(snp_data) {
 #'
 #' @param df A data frame containing a column named 'maf' with MAF values
 #' @return A ggplot object showing the density distribution of MAF
+#' @family distribution plotting functions
 #' @export
 #'
 #' @examples

@@ -22,3 +22,9 @@ snp_data <- get_example_snpdata()
 plot_lib_size_distribution(snp_data)
 }
 }
+\seealso{
+Other distribution plotting functions:
+\code{\link[=plot_maf_distribution]{plot_maf_distribution()}},
+\code{\link[=plot_snp_cov_distribution]{plot_snp_cov_distribution()}}
+}
+\concept{distribution plotting functions}
