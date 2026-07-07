@@ -1,6 +1,6 @@
 # ==============================================================================
 # Test Suite: X-chromosome inactivation fitting
-# Description: fit_inactive_x cell/clonotype modes, stored diagnostics, and
+# Description: assign_inactive_x cell/clonotype modes, stored diagnostics, and
 #              the SNPData accessor/heatmap methods.
 # ==============================================================================
 
@@ -83,43 +83,43 @@ make_xci_snpdata <- function(
 
 # ==============================================================================
 
-test_that("fit_inactive_x returns an xci_fit with cell-level assignments", {
+test_that("assign_inactive_x recovers the true clonal split at cell level", {
     fixture <- make_xci_snpdata()
-    fit <- fit_inactive_x(fixture$snpdata, n_inits = 3)
+    stored <- assign_inactive_x(fixture$snpdata, n_inits = 3)
 
-    # Verify the fit is an xci_fit object keyed by donor
-    expect_s3_class(fit, "xci_fit")
-    expect_true("donor0" %in% names(fit))
-
-    assignments <- xci_assignments(fit)
-    # Verify assignments carry the expected columns
-    expect_true(all(c("donor", "cell_id", "post_X1", "post_X2", "assignment") %in% colnames(assignments)))
+    assignments <- xci_assignments(stored)
+    # Verify assignments carry the stored annotation columns
+    expect_true(all(c("cell_id", "inactive_x", "xci_post_X1") %in% colnames(assignments)))
     # Verify every cell received an assignment row
     expect_equal(nrow(assignments), ncol(fixture$snpdata))
 
     # Confirm the two inferred groups recover the true clonal split (up to a
-    # label swap, since X1/X2 labels are exchangeable in the model).
+    # label swap, since X1/X2 labels are exchangeable in the model). Compare
+    # only cells that met the confidence threshold.
     truth <- get_barcode_info(fixture$snpdata)$true_group
-    agree <- mean(assignments$assignment == truth)
+    called <- !is.na(assignments$inactive_x)
+    agree <- mean(assignments$inactive_x[called] == truth[called])
     expect_true(max(agree, 1 - agree) > 0.9)
 })
 
 test_that("xci_haplotypes reports phase and escape fraction per informative SNP", {
     fixture <- make_xci_snpdata()
-    fit <- fit_inactive_x(fixture$snpdata, n_inits = 3)
+    stored <- assign_inactive_x(fixture$snpdata, n_inits = 3)
 
-    haplotypes <- xci_haplotypes(fit)
+    haplotypes <- xci_haplotypes(stored)
     # Verify haplotype columns are present
-    expect_true(all(c("donor", "snp_id", "gene_name", "allele_on_x1", "escape_fraction") %in% colnames(haplotypes)))
+    expect_true(all(c("snp_id", "gene_name", "allele_on_x1", "escape_fraction") %in% colnames(haplotypes)))
     # Check phase is reported as REF/ALT
     expect_true(all(haplotypes$allele_on_x1 %in% c("REF", "ALT")))
     # Confirm escape fraction is a valid minor fraction
     expect_true(all(haplotypes$escape_fraction > 0 & haplotypes$escape_fraction < 0.5))
 })
 
-test_that("fit_inactive_x by clonotype projects assignments back to cells", {
+test_that("clonotype fit projects assignments back to cells consistently", {
     fixture <- make_xci_snpdata()
-    fit <- fit_inactive_x(fixture$snpdata, n_inits = 3, by = "clonotype")
+
+    # Reach into the internal engine to inspect the pre-storage clonotype fit.
+    fit <- snplet:::.fit_inactive_x(fixture$snpdata, n_inits = 3, by = "clonotype")
 
     # Verify the clonotype fit records its unit and carries a cell projection
     expect_equal(fit[["donor0"]]$unit, "clonotype")
@@ -137,9 +137,9 @@ test_that("fit_inactive_x by clonotype projects assignments back to cells", {
     expect_true(all(per_clono == 1))
 })
 
-test_that("store = TRUE promotes diagnostics into SNPData slots and survives subsetting", {
+test_that("assign_inactive_x promotes diagnostics into SNPData slots and survives subsetting", {
     fixture <- make_xci_snpdata()
-    stored <- fit_inactive_x(fixture$snpdata, n_inits = 3, store = TRUE)
+    stored <- assign_inactive_x(fixture$snpdata, n_inits = 3)
 
     # Verify a SNPData object is returned
     expect_s4_class(stored, "SNPData")
@@ -166,7 +166,7 @@ test_that("store = TRUE promotes diagnostics into SNPData slots and survives sub
 
 test_that("accessors and heatmap work on a stored SNPData object", {
     fixture <- make_xci_snpdata()
-    stored <- fit_inactive_x(fixture$snpdata, n_inits = 3, store = TRUE)
+    stored <- assign_inactive_x(fixture$snpdata, n_inits = 3)
 
     assignments <- xci_assignments(stored)
     # Verify stored-object assignments expose the annotation columns
@@ -176,9 +176,128 @@ test_that("accessors and heatmap work on a stored SNPData object", {
     # Verify stored-object haplotypes expose phase and escape fraction
     expect_true(all(c("snp_id", "allele_on_x1", "escape_fraction") %in% colnames(haplotypes)))
 
-    # Confirm the heatmap method runs on a stored object
+    # Confirm the heatmap method runs on a stored object. It returns a drawn
+    # HeatmapList (donor as title, unit-labelled column axis), so draw to a null
+    # device to keep the test headless.
+    grDevices::pdf(NULL)
+    on.exit(grDevices::dev.off(), add = TRUE)
     hm <- plot_inactive_x_assignment_heatmap(stored, donor = "donor0")
-    expect_s4_class(hm, "Heatmap")
+    expect_s4_class(hm, "HeatmapList")
+})
+
+test_that("heatmap display parameters control genes and columns shown", {
+    fixture <- make_xci_snpdata()
+    stored <- assign_inactive_x(fixture$snpdata, n_inits = 3)
+
+    grDevices::pdf(NULL)
+    on.exit(grDevices::dev.off(), add = TRUE)
+
+    # Confirm max_genes caps the number of displayed rows
+    capped <- plot_inactive_x_assignment_heatmap(stored, donor = "donor0", max_genes = 5)
+    expect_equal(nrow(capped@ht_list[[1]]@matrix), 5)
+
+    # Confirm max_genes above the available count shows all retained genes
+    full <- plot_inactive_x_assignment_heatmap(stored, donor = "donor0")
+    n_all <- nrow(full@ht_list[[1]]@matrix)
+    big <- plot_inactive_x_assignment_heatmap(stored, donor = "donor0", max_genes = n_all + 100)
+    expect_equal(nrow(big@ht_list[[1]]@matrix), n_all)
+
+    # Check show_unassigned = FALSE drops unassigned columns
+    assigned_only <- plot_inactive_x_assignment_heatmap(
+        stored,
+        donor = "donor0",
+        show_unassigned = FALSE
+    )
+    n_assigned <- sum(!is.na(get_barcode_info(stored)$inactive_x))
+    expect_equal(ncol(assigned_only@ht_list[[1]]@matrix), n_assigned)
+
+    # Ensure toggling gene names and clustering still returns a valid plot
+    variant <- plot_inactive_x_assignment_heatmap(
+        stored,
+        donor = "donor0",
+        show_gene_names = FALSE,
+        cluster_rows = TRUE
+    )
+    expect_s4_class(variant, "HeatmapList")
+
+    # Ensure toggling the assignment boundary markers still returns a valid plot
+    no_marks <- plot_inactive_x_assignment_heatmap(
+        stored,
+        donor = "donor0",
+        mark_boundaries = FALSE
+    )
+    expect_s4_class(no_marks, "HeatmapList")
+
+    # Check show_posterior toggles the posterior annotation row
+    with_post <- plot_inactive_x_assignment_heatmap(stored, donor = "donor0")
+    without_post <- plot_inactive_x_assignment_heatmap(
+        stored,
+        donor = "donor0",
+        show_posterior = FALSE
+    )
+    with_names <- names(with_post@ht_list[[1]]@top_annotation@anno_list)
+    without_names <- names(without_post@ht_list[[1]]@top_annotation@anno_list)
+    # Confirm the posterior_X1 annotation is present by default and dropped when off
+    expect_true("posterior_X1" %in% with_names)
+    expect_false("posterior_X1" %in% without_names)
+    # Confirm the assignment annotation is retained either way
+    expect_true("assignment" %in% without_names)
+
+    # Ensure custom colour arguments are accepted and applied to the body
+    coloured <- plot_inactive_x_assignment_heatmap(
+        stored,
+        donor = "donor0",
+        ref_fraction_palette = c("#2166ac", "#f7f7f7", "#b2182b"),
+        assignment_palette = c(X1 = "#1b9e77", X2 = "#d95f02", unassigned = "grey85"),
+        posterior_palette = c("purple", "white", "orange"),
+        na_fill = "white"
+    )
+    expect_s4_class(coloured, "HeatmapList")
+    # Confirm the supplied ramp anchors drive the REF fraction body colours
+    body_col <- coloured@ht_list[[1]]@matrix_color_mapping@col_fun
+    expect_equal(body_col(0), "#2166ACFF")
+    expect_equal(body_col(1), "#B2182BFF")
+    # Confirm na_col was overridden (normalised to hex with alpha)
+    expect_equal(coloured@ht_list[[1]]@matrix_color_mapping@na_col, "#FFFFFFFF")
+})
+
+test_that("heatmap distinguishes no-coverage units from low-confidence unassigned", {
+    fixture <- make_xci_snpdata()
+    stored <- assign_inactive_x(fixture$snpdata, n_inits = 3)
+
+    # Force one cell to look like it was never scored (NA posterior): the model
+    # gives it no coverage, distinct from a low-confidence unassigned call.
+    bi <- get_barcode_info(stored)
+    bi$inactive_x[1] <- NA
+    bi$xci_post_X1[1] <- NA_real_
+    stored <- add_barcode_metadata(
+        stored,
+        dplyr::select(bi, cell_id, inactive_x, xci_post_X1),
+        join_by = "cell_id",
+        overwrite = TRUE
+    )
+
+    grDevices::pdf(NULL)
+    on.exit(grDevices::dev.off(), add = TRUE)
+
+    # With show_no_coverage = TRUE the annotation carries a distinct level
+    hm <- plot_inactive_x_assignment_heatmap(
+        stored,
+        donor = "donor0",
+        show_no_coverage = TRUE
+    )
+    ann <- hm@ht_list[[1]]@top_annotation@anno_list$assignment
+    ann_colors <- ann@color_mapping@colors
+    expect_true("no coverage" %in% names(ann_colors))
+    # Check "no coverage" uses the dark slate distinct from the default
+    # low-confidence "unassigned" grey70 (#B3B3B3)
+    expect_equal(toupper(ann_colors[["no coverage"]]), "#4D4D4DFF")
+
+    # By default (show_no_coverage = FALSE) the no-coverage cell is dropped, so
+    # the plotted matrix loses exactly that one column
+    default_hm <- plot_inactive_x_assignment_heatmap(stored, donor = "donor0")
+    n_donor0 <- sum(get_barcode_info(stored)$donor == "donor0")
+    expect_equal(ncol(default_hm@ht_list[[1]]@matrix), n_donor0 - 1)
 })
 
 test_that("clonotype fit requires clonotype information", {
@@ -194,7 +313,7 @@ test_that("clonotype fit requires clonotype information", {
     )
     # Verify a clear error is raised when clonotypes are all NA
     expect_error(
-        fit_inactive_x(no_clono, by = "clonotype"),
+        assign_inactive_x_by_clonotype(no_clono),
         "clonotype"
     )
 })
