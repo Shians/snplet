@@ -8,7 +8,7 @@
 #' @importFrom scales percent label_comma label_number cut_short_scale
 #' @importFrom logger log_info log_success log_warn
 #' @importFrom glue glue
-#' @importFrom stringr str_remove str_to_title
+#' @importFrom stringr str_remove str_to_title str_detect str_escape
 #' @importFrom methods as is new setClass setGeneric setMethod show
 #' @importFrom BiocGenerics nrow ncol rownames colnames
 #' @importFrom magrittr %>%
@@ -21,7 +21,7 @@
 #' @importFrom readr read_tsv read_csv write_tsv write_csv cols col_character col_integer
 #' @importFrom plyranges as_granges join_overlap_left
 #' @importFrom fs path
-#' @importFrom furrr future_map
+#' @importFrom furrr future_map future_map2
 #' @importFrom future nbrOfWorkers
 #' @importFrom purrr map map2_dbl
 #' @importFrom R.utils gzip
