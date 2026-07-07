@@ -982,6 +982,20 @@ setMethod(
 
     n_start <- nrow(get_snp_info(snp_data))
 
+    # Restrict to X-chromosome SNPs. XCI is an X-chromosome phenomenon, so SNPs
+    # on other chromosomes carry no signal and would only add noise. Use the
+    # canonical (UCSC) chromosome name set at construction so the match is robust
+    # to the input naming style.
+    snp_info <- get_snp_info(snp_data)
+    if (!"chrom_canonical" %in% colnames(snp_info)) {
+        stop(
+            "No canonical chromosome names available. Ensure the SNPData object was built with a 'chrom' column so chrX SNPs can be selected."
+        )
+    }
+    snp_data <- snp_data %>%
+        filter_snps(chrom_canonical == "chrX")
+    n_chrx <- nrow(get_snp_info(snp_data))
+
     het_snp_ids <- snp_data %>%
         donor_het_status_df() %>%
         dplyr::filter(zygosity == "het") %>%
@@ -1000,7 +1014,7 @@ setMethod(
     n_genes <- nrow(get_snp_info(snp_data))
 
     logger::log_info(
-        "[{donor}] het-SNP filter: {n_start} X SNPs -> {n_het} het -> {n_genes} genes (top SNP per gene)"
+        "[{donor}] het-SNP filter: {n_start} SNPs -> {n_chrx} chrX -> {n_het} het -> {n_genes} genes (top SNP per gene)"
     )
 
     snp_data
