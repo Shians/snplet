@@ -118,19 +118,20 @@ test_that("xci_haplotypes reports phase and escape fraction per informative SNP"
 test_that("clonotype fit projects assignments back to cells consistently", {
     fixture <- make_xci_snpdata()
 
-    # Reach into the internal engine to inspect the pre-storage clonotype fit.
-    fit <- snplet:::.fit_inactive_x(fixture$snpdata, n_inits = 3, by = "clonotype")
+    # Reach into the per-donor engine to inspect the pre-storage clonotype fit.
+    donor_data <- filter_samples(fixture$snpdata, donor == "donor0")
+    fit <- snplet:::.fit_xci_donor(donor_data, n_inits = 3, by = "clonotype")
 
     # Verify the clonotype fit records its unit and carries a cell projection
-    expect_equal(fit[["donor0"]]$unit, "clonotype")
-    expect_true(!is.null(fit[["donor0"]]$cell_assignments))
+    expect_equal(fit$unit, "clonotype")
+    expect_true(!is.null(fit$cell_assignments))
 
     # The EM ran per clonotype, one assignment row each
     n_clonotypes <- dplyr::n_distinct(get_barcode_info(fixture$snpdata)$clonotype)
-    expect_equal(nrow(fit[["donor0"]]$assignments), n_clonotypes)
+    expect_equal(nrow(fit$assignments), n_clonotypes)
 
     # Cells within a clonotype must share an assignment (clonal consistency)
-    cell_assign <- fit[["donor0"]]$cell_assignments
+    cell_assign <- fit$cell_assignments
     clono_map <- dplyr::select(get_barcode_info(fixture$snpdata), cell_id, clonotype)
     joined <- dplyr::inner_join(cell_assign, clono_map, by = "cell_id")
     per_clono <- tapply(joined$assignment, joined$clonotype, function(a) length(unique(a)))
