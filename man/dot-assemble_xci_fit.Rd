@@ -11,7 +11,7 @@
   alt_mat,
   snp_info,
   unit_ids,
-  unit_label
+  unit = c("cell", "clonotype")
 )
 }
 \description{

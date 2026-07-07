@@ -9,8 +9,7 @@
   n_inits = 10,
   confidence_threshold = 0.95,
   refit_after_filter = FALSE,
-  by = c("cell", "clonotype"),
-  store = FALSE
+  by = c("cell", "clonotype")
 )
 }
 \arguments{
@@ -27,15 +26,10 @@ assignment.}
 filtering genes with inconsistent allelic patterns.}
 
 \item{by}{Modelling unit, \code{"cell"} or \code{"clonotype"}.}
-
-\item{store}{Logical; if TRUE, return the input SNPData object with the
-diagnostics written into its metadata slots rather than the internal
-\code{xci_fit} object.}
 }
 \value{
-If \code{store = FALSE}, an \code{xci_fit} object (named list by
-  donor). If \code{store = TRUE}, the input SNPData object with diagnostics
-  written into its metadata slots.
+The input SNPData object with diagnostics written into its metadata
+  slots.
 }
 \description{
 Runs the beta-binomial EM algorithm for each donor and returns a full fit
@@ -45,8 +39,8 @@ cell (\code{by = "cell"}) or the clonotype (\code{by = "clonotype"}).
 }
 \details{
 This is the shared engine behind \code{\link{assign_inactive_x}} and
-\code{\link{assign_inactive_x_by_clonotype}}, which always call it with
-\code{store = TRUE}. It is not exported; the public entry points return a
-SNPData object carrying the diagnostics in its metadata slots.
+\code{\link{assign_inactive_x_by_clonotype}}. It is not exported; the public
+entry points return a SNPData object carrying the diagnostics in its metadata
+slots.
 }
 \keyword{internal}
