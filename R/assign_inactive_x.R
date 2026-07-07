@@ -171,9 +171,9 @@ setMethod(
 #' cell (\code{by = "cell"}) or the clonotype (\code{by = "clonotype"}).
 #'
 #' This is the shared engine behind \code{\link{assign_inactive_x}} and
-#' \code{\link{assign_inactive_x_by_clonotype}}, which always call it with
-#' \code{store = TRUE}. It is not exported; the public entry points return a
-#' SNPData object carrying the diagnostics in its metadata slots.
+#' \code{\link{assign_inactive_x_by_clonotype}}. It is not exported; the public
+#' entry points return a SNPData object carrying the diagnostics in its metadata
+#' slots.
 #'
 #' @param x SNPData object containing X chromosome SNP data with donor
 #'   assignments and heterozygosity information. For \code{by = "clonotype"},
@@ -184,13 +184,9 @@ setMethod(
 #' @param refit_after_filter Logical; if TRUE, re-run the EM algorithm after
 #'   filtering genes with inconsistent allelic patterns.
 #' @param by Modelling unit, \code{"cell"} or \code{"clonotype"}.
-#' @param store Logical; if TRUE, return the input SNPData object with the
-#'   diagnostics written into its metadata slots rather than the internal
-#'   \code{xci_fit} object.
 #'
-#' @return If \code{store = FALSE}, an \code{xci_fit} object (named list by
-#'   donor). If \code{store = TRUE}, the input SNPData object with diagnostics
-#'   written into its metadata slots.
+#' @return The input SNPData object with diagnostics written into its metadata
+#'   slots.
 #'
 #' @keywords internal
 #' @include SNPData-class.R
@@ -206,7 +202,6 @@ setMethod(
         .check_clonotype_available(x)
     }
 
-    donor_fitter <- if (by == "clonotype") .fit_xci_donor_by_clonotype else .fit_xci_donor
     unique_donors <- sort(unique(get_barcode_info(x)$donor))
 
     # Split the data per donor up front so each worker only receives its own
@@ -218,7 +213,7 @@ setMethod(
         unique_donors,
         function(dd, d) {
             tryCatch(
-                donor_fitter(dd, n_inits, confidence_threshold, refit_after_filter),
+                .fit_xci_donor(dd, n_inits, confidence_threshold, refit_after_filter, by = by),
                 error = function(e) {
                     logger::log_warn("Failed to fit XCI for donor {d}: {conditionMessage(e)}")
                     NULL
@@ -753,69 +748,51 @@ setMethod(
     )
 }
 
+#' Fit the XCI model for one donor, at cell or clonotype level
+#'
+#' Shared per-donor fitter for both modelling units. For \code{by = "cell"} the
+#' count matrices are used as-is; for \code{by = "clonotype"} they are first
+#' aggregated by clonotype and the resulting clonotype-level posteriors are
+#' projected back down to individual cells.
+#'
 #' @keywords internal
-.fit_xci_donor <- function(snp_data, n_inits = 10, confidence_threshold = 0.95, refit_after_filter = FALSE) {
-    donor <- unique(get_barcode_info(snp_data)$donor)
-    logger::log_info("[{donor}] Fitting XCI model")
-
-    snp_data <- .filter_to_informative_het_snps(snp_data, donor)
-
-    ref_mat <- ref_count(snp_data)
-    alt_mat <- alt_count(snp_data)
-    cell_ids <- colnames(ref_mat)
-    snp_info <- get_snp_info(snp_data)
-
-    if (nrow(ref_mat) == 0 || ncol(ref_mat) == 0) {
-        logger::log_warn("Insufficient data for donor {donor}")
-        return(NULL)
-    }
-
-    xci_result <- .infer_xci(
-        ref_mat,
-        alt_mat,
-        n_inits = n_inits,
-        confidence_threshold = confidence_threshold,
-        refit_after_filter = refit_after_filter,
-        donor = donor
-    )
-
-    .assemble_xci_fit(
-        xci_result = xci_result,
-        donor = donor,
-        ref_mat = ref_mat,
-        alt_mat = alt_mat,
-        snp_info = snp_info,
-        unit_ids = cell_ids,
-        unit_label = "cells"
-    )
-}
-
-#' @keywords internal
-.fit_xci_donor_by_clonotype <- function(
+.fit_xci_donor <- function(
     snp_data,
     n_inits = 10,
     confidence_threshold = 0.95,
-    refit_after_filter = FALSE
+    refit_after_filter = FALSE,
+    by = c("cell", "clonotype")
 ) {
+    by <- match.arg(by)
     donor <- unique(get_barcode_info(snp_data)$donor)
-    logger::log_info("[{donor}] Fitting XCI model at clonotype level")
+
+    if (by == "clonotype") {
+        logger::log_info("[{donor}] Fitting XCI model at clonotype level")
+    } else {
+        logger::log_info("[{donor}] Fitting XCI model")
+    }
 
     snp_data <- .filter_to_informative_het_snps(snp_data, donor)
 
-    barcode_info <- get_barcode_info(snp_data)
-    has_clonotype <- !is.na(barcode_info$clonotype)
-    if (!any(has_clonotype)) {
-        stop(glue::glue("No cells with non-NA clonotype values for donor {donor}"))
+    # Build the count matrices at the requested modelling unit. For clonotypes,
+    # drop cells with no clonotype and aggregate counts within each clonotype.
+    cell_to_clonotype <- NULL
+    if (by == "clonotype") {
+        has_clonotype <- !is.na(get_barcode_info(snp_data)$clonotype)
+        if (!any(has_clonotype)) {
+            stop(glue::glue("No cells with non-NA clonotype values for donor {donor}"))
+        }
+        snp_data <- snp_data[, has_clonotype]
+
+        cell_to_clonotype <- get_barcode_info(snp_data) %>%
+            dplyr::select(cell_id, clonotype)
+        ref_mat <- groupedRowSums(ref_count(snp_data), cell_to_clonotype$clonotype)
+        alt_mat <- groupedRowSums(alt_count(snp_data), cell_to_clonotype$clonotype)
+    } else {
+        ref_mat <- ref_count(snp_data)
+        alt_mat <- alt_count(snp_data)
     }
-    snp_data <- snp_data[, has_clonotype]
-
-    cell_to_clonotype <- get_barcode_info(snp_data) %>%
-        dplyr::select(cell_id, clonotype)
-    clonotypes <- cell_to_clonotype$clonotype
-
-    ref_mat <- groupedRowSums(ref_count(snp_data), clonotypes)
-    alt_mat <- groupedRowSums(alt_count(snp_data), clonotypes)
-    clonotype_ids <- colnames(ref_mat)
+    unit_ids <- colnames(ref_mat)
     snp_info <- get_snp_info(snp_data)
 
     if (nrow(ref_mat) == 0 || ncol(ref_mat) == 0) {
@@ -838,18 +815,20 @@ setMethod(
         ref_mat = ref_mat,
         alt_mat = alt_mat,
         snp_info = snp_info,
-        unit_ids = clonotype_ids,
-        unit_label = "clonotypes"
+        unit_ids = unit_ids,
+        unit = by
     )
 
-    # Project clonotype-level posteriors down to individual cells so downstream
-    # cell annotation works. Each cell inherits its clonotype's posterior.
-    fit$cell_assignments <- fit$assignments %>%
-        dplyr::rename(clonotype = cell_id) %>%
-        dplyr::inner_join(cell_to_clonotype, by = "clonotype") %>%
-        dplyr::select(cell_id, post_X1, post_X2, assignment)
+    if (by == "clonotype") {
+        # Project clonotype-level posteriors down to individual cells so
+        # downstream cell annotation works. Each cell inherits its clonotype's
+        # posterior.
+        fit$cell_assignments <- fit$assignments %>%
+            dplyr::rename(clonotype = cell_id) %>%
+            dplyr::inner_join(cell_to_clonotype, by = "clonotype") %>%
+            dplyr::select(cell_id, post_X1, post_X2, assignment)
+    }
 
-    fit$unit <- "clonotype"
     fit
 }
 
@@ -862,7 +841,10 @@ setMethod(
 #' unit uniformly.
 #'
 #' @keywords internal
-.assemble_xci_fit <- function(xci_result, donor, ref_mat, alt_mat, snp_info, unit_ids, unit_label) {
+.assemble_xci_fit <- function(xci_result, donor, ref_mat, alt_mat, snp_info, unit_ids, unit = c("cell", "clonotype")) {
+    unit <- match.arg(unit)
+    unit_label <- if (unit == "clonotype") "clonotypes" else "cells"
+
     assignments <- xci_result$post %>%
         dplyr::mutate(cell_id = unit_ids[cell], post_X2 = 1 - post_X1) %>%
         dplyr::select(cell_id, post_X1, post_X2, assignment)
@@ -890,7 +872,7 @@ setMethod(
 
     list(
         donor = donor,
-        unit = "cell",
+        unit = unit,
         assignments = assignments,
         haplotypes = haplotypes,
         ref_mat = ref_mat_filtered,
