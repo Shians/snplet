@@ -2,21 +2,110 @@
 % Please edit documentation in R/assign_inactive_x.R
 \name{plot_inactive_x_assignment_heatmap}
 \alias{plot_inactive_x_assignment_heatmap}
-\title{Plot assignment heatmap from an XCI fit}
+\alias{plot_inactive_x_assignment_heatmap,SNPData-method}
+\title{Plot assignment heatmap from a SNPData object with stored XCI diagnostics}
 \usage{
-plot_inactive_x_assignment_heatmap(fit, donor)
+plot_inactive_x_assignment_heatmap(
+  x,
+  donor,
+  min_coverage_cells = 1,
+  max_genes = NULL,
+  show_gene_names = TRUE,
+  show_posterior = TRUE,
+  mark_boundaries = TRUE,
+  show_unassigned = TRUE,
+  show_no_coverage = FALSE,
+  cluster_rows = FALSE,
+  ref_fraction_palette = c("#2166ac", "#f7f7f7", "#b2182b"),
+  assignment_palette = c(X1 = "#1b7837", X2 = "#762a83", unassigned = "grey70"),
+  posterior_palette = c("#8c510a", "#f7f7f7", "#e08214"),
+  na_fill = "grey90"
+)
+
+\S4method{plot_inactive_x_assignment_heatmap}{SNPData}(
+  x,
+  donor,
+  min_coverage_cells = 1,
+  max_genes = NULL,
+  show_gene_names = TRUE,
+  show_posterior = TRUE,
+  mark_boundaries = TRUE,
+  show_unassigned = TRUE,
+  show_no_coverage = FALSE,
+  cluster_rows = FALSE,
+  ref_fraction_palette = c("#2166ac", "#f7f7f7", "#b2182b"),
+  assignment_palette = c(X1 = "#1b7837", X2 = "#762a83", unassigned = "grey70"),
+  posterior_palette = c("#8c510a", "#f7f7f7", "#e08214"),
+  na_fill = "grey90"
+)
 }
 \arguments{
-\item{fit}{An \code{xci_fit} object from \code{\link{fit_inactive_x}}}
+\item{x}{A SNPData object that had XCI diagnostics stored by
+\code{\link{assign_inactive_x}} or
+\code{\link{assign_inactive_x_by_clonotype}}.}
 
 \item{donor}{Character string specifying which donor to visualize}
+
+\item{min_coverage_cells}{Minimum number of cells that must cover a gene for
+it to be shown. Genes covered in fewer cells carry little signal and are
+dropped. Defaults to 1 (drop only genes with no coverage in this donor).}
+
+\item{max_genes}{Maximum number of genes (rows) to display. When set, only
+the top \code{max_genes} most discriminative genes are shown. Defaults to
+\code{NULL} (show all retained genes).}
+
+\item{show_gene_names}{Whether to draw gene names as row labels. Useful to
+turn off when many genes are shown. Defaults to \code{TRUE}.}
+
+\item{show_posterior}{Whether to draw the "P(inactive = X1)" posterior
+probability annotation row. Defaults to \code{TRUE}.}
+
+\item{mark_boundaries}{Whether to draw dotted vertical lines at the
+transitions between assignment groups (X1 -> unassigned -> X2). Defaults to
+\code{TRUE}.}
+
+\item{show_unassigned}{Whether to include low-confidence unassigned columns:
+cells or clonotypes the model scored but could not confidently assign to X1
+or X2. Defaults to \code{TRUE}.}
+
+\item{show_no_coverage}{Whether to include no-coverage columns: cells or
+clonotypes with no covered informative SNPs, which the model never scored.
+These carry no data (all-NA columns). Defaults to \code{FALSE}.}
+
+\item{cluster_rows}{Whether to cluster genes hierarchically instead of
+ordering them by discriminative power. Defaults to \code{FALSE}.}
+
+\item{ref_fraction_palette}{Length-3 vector of colours for the REF fraction
+heatmap body, mapped to fractions 0, 0.5, and 1. Defaults to a blue-red
+diverging ramp.}
+
+\item{assignment_palette}{Named vector of colours for the assignment
+annotation, with names \code{"X1"}, \code{"X2"}, and \code{"unassigned"}.
+Defaults to green / purple.}
+
+\item{posterior_palette}{Length-3 vector of colours for the posterior_X1
+annotation ramp, mapped to posteriors 0, 0.5, and 1. Defaults to a
+brown-orange diverging ramp. The three scales use distinct hue families
+(blue-red, green/purple, brown-orange) so viewers do not relate them.}
+
+\item{na_fill}{Colour for uncovered (missing) cells. Defaults to
+\code{"grey90"}, chosen to read distinctly from a balanced REF fraction.}
 }
 \value{
-A ComplexHeatmap object
+A drawn \code{HeatmapList} (the donor is the plot title and the
+  column axis is labelled with the modelling unit, "Cells" or "Clonotypes").
+  Prints normally but, being already drawn, is not composable with \code{+}.
 }
 \description{
-Visualizes the REF allele fraction at the final EM-selected genes for a
-single donor. Cells are ordered by assignment (X1 then X2 then unassigned)
-and annotated at the top. Rows are the genes that survived both the outlier
-filter and the post-convergence escapee filter.
+Visualizes the REF allele fraction at the genes this donor's model retained.
+Columns (cells or clonotypes) are ordered by posterior and annotated at the
+top. Rows are ordered by discriminative power (the difference in mean REF
+fraction between X1 and X2 cells) so the genes that most cleanly flip allele
+between the two states appear at the bottom. A right-hand annotation shows
+how many cells cover each gene. In the "Inactive X" annotation, units the
+model could not call are split into "unassigned" (covered but low posterior
+confidence) and "no coverage" (no covered informative SNPs, hence never
+scored), so the two reasons are visually distinct. When any no-coverage units
+are present they are further isolated into their own column slice, separated
+from the scored units by a gap.
 }

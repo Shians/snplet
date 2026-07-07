@@ -14,11 +14,11 @@ get_donor_het_snpdata(snp_data, donor, ...)
 \item{...}{Additional arguments passed to `donor_het_status_df`}
 }
 \value{
-A filtered SNPData object containing only the specified donor and 
+A filtered SNPData object containing only the specified donor and
   their heterozygous SNPs
 }
 \description{
-Filters a SNPData object to a specific donor and only includes SNPs that are 
+Filters a SNPData object to a specific donor and only includes SNPs that are
 heterozygous for that donor.
 }
 \examples{

@@ -21,6 +21,15 @@ utils::globalVariables(c(
     "gene_name",
     "inactive_x",
     "inactive_x_prob",
+    "pi_g",
+    "escape_fraction",
+    "xci_informative",
+    "xci_informative_donor",
+    "xci_allele_on_x1",
+    "xci_escape_fraction",
+    "xci_post_X1",
+    "xci_fit_unit",
+    "unit_id",
     "library_size",
     "maf",
     "minor_count",
@@ -75,7 +84,11 @@ groupedRowSums <- function(x, groups) {
     if (length(groups) != ncol(x)) {
         stop(
             "Length of groups must match the number of columns in x. ",
-            "Got ", length(groups), " groups for ", ncol(x), " columns."
+            "Got ",
+            length(groups),
+            " groups for ",
+            ncol(x),
+            " columns."
         )
     }
 
