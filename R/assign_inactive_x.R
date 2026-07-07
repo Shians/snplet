@@ -1350,7 +1350,7 @@ setMethod(
 }
 
 #' @keywords internal
-.pivot_counts_to_long <- function(ref_mat, alt_mat, min_cov = 3) {
+.pivot_counts_to_long <- function(ref_mat, alt_mat, min_cov = 1) {
     n_mat <- ref_mat + alt_mat
     # Matrix::which handles sparse lgCMatrix; base which() does not dispatch S4
     idx <- Matrix::which(n_mat >= min_cov, arr.ind = TRUE)
