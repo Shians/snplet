@@ -72,8 +72,7 @@ setMethod(
             n_inits = n_inits,
             confidence_threshold = confidence_threshold,
             refit_after_filter = refit_after_filter,
-            by = "cell",
-            store = TRUE
+            by = "cell"
         )
     }
 )
@@ -159,8 +158,7 @@ setMethod(
             n_inits = n_inits,
             confidence_threshold = confidence_threshold,
             refit_after_filter = refit_after_filter,
-            by = "clonotype",
-            store = TRUE
+            by = "clonotype"
         )
     }
 )
@@ -201,8 +199,7 @@ setMethod(
     n_inits = 10,
     confidence_threshold = 0.95,
     refit_after_filter = FALSE,
-    by = c("cell", "clonotype"),
-    store = FALSE
+    by = c("cell", "clonotype")
 ) {
     by <- match.arg(by)
     if (by == "clonotype") {
@@ -233,11 +230,7 @@ setMethod(
         magrittr::set_names(unique_donors)
 
     fit <- structure(result, class = "xci_fit")
-
-    if (store) {
-        return(.store_xci_fit(x, fit))
-    }
-    fit
+    .store_xci_fit(x, fit)
 }
 
 #' @keywords internal
