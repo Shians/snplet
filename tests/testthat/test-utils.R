@@ -113,15 +113,12 @@ test_that("groupedRowSums validates group length and missing values", {
 
 test_that("check_file works correctly", {
     # Setup - Create temporary file
-    temp_file <- tempfile()
+    temp_file <- withr::local_tempfile()
     writeLines("test content", temp_file)
 
     # Test existing file (should not error)
     # Verify no error when checking existing file
     expect_no_error(check_file(temp_file))
-
-    # Cleanup
-    unlink(temp_file)
 
     # Test non-existing file (should error)
     non_existing_file <- tempfile()
