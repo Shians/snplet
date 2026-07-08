@@ -30,27 +30,27 @@ test_barcode_info <- data.frame(
     stringsAsFactors = FALSE
 )
 
-# ==============================================================================
-
-test_that("SNPData() creates valid S4 object with correct class", {
-    snp_data <- SNPData(
+# Create test SNPData object using the standard fixtures above
+create_test_snpdata <- function() {
+    SNPData(
         ref_count = test_ref_count,
         alt_count = test_alt_count,
         snp_info = test_snp_info,
         barcode_info = test_barcode_info
     )
+}
+
+# ==============================================================================
+
+test_that("SNPData() creates valid S4 object with correct class", {
+    snp_data <- create_test_snpdata()
 
     # Verify SNPData object is created successfully
     expect_s4_class(snp_data, "SNPData")
 })
 
 test_that("SNPData() sets correct dimensions", {
-    snp_data <- SNPData(
-        ref_count = test_ref_count,
-        alt_count = test_alt_count,
-        snp_info = test_snp_info,
-        barcode_info = test_barcode_info
-    )
+    snp_data <- create_test_snpdata()
 
     # Check that dim() method returns correct dimensions
     expect_equal(dim(snp_data), c(2, 2))
@@ -61,12 +61,7 @@ test_that("SNPData() sets correct dimensions", {
 })
 
 test_that("SNPData() sets row and column names from metadata", {
-    snp_data <- SNPData(
-        ref_count = test_ref_count,
-        alt_count = test_alt_count,
-        snp_info = test_snp_info,
-        barcode_info = test_barcode_info
-    )
+    snp_data <- create_test_snpdata()
 
     # Check that SNP IDs are used as row names
     expect_equal(rownames(snp_data), c("snp_1", "snp_2"))
@@ -75,12 +70,7 @@ test_that("SNPData() sets row and column names from metadata", {
 })
 
 test_that("ref_count() returns reference count matrix with correct values and names", {
-    snp_data <- SNPData(
-        ref_count = test_ref_count,
-        alt_count = test_alt_count,
-        snp_info = test_snp_info,
-        barcode_info = test_barcode_info
-    )
+    snp_data <- create_test_snpdata()
 
     ref_count_matrix <- ref_count(snp_data)
 
@@ -93,12 +83,7 @@ test_that("ref_count() returns reference count matrix with correct values and na
 })
 
 test_that("alt_count() returns alternate count matrix with correct values and names", {
-    snp_data <- SNPData(
-        ref_count = test_ref_count,
-        alt_count = test_alt_count,
-        snp_info = test_snp_info,
-        barcode_info = test_barcode_info
-    )
+    snp_data <- create_test_snpdata()
 
     alt_count_matrix <- alt_count(snp_data)
 
@@ -111,12 +96,7 @@ test_that("alt_count() returns alternate count matrix with correct values and na
 })
 
 test_that("get_snp_info() returns SNP metadata with computed coverage metrics", {
-    snp_data <- SNPData(
-        ref_count = test_ref_count,
-        alt_count = test_alt_count,
-        snp_info = test_snp_info,
-        barcode_info = test_barcode_info
-    )
+    snp_data <- create_test_snpdata()
 
     snp_info <- get_snp_info(snp_data)
 
@@ -135,12 +115,7 @@ test_that("get_snp_info() returns SNP metadata with computed coverage metrics", 
 })
 
 test_that("get_barcode_info() returns barcode metadata with computed library size metrics", {
-    snp_data <- SNPData(
-        ref_count = test_ref_count,
-        alt_count = test_alt_count,
-        snp_info = test_snp_info,
-        barcode_info = test_barcode_info
-    )
+    snp_data <- create_test_snpdata()
 
     barcode_info <- get_barcode_info(snp_data)
 
@@ -161,12 +136,7 @@ test_that("get_barcode_info() returns barcode metadata with computed library siz
 })
 
 test_that("[() subsetting by numeric index returns SNPData object with correct dimensions", {
-    snp_data <- SNPData(
-        alt_count = test_alt_count,
-        ref_count = test_ref_count,
-        snp_info = test_snp_info,
-        barcode_info = test_barcode_info
-    )
+    snp_data <- create_test_snpdata()
 
     subset_data <- snp_data[1, 1]
 
@@ -177,12 +147,7 @@ test_that("[() subsetting by numeric index returns SNPData object with correct d
 })
 
 test_that("[() subsetting by name returns SNPData object with correct dimensions", {
-    snp_data <- SNPData(
-        alt_count = test_alt_count,
-        ref_count = test_ref_count,
-        snp_info = test_snp_info,
-        barcode_info = test_barcode_info
-    )
+    snp_data <- create_test_snpdata()
 
     subset_data <- snp_data["snp_1", "cell_1"]
 
@@ -193,12 +158,7 @@ test_that("[() subsetting by name returns SNPData object with correct dimensions
 })
 
 test_that("[() ignores drop parameter and always returns SNPData object", {
-    snp_data <- SNPData(
-        alt_count = test_alt_count,
-        ref_count = test_ref_count,
-        snp_info = test_snp_info,
-        barcode_info = test_barcode_info
-    )
+    snp_data <- create_test_snpdata()
 
     subset_data <- snp_data[1, 1, drop = TRUE]
 
@@ -209,12 +169,7 @@ test_that("[() ignores drop parameter and always returns SNPData object", {
 })
 
 test_that("[() subsetting to single row returns SNPData object", {
-    snp_data <- SNPData(
-        alt_count = test_alt_count,
-        ref_count = test_ref_count,
-        snp_info = test_snp_info,
-        barcode_info = test_barcode_info
-    )
+    snp_data <- create_test_snpdata()
 
     subset_data <- snp_data[1, ]
 
@@ -225,12 +180,7 @@ test_that("[() subsetting to single row returns SNPData object", {
 })
 
 test_that("[() subsetting to single column returns SNPData object", {
-    snp_data <- SNPData(
-        alt_count = test_alt_count,
-        ref_count = test_ref_count,
-        snp_info = test_snp_info,
-        barcode_info = test_barcode_info
-    )
+    snp_data <- create_test_snpdata()
 
     subset_data <- snp_data[, 1]
 
@@ -241,12 +191,7 @@ test_that("[() subsetting to single column returns SNPData object", {
 })
 
 test_that("coverage() returns sum of alt_count and ref_count matrices", {
-    snp_data <- SNPData(
-        alt_count = test_alt_count,
-        ref_count = test_ref_count,
-        snp_info = test_snp_info,
-        barcode_info = test_barcode_info
-    )
+    snp_data <- create_test_snpdata()
     expected_coverage <- Matrix::Matrix(
         matrix(c(6, 8, 10, 12), nrow = 2, ncol = 2),
         dimnames = list(c("snp_1", "snp_2"), c("cell_1", "cell_2"))
@@ -343,24 +288,14 @@ test_that("SNPData() throws error when barcode_info rows don't match matrix colu
 })
 
 test_that("get_sample_info() returns same result as get_barcode_info()", {
-    snp_data <- SNPData(
-        ref_count = test_ref_count,
-        alt_count = test_alt_count,
-        snp_info = test_snp_info,
-        barcode_info = test_barcode_info
-    )
+    snp_data <- create_test_snpdata()
 
     # Verify get_sample_info is an alias for get_barcode_info
     expect_equal(get_sample_info(snp_data), get_barcode_info(snp_data))
 })
 
 test_that("barcode_info<- replaces barcode_info with valid data", {
-    snp_data <- SNPData(
-        ref_count = test_ref_count,
-        alt_count = test_alt_count,
-        snp_info = test_snp_info,
-        barcode_info = test_barcode_info
-    )
+    snp_data <- create_test_snpdata()
 
     new_barcode_info <- data.frame(
         cell_id = c("cell_1", "cell_2"),
@@ -378,12 +313,7 @@ test_that("barcode_info<- replaces barcode_info with valid data", {
 })
 
 test_that("barcode_info<- throws error when dimensions don't match", {
-    snp_data <- SNPData(
-        ref_count = test_ref_count,
-        alt_count = test_alt_count,
-        snp_info = test_snp_info,
-        barcode_info = test_barcode_info
-    )
+    snp_data <- create_test_snpdata()
 
     wrong_dim_barcode_info <- data.frame(
         cell_id = c("cell_1", "cell_2", "cell_3"),
@@ -398,12 +328,7 @@ test_that("barcode_info<- throws error when dimensions don't match", {
 })
 
 test_that("barcode_info<- throws error when cell_id column is missing", {
-    snp_data <- SNPData(
-        ref_count = test_ref_count,
-        alt_count = test_alt_count,
-        snp_info = test_snp_info,
-        barcode_info = test_barcode_info
-    )
+    snp_data <- create_test_snpdata()
 
     no_cell_id <- data.frame(
         donor = c("donor_1", "donor_1"),
@@ -418,12 +343,7 @@ test_that("barcode_info<- throws error when cell_id column is missing", {
 })
 
 test_that("barcode_info<- throws error when cell_id doesn't match matrix column names", {
-    snp_data <- SNPData(
-        ref_count = test_ref_count,
-        alt_count = test_alt_count,
-        snp_info = test_snp_info,
-        barcode_info = test_barcode_info
-    )
+    snp_data <- create_test_snpdata()
 
     mismatched_cell_id <- data.frame(
         cell_id = c("cell_3", "cell_4"),
@@ -438,12 +358,7 @@ test_that("barcode_info<- throws error when cell_id doesn't match matrix column 
 })
 
 test_that("snp_info<- replaces snp_info with valid data", {
-    snp_data <- SNPData(
-        ref_count = test_ref_count,
-        alt_count = test_alt_count,
-        snp_info = test_snp_info,
-        barcode_info = test_barcode_info
-    )
+    snp_data <- create_test_snpdata()
 
     new_snp_info <- data.frame(
         snp_id = c("snp_1", "snp_2"),
@@ -461,12 +376,7 @@ test_that("snp_info<- replaces snp_info with valid data", {
 })
 
 test_that("snp_info<- throws error when dimensions don't match", {
-    snp_data <- SNPData(
-        ref_count = test_ref_count,
-        alt_count = test_alt_count,
-        snp_info = test_snp_info,
-        barcode_info = test_barcode_info
-    )
+    snp_data <- create_test_snpdata()
 
     wrong_dim_snp_info <- data.frame(
         snp_id = c("snp_1", "snp_2", "snp_3"),
@@ -481,12 +391,7 @@ test_that("snp_info<- throws error when dimensions don't match", {
 })
 
 test_that("snp_info<- throws error when snp_id column is missing", {
-    snp_data <- SNPData(
-        ref_count = test_ref_count,
-        alt_count = test_alt_count,
-        snp_info = test_snp_info,
-        barcode_info = test_barcode_info
-    )
+    snp_data <- create_test_snpdata()
 
     no_snp_id <- data.frame(
         pos = c(100, 200),
@@ -501,12 +406,7 @@ test_that("snp_info<- throws error when snp_id column is missing", {
 })
 
 test_that("snp_info<- throws error when snp_id doesn't match matrix row names", {
-    snp_data <- SNPData(
-        ref_count = test_ref_count,
-        alt_count = test_alt_count,
-        snp_info = test_snp_info,
-        barcode_info = test_barcode_info
-    )
+    snp_data <- create_test_snpdata()
 
     mismatched_snp_id <- data.frame(
         snp_id = c("snp_3", "snp_4"),
