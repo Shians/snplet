@@ -60,6 +60,11 @@ utils::globalVariables(c(
     "tested",
     "total_count",
     "total_library_size",
+    "active_count",
+    "inactive_count",
+    "dominant_allele",
+    "same_allele_dominant",
+    "escapes",
     "zygosity"
 ))
 
