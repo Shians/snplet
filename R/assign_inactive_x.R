@@ -39,7 +39,7 @@
 #'   inactive X chromosome state. Cells that do not meet the confidence
 #'   threshold receive \code{NA}. The full XCI diagnostics are also written
 #'   into the object's metadata slots, so the result can be
-#'   passed directly to \code{\link{plot_inactive_x_assignment_heatmap}},
+#'   passed directly to \code{\link{plot_xci_heatmap}},
 #'   \code{\link{xci_assignments}}, and \code{\link{xci_haplotypes}}.
 #'
 #' @family X-chromosome inactivation functions
@@ -48,26 +48,26 @@
 #' @examples
 #' \dontrun{
 #' # Assign inactive X chromosome to cells
-#' snp_data <- assign_inactive_x(snp_data)
+#' snp_data <- assign_xci(snp_data)
 #'
 #' # View results
 #' get_barcode_info(snp_data) %>%
 #'   count(donor, inactive_x)
 #'
 #' # Diagnostics are stored, so plotting works directly
-#' plot_inactive_x_assignment_heatmap(snp_data, donor = "donor1")
+#' plot_xci_heatmap(snp_data, donor = "donor1")
 #' }
-setGeneric("assign_inactive_x", function(x, n_inits = 10, confidence_threshold = 0.95, refit_after_filter = FALSE) {
-    standardGeneric("assign_inactive_x")
+setGeneric("assign_xci", function(x, n_inits = 10, confidence_threshold = 0.95, refit_after_filter = FALSE) {
+    standardGeneric("assign_xci")
 })
 
-#' @rdname assign_inactive_x
+#' @rdname assign_xci
 #' @include SNPData-class.R
 setMethod(
-    "assign_inactive_x",
+    "assign_xci",
     signature(x = "SNPData"),
     function(x, n_inits = 10, confidence_threshold = 0.95, refit_after_filter = FALSE) {
-        .fit_inactive_x(
+        .fit_xci(
             x,
             n_inits = n_inits,
             confidence_threshold = confidence_threshold,
@@ -84,7 +84,7 @@ setMethod(
 #' before running the EM model and projecting assignments back to individual cells.
 #'
 #' @details
-#' This function is similar to \code{\link{assign_inactive_x}} but runs the
+#' This function is similar to \code{\link{assign_xci}} but runs the
 #' beta-binomial EM on clonotype-aggregated counts rather than per-cell counts.
 #' This approach:
 #' \itemize{
@@ -122,7 +122,7 @@ setMethod(
 #'   confidence threshold receive \code{NA}. The full XCI diagnostics are also
 #'   written into the object's metadata slots,
 #'   so the result can be passed directly to
-#'   \code{\link{plot_inactive_x_assignment_heatmap}},
+#'   \code{\link{plot_xci_heatmap}},
 #'   \code{\link{xci_assignments}}, and \code{\link{xci_haplotypes}}.
 #'
 #' @family X-chromosome inactivation functions
@@ -131,29 +131,29 @@ setMethod(
 #' @examples
 #' \dontrun{
 #' # Assign inactive X chromosome to cells by clonotype
-#' snp_data <- assign_inactive_x_by_clonotype(snp_data)
+#' snp_data <- assign_xci_by_clonotype(snp_data)
 #'
 #' # View results
 #' get_barcode_info(snp_data) %>%
 #'   count(donor, clonotype, inactive_x)
 #'
 #' # Diagnostics are stored, so plotting works directly
-#' plot_inactive_x_assignment_heatmap(snp_data, donor = "donor1")
+#' plot_xci_heatmap(snp_data, donor = "donor1")
 #' }
 setGeneric(
-    "assign_inactive_x_by_clonotype",
+    "assign_xci_by_clonotype",
     function(x, n_inits = 10, confidence_threshold = 0.95, refit_after_filter = FALSE) {
-        standardGeneric("assign_inactive_x_by_clonotype")
+        standardGeneric("assign_xci_by_clonotype")
     }
 )
 
-#' @rdname assign_inactive_x_by_clonotype
+#' @rdname assign_xci_by_clonotype
 #' @include SNPData-class.R
 setMethod(
-    "assign_inactive_x_by_clonotype",
+    "assign_xci_by_clonotype",
     signature(x = "SNPData"),
     function(x, n_inits = 10, confidence_threshold = 0.95, refit_after_filter = FALSE) {
-        .fit_inactive_x(
+        .fit_xci(
             x,
             n_inits = n_inits,
             confidence_threshold = confidence_threshold,
@@ -170,8 +170,8 @@ setMethod(
 #' allele count matrices used in the model. The modelling unit is either the
 #' cell (\code{by = "cell"}) or the clonotype (\code{by = "clonotype"}).
 #'
-#' This is the shared engine behind \code{\link{assign_inactive_x}} and
-#' \code{\link{assign_inactive_x_by_clonotype}}. It is not exported; the public
+#' This is the shared engine behind \code{\link{assign_xci}} and
+#' \code{\link{assign_xci_by_clonotype}}. It is not exported; the public
 #' entry points return a SNPData object carrying the diagnostics in its metadata
 #' slots.
 #'
@@ -190,7 +190,7 @@ setMethod(
 #'
 #' @keywords internal
 #' @include SNPData-class.R
-.fit_inactive_x <- function(
+.fit_xci <- function(
     x,
     n_inits = 10,
     confidence_threshold = 0.95,
@@ -248,12 +248,12 @@ setMethod(
 #'
 #' Pulls the stored X-chromosome inactivation call and posterior for every cell
 #' out of a SNPData object's barcode metadata. Requires that
-#' \code{\link{assign_inactive_x}} or \code{\link{assign_inactive_x_by_clonotype}}
+#' \code{\link{assign_xci}} or \code{\link{assign_xci_by_clonotype}}
 #' has been run first; errors otherwise.
 #'
 #' @param x A SNPData object that had XCI diagnostics stored by
-#'   \code{\link{assign_inactive_x}} or
-#'   \code{\link{assign_inactive_x_by_clonotype}}.
+#'   \code{\link{assign_xci}} or
+#'   \code{\link{assign_xci_by_clonotype}}.
 #'
 #' @return A tibble with one row per cell and columns \code{cell_id}
 #'   (character), \code{donor} (character; present only when the object carries
@@ -270,7 +270,7 @@ setGeneric("xci_assignments", function(x) standardGeneric("xci_assignments"))
 setMethod("xci_assignments", signature(x = "SNPData"), function(x) {
     barcode_info <- get_barcode_info(x)
     if (!"inactive_x" %in% colnames(barcode_info)) {
-        stop("No stored XCI diagnostics found. Run assign_inactive_x(x) first.")
+        stop("No stored XCI diagnostics found. Run assign_xci(x) first.")
     }
     barcode_info %>%
         dplyr::select(cell_id, dplyr::any_of("donor"), inactive_x, xci_post_X1)
@@ -284,8 +284,8 @@ setMethod("xci_assignments", signature(x = "SNPData"), function(x) {
 #' row per SNP and donor rather than flattening to a single value.
 #'
 #' @param x A SNPData object that had XCI diagnostics stored by
-#'   \code{\link{assign_inactive_x}} or
-#'   \code{\link{assign_inactive_x_by_clonotype}}.
+#'   \code{\link{assign_xci}} or
+#'   \code{\link{assign_xci_by_clonotype}}.
 #'
 #' @return A tibble with one row per informative SNP and donor, with columns
 #'   \code{snp_id} (character), \code{gene_name} (character; present only when
@@ -304,7 +304,7 @@ setGeneric("xci_haplotypes", function(x) standardGeneric("xci_haplotypes"))
 setMethod("xci_haplotypes", signature(x = "SNPData"), function(x) {
     snp_info <- get_snp_info(x)
     if (!"xci_informative" %in% colnames(snp_info)) {
-        stop("No stored XCI diagnostics found. Run assign_inactive_x(x) first.")
+        stop("No stored XCI diagnostics found. Run assign_xci(x) first.")
     }
     snp_info %>%
         dplyr::filter(xci_informative) %>%
@@ -339,8 +339,8 @@ setMethod("xci_haplotypes", signature(x = "SNPData"), function(x) {
 #' from the scored units by a gap.
 #'
 #' @param x A SNPData object that had XCI diagnostics stored by
-#'   \code{\link{assign_inactive_x}} or
-#'   \code{\link{assign_inactive_x_by_clonotype}}.
+#'   \code{\link{assign_xci}} or
+#'   \code{\link{assign_xci_by_clonotype}}.
 #' @param donor Character string specifying which donor to visualize
 #' @param min_coverage_cells Minimum number of cells that must cover a gene for
 #'   it to be shown. Genes covered in fewer cells carry little signal and are
@@ -386,12 +386,12 @@ setMethod("xci_haplotypes", signature(x = "SNPData"), function(x) {
 #'
 #' @examples
 #' \dontrun{
-#' # Diagnostics stored by assign_inactive_x() are read back automatically
-#' snp_data <- assign_inactive_x(snp_data)
-#' plot_inactive_x_assignment_heatmap(snp_data, donor = "donor1")
+#' # Diagnostics stored by assign_xci() are read back automatically
+#' snp_data <- assign_xci(snp_data)
+#' plot_xci_heatmap(snp_data, donor = "donor1")
 #' }
 setGeneric(
-    "plot_inactive_x_assignment_heatmap",
+    "plot_xci_heatmap",
     function(
         x,
         donor,
@@ -408,14 +408,14 @@ setGeneric(
         posterior_palette = c("#8c510a", "#f7f7f7", "#e08214"),
         na_fill = "grey90"
     ) {
-        standardGeneric("plot_inactive_x_assignment_heatmap")
+        standardGeneric("plot_xci_heatmap")
     }
 )
 
-#' @rdname plot_inactive_x_assignment_heatmap
+#' @rdname plot_xci_heatmap
 #' @include SNPData-class.R
 setMethod(
-    "plot_inactive_x_assignment_heatmap",
+    "plot_xci_heatmap",
     signature(x = "SNPData"),
     function(
         x,
@@ -436,7 +436,7 @@ setMethod(
         barcode_info <- get_barcode_info(x)
         snp_info <- get_snp_info(x)
         if (!"inactive_x" %in% colnames(barcode_info) || !"xci_informative" %in% colnames(snp_info)) {
-            stop("No stored XCI diagnostics found. Run assign_inactive_x(x) first.")
+            stop("No stored XCI diagnostics found. Run assign_xci(x) first.")
         }
 
         donor_data <- filter_samples(x, donor == !!donor)
@@ -1358,4 +1358,52 @@ setMethod(
         alt = alt_mat[idx],
         n = n_mat[idx]
     )
+}
+
+# ==============================================================================
+# Deprecated aliases
+# ==============================================================================
+
+#' Deprecated functions in snplet
+#'
+#' These functions have been renamed to use the \code{xci} prefix for
+#' consistency with the rest of the X-chromosome inactivation API
+#' (\code{\link{xci_assignments}}, \code{\link{xci_haplotypes}}). The old names
+#' still work but issue a deprecation warning and will be removed in a future
+#' release.
+#'
+#' \itemize{
+#'   \item \code{assign_inactive_x()} -> \code{\link{assign_xci}()}
+#'   \item \code{assign_inactive_x_by_clonotype()} ->
+#'     \code{\link{assign_xci_by_clonotype}()}
+#'   \item \code{plot_inactive_x_assignment_heatmap()} ->
+#'     \code{\link{plot_xci_heatmap}()}
+#' }
+#'
+#' @param x A SNPData object.
+#' @param ... Arguments passed on to the replacement function.
+#'
+#' @name snplet-deprecated
+#' @keywords internal
+NULL
+
+#' @rdname snplet-deprecated
+#' @export
+assign_inactive_x <- function(x, ...) {
+    .Deprecated("assign_xci")
+    assign_xci(x, ...)
+}
+
+#' @rdname snplet-deprecated
+#' @export
+assign_inactive_x_by_clonotype <- function(x, ...) {
+    .Deprecated("assign_xci_by_clonotype")
+    assign_xci_by_clonotype(x, ...)
+}
+
+#' @rdname snplet-deprecated
+#' @export
+plot_inactive_x_assignment_heatmap <- function(x, ...) {
+    .Deprecated("plot_xci_heatmap")
+    plot_xci_heatmap(x, ...)
 }

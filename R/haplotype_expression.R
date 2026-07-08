@@ -2,7 +2,7 @@
 #'
 #' Splits each informative SNP's ALT/REF counts into active- and
 #' inactive-haplotype reads using the phase inferred by
-#' \code{\link{assign_inactive_x}}, computed separately within the X1-inactive
+#' \code{\link{assign_xci}}, computed separately within the X1-inactive
 #' and X2-inactive cell groups. Unlike a per-group \code{pmin}/\code{pmax} on
 #' raw counts, the allele-to-haplotype assignment comes from the stored
 #' per-donor phase (\code{xci_allele_on_x1_by_donor}) and is applied
@@ -27,8 +27,8 @@
 #' the fraction of reads coming from the haplotype that should be silenced.
 #'
 #' @param x A SNPData object that had XCI diagnostics stored by
-#'   \code{\link{assign_inactive_x}} or
-#'   \code{\link{assign_inactive_x_by_clonotype}}.
+#'   \code{\link{assign_xci}} or
+#'   \code{\link{assign_xci_by_clonotype}}.
 #' @param escape_threshold Inactive-haplotype fraction at or above which a
 #'   group is flagged as escaping in \code{escapes}. Default 0.1.
 #'
@@ -49,7 +49,7 @@
 #'
 #' @examples
 #' \dontrun{
-#' snp_data <- assign_inactive_x(snp_data)
+#' snp_data <- assign_xci(snp_data)
 #' hap <- haplotype_expression(snp_data)
 #'
 #' # SNPs that escape inactivation surface directly
@@ -66,7 +66,7 @@ setMethod("haplotype_expression", signature(x = "SNPData"), function(x, escape_t
     snp_info <- get_snp_info(x)
 
     if (!"inactive_x" %in% colnames(barcode_info) || !"xci_allele_on_x1_by_donor" %in% colnames(snp_info)) {
-        stop("No stored XCI diagnostics found. Run assign_inactive_x(x) first.")
+        stop("No stored XCI diagnostics found. Run assign_xci(x) first.")
     }
 
     # Informative SNPs carry a phase; cells carry a confident inactive-X call.
