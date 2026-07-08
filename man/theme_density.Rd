@@ -10,7 +10,7 @@ theme_density()
 A ggplot2 theme object that can be added to any ggplot
 }
 \description{
-This function provides a minimalist ggplot2 theme optimized for density plots.
+This function provides a minimalist ggplot2 theme optimised for density plots.
 It removes background elements, grid lines, and y-axis text while keeping
 essential elements like the axis lines and titles.
 }

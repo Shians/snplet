@@ -11,8 +11,8 @@ haplotype_expression(x, escape_threshold = 0.1)
 }
 \arguments{
 \item{x}{A SNPData object that had XCI diagnostics stored by
-\code{\link{assign_inactive_x}} or
-\code{\link{assign_inactive_x_by_clonotype}}.}
+\code{\link{assign_xci}} or
+\code{\link{assign_xci_by_clonotype}}.}
 
 \item{escape_threshold}{Inactive-haplotype fraction at or above which a
 group is flagged as escaping in \code{escapes}. Default 0.1.}
@@ -33,7 +33,7 @@ A tibble with one row per donor, informative SNP, and inactive-X
 \description{
 Splits each informative SNP's ALT/REF counts into active- and
 inactive-haplotype reads using the phase inferred by
-\code{\link{assign_inactive_x}}, computed separately within the X1-inactive
+\code{\link{assign_xci}}, computed separately within the X1-inactive
 and X2-inactive cell groups. Unlike a per-group \code{pmin}/\code{pmax} on
 raw counts, the allele-to-haplotype assignment comes from the stored
 per-donor phase (\code{xci_allele_on_x1_by_donor}) and is applied
@@ -59,7 +59,7 @@ the fraction of reads coming from the haplotype that should be silenced.
 }
 \examples{
 \dontrun{
-snp_data <- assign_inactive_x(snp_data)
+snp_data <- assign_xci(snp_data)
 hap <- haplotype_expression(snp_data)
 
 # SNPs that escape inactivation surface directly
@@ -68,9 +68,9 @@ dplyr::filter(hap, same_allele_dominant)
 }
 \seealso{
 Other X-chromosome inactivation functions:
-\code{\link[=assign_inactive_x]{assign_inactive_x()}},
-\code{\link[=assign_inactive_x_by_clonotype]{assign_inactive_x_by_clonotype()}},
-\code{\link[=plot_inactive_x_assignment_heatmap]{plot_inactive_x_assignment_heatmap()}},
+\code{\link[=assign_xci]{assign_xci()}},
+\code{\link[=assign_xci_by_clonotype]{assign_xci_by_clonotype()}},
+\code{\link[=plot_xci_heatmap]{plot_xci_heatmap()}},
 \code{\link[=xci_assignments]{xci_assignments()}},
 \code{\link[=xci_haplotypes]{xci_haplotypes()}}
 }

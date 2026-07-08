@@ -11,8 +11,8 @@ xci_assignments(x)
 }
 \arguments{
 \item{x}{A SNPData object that had XCI diagnostics stored by
-\code{\link{assign_inactive_x}} or
-\code{\link{assign_inactive_x_by_clonotype}}.}
+\code{\link{assign_xci}} or
+\code{\link{assign_xci_by_clonotype}}.}
 }
 \value{
 A tibble with one row per cell and columns \code{cell_id}
@@ -24,15 +24,15 @@ A tibble with one row per cell and columns \code{cell_id}
 \description{
 Pulls the stored X-chromosome inactivation call and posterior for every cell
 out of a SNPData object's barcode metadata. Requires that
-\code{\link{assign_inactive_x}} or \code{\link{assign_inactive_x_by_clonotype}}
+\code{\link{assign_xci}} or \code{\link{assign_xci_by_clonotype}}
 has been run first; errors otherwise.
 }
 \seealso{
 Other X-chromosome inactivation functions:
-\code{\link[=assign_inactive_x]{assign_inactive_x()}},
-\code{\link[=assign_inactive_x_by_clonotype]{assign_inactive_x_by_clonotype()}},
+\code{\link[=assign_xci]{assign_xci()}},
+\code{\link[=assign_xci_by_clonotype]{assign_xci_by_clonotype()}},
 \code{\link[=haplotype_expression]{haplotype_expression()}},
-\code{\link[=plot_inactive_x_assignment_heatmap]{plot_inactive_x_assignment_heatmap()}},
+\code{\link[=plot_xci_heatmap]{plot_xci_heatmap()}},
 \code{\link[=xci_haplotypes]{xci_haplotypes()}}
 }
 \concept{X-chromosome inactivation functions}
