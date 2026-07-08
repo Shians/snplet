@@ -99,7 +99,7 @@ test_that("haplotype_expression() errors when no XCI diagnostics are stored", {
     obj <- SNPData(ref_count = ref, alt_count = alt, snp_info = snp_info, barcode_info = barcode_info)
 
     # Verify the method refuses to run without stored phase/assignments
-    expect_error(haplotype_expression(obj), "Run assign_inactive_x")
+    expect_error(haplotype_expression(obj), "Run assign_xci")
 })
 
 test_that("haplotype_expression() carries a donor column keyed to the assignments", {

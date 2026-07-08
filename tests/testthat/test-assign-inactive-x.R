@@ -1,6 +1,6 @@
 # ==============================================================================
 # Test Suite: X-chromosome inactivation fitting
-# Description: assign_inactive_x cell/clonotype modes, stored diagnostics, and
+# Description: assign_xci cell/clonotype modes, stored diagnostics, and
 #              the SNPData accessor/heatmap methods.
 # ==============================================================================
 
@@ -98,9 +98,9 @@ make_xci_snpdata <- function(
 
 # ==============================================================================
 
-test_that("assign_inactive_x recovers the true clonal split at cell level", {
+test_that("assign_xci recovers the true clonal split at cell level", {
     fixture <- make_xci_snpdata()
-    stored <- assign_inactive_x(fixture$snpdata, n_inits = 3)
+    stored <- assign_xci(fixture$snpdata, n_inits = 3)
 
     assignments <- xci_assignments(stored)
     # Verify assignments carry the stored annotation columns
@@ -120,7 +120,7 @@ test_that("assign_inactive_x recovers the true clonal split at cell level", {
 
 test_that("xci_haplotypes reports phase and escape fraction per informative SNP", {
     fixture <- make_xci_snpdata()
-    stored <- assign_inactive_x(fixture$snpdata, n_inits = 3)
+    stored <- assign_xci(fixture$snpdata, n_inits = 3)
 
     haplotypes <- xci_haplotypes(stored)
     # Verify haplotype columns are present, including the per-donor donor column
@@ -133,7 +133,7 @@ test_that("xci_haplotypes reports phase and escape fraction per informative SNP"
 
 test_that("xci_haplotypes emits one row per SNP and donor for a multi-donor fit", {
     fixture <- make_xci_snpdata(n_donors = 2)
-    stored <- assign_inactive_x(fixture$snpdata, n_inits = 3)
+    stored <- assign_xci(fixture$snpdata, n_inits = 3)
 
     haplotypes <- xci_haplotypes(stored)
     # Confirm both donors are represented in the unnested output
@@ -174,9 +174,9 @@ test_that("clonotype fit projects assignments back to cells consistently", {
     expect_true(all(per_clono == 1))
 })
 
-test_that("assign_inactive_x promotes diagnostics into SNPData slots and survives subsetting", {
+test_that("assign_xci promotes diagnostics into SNPData slots and survives subsetting", {
     fixture <- make_xci_snpdata()
-    stored <- assign_inactive_x(fixture$snpdata, n_inits = 3)
+    stored <- assign_xci(fixture$snpdata, n_inits = 3)
 
     # Verify a SNPData object is returned
     expect_s4_class(stored, "SNPData")
@@ -206,7 +206,7 @@ test_that("assign_inactive_x promotes diagnostics into SNPData slots and survive
 
 test_that("accessors and heatmap work on a stored SNPData object", {
     fixture <- make_xci_snpdata()
-    stored <- assign_inactive_x(fixture$snpdata, n_inits = 3)
+    stored <- assign_xci(fixture$snpdata, n_inits = 3)
 
     assignments <- xci_assignments(stored)
     # Verify stored-object assignments expose the annotation columns
@@ -221,7 +221,7 @@ test_that("accessors and heatmap work on a stored SNPData object", {
     # device to keep the test headless.
     grDevices::pdf(NULL)
     on.exit(grDevices::dev.off(), add = TRUE)
-    hm <- plot_inactive_x_assignment_heatmap(stored, donor = "donor0")
+    hm <- plot_xci_heatmap(stored, donor = "donor0")
     # Verify the heatmap method returns a drawn HeatmapList object
     expect_s4_class(hm, "HeatmapList")
 })
@@ -229,7 +229,7 @@ test_that("accessors and heatmap work on a stored SNPData object", {
 # Shared stored-object fixture for heatmap display-parameter tests below
 create_stored_xci_fixture <- function() {
     fixture <- make_xci_snpdata()
-    assign_inactive_x(fixture$snpdata, n_inits = 3)
+    assign_xci(fixture$snpdata, n_inits = 3)
 }
 
 test_that("heatmap max_genes caps the number of displayed rows", {
@@ -237,7 +237,7 @@ test_that("heatmap max_genes caps the number of displayed rows", {
     grDevices::pdf(NULL)
     on.exit(grDevices::dev.off(), add = TRUE)
 
-    capped <- plot_inactive_x_assignment_heatmap(stored, donor = "donor0", max_genes = 5)
+    capped <- plot_xci_heatmap(stored, donor = "donor0", max_genes = 5)
 
     # Confirm max_genes caps the number of displayed rows
     expect_equal(nrow(capped@ht_list[[1]]@matrix), 5)
@@ -248,9 +248,9 @@ test_that("heatmap max_genes above the available count shows all retained genes"
     grDevices::pdf(NULL)
     on.exit(grDevices::dev.off(), add = TRUE)
 
-    full <- plot_inactive_x_assignment_heatmap(stored, donor = "donor0")
+    full <- plot_xci_heatmap(stored, donor = "donor0")
     n_all <- nrow(full@ht_list[[1]]@matrix)
-    big <- plot_inactive_x_assignment_heatmap(stored, donor = "donor0", max_genes = n_all + 100)
+    big <- plot_xci_heatmap(stored, donor = "donor0", max_genes = n_all + 100)
 
     # Confirm requesting more genes than available shows all retained genes
     expect_equal(nrow(big@ht_list[[1]]@matrix), n_all)
@@ -261,7 +261,7 @@ test_that("heatmap show_unassigned = FALSE drops unassigned columns", {
     grDevices::pdf(NULL)
     on.exit(grDevices::dev.off(), add = TRUE)
 
-    assigned_only <- plot_inactive_x_assignment_heatmap(
+    assigned_only <- plot_xci_heatmap(
         stored,
         donor = "donor0",
         show_unassigned = FALSE
@@ -277,7 +277,7 @@ test_that("heatmap accepts toggling gene names and row clustering", {
     grDevices::pdf(NULL)
     on.exit(grDevices::dev.off(), add = TRUE)
 
-    variant <- plot_inactive_x_assignment_heatmap(
+    variant <- plot_xci_heatmap(
         stored,
         donor = "donor0",
         show_gene_names = FALSE,
@@ -293,7 +293,7 @@ test_that("heatmap accepts toggling assignment boundary markers", {
     grDevices::pdf(NULL)
     on.exit(grDevices::dev.off(), add = TRUE)
 
-    no_marks <- plot_inactive_x_assignment_heatmap(
+    no_marks <- plot_xci_heatmap(
         stored,
         donor = "donor0",
         mark_boundaries = FALSE
@@ -308,8 +308,8 @@ test_that("heatmap show_posterior toggles the posterior annotation row", {
     grDevices::pdf(NULL)
     on.exit(grDevices::dev.off(), add = TRUE)
 
-    with_post <- plot_inactive_x_assignment_heatmap(stored, donor = "donor0")
-    without_post <- plot_inactive_x_assignment_heatmap(
+    with_post <- plot_xci_heatmap(stored, donor = "donor0")
+    without_post <- plot_xci_heatmap(
         stored,
         donor = "donor0",
         show_posterior = FALSE
@@ -330,7 +330,7 @@ test_that("heatmap applies custom colour arguments to the plot body", {
     grDevices::pdf(NULL)
     on.exit(grDevices::dev.off(), add = TRUE)
 
-    coloured <- plot_inactive_x_assignment_heatmap(
+    coloured <- plot_xci_heatmap(
         stored,
         donor = "donor0",
         ref_fraction_palette = c("#2166ac", "#f7f7f7", "#b2182b"),
@@ -352,7 +352,7 @@ test_that("heatmap applies custom colour arguments to the plot body", {
 
 test_that("heatmap distinguishes no-coverage units from low-confidence unassigned", {
     fixture <- make_xci_snpdata()
-    stored <- assign_inactive_x(fixture$snpdata, n_inits = 3)
+    stored <- assign_xci(fixture$snpdata, n_inits = 3)
 
     # Force one cell to look like it was never scored (NA posterior): the model
     # gives it no coverage, distinct from a low-confidence unassigned call.
@@ -370,7 +370,7 @@ test_that("heatmap distinguishes no-coverage units from low-confidence unassigne
     on.exit(grDevices::dev.off(), add = TRUE)
 
     # With show_no_coverage = TRUE the annotation carries a distinct level
-    hm <- plot_inactive_x_assignment_heatmap(
+    hm <- plot_xci_heatmap(
         stored,
         donor = "donor0",
         show_no_coverage = TRUE
@@ -385,7 +385,7 @@ test_that("heatmap distinguishes no-coverage units from low-confidence unassigne
 
     # By default (show_no_coverage = FALSE) the no-coverage cell is dropped, so
     # the plotted matrix loses exactly that one column
-    default_hm <- plot_inactive_x_assignment_heatmap(stored, donor = "donor0")
+    default_hm <- plot_xci_heatmap(stored, donor = "donor0")
     n_donor0 <- sum(get_barcode_info(stored)$donor == "donor0")
     expect_equal(ncol(default_hm@ht_list[[1]]@matrix), n_donor0 - 1)
 })
@@ -403,7 +403,7 @@ test_that("clonotype fit requires clonotype information", {
     )
     # Verify a clear error is raised when clonotypes are all NA
     expect_error(
-        assign_inactive_x_by_clonotype(no_clono),
+        assign_xci_by_clonotype(no_clono),
         "clonotype"
     )
 })
@@ -450,9 +450,9 @@ test_that("deduplicated kernel evaluation matches the direct per-row computation
     expect_identical(both$L1, direct_L1)
 })
 
-test_that("assign_inactive_x_by_clonotype recovers the clonal split and stores diagnostics", {
+test_that("assign_xci_by_clonotype recovers the clonal split and stores diagnostics", {
     fixture <- make_xci_snpdata()
-    stored <- assign_inactive_x_by_clonotype(fixture$snpdata, n_inits = 3)
+    stored <- assign_xci_by_clonotype(fixture$snpdata, n_inits = 3)
 
     # Verify a stored SNPData object is returned
     expect_s4_class(stored, "SNPData")
@@ -476,8 +476,8 @@ test_that("assign_inactive_x_by_clonotype recovers the clonal split and stores d
 test_that("confidence_threshold controls how many cells are hard-assigned", {
     fixture <- make_xci_snpdata()
 
-    strict <- assign_inactive_x(fixture$snpdata, n_inits = 3, confidence_threshold = 0.999)
-    lax <- assign_inactive_x(fixture$snpdata, n_inits = 3, confidence_threshold = 0.6)
+    strict <- assign_xci(fixture$snpdata, n_inits = 3, confidence_threshold = 0.999)
+    lax <- assign_xci(fixture$snpdata, n_inits = 3, confidence_threshold = 0.6)
 
     n_called_strict <- sum(!is.na(get_barcode_info(strict)$inactive_x))
     n_called_lax <- sum(!is.na(get_barcode_info(lax)$inactive_x))
@@ -497,7 +497,7 @@ test_that("refit_after_filter returns a valid fit and drops escapee genes", {
     fixture <- make_xci_snpdata(escapee = TRUE)
 
     # Verify the refit path returns a valid stored object
-    stored <- assign_inactive_x(fixture$snpdata, n_inits = 3, refit_after_filter = TRUE)
+    stored <- assign_xci(fixture$snpdata, n_inits = 3, refit_after_filter = TRUE)
     expect_s4_class(stored, "SNPData")
 
     # The clonal split must still be recovered after refitting
@@ -520,9 +520,9 @@ test_that("refit_after_filter returns a valid fit and drops escapee genes", {
     expect_true(any(snp_info$xci_informative))
 })
 
-test_that("assign_inactive_x fits each donor independently in a multi-donor object", {
+test_that("assign_xci fits each donor independently in a multi-donor object", {
     fixture <- make_xci_snpdata(n_donors = 2)
-    stored <- assign_inactive_x(fixture$snpdata, n_inits = 3)
+    stored <- assign_xci(fixture$snpdata, n_inits = 3)
 
     barcode_info <- get_barcode_info(stored)
     # Verify both donors received assignments
@@ -541,4 +541,45 @@ test_that("assign_inactive_x fits each donor independently in a multi-donor obje
     expect_true(max(agree_donor0, 1 - agree_donor0) > 0.9)
     # Confirm the clonal split is recovered within donor1
     expect_true(max(agree_donor1, 1 - agree_donor1) > 0.9)
+})
+
+# ==============================================================================
+# Deprecated aliases
+# ==============================================================================
+
+test_that("deprecated aliases warn and forward to their xci replacements", {
+    fixture <- make_xci_snpdata()
+
+    # Verify assign_inactive_x() warns and returns the same result as assign_xci()
+    expect_warning(
+        old_result <- assign_inactive_x(fixture$snpdata, n_inits = 3),
+        "deprecated"
+    )
+    new_result <- assign_xci(fixture$snpdata, n_inits = 3)
+    # Confirm the alias forwards to the new implementation identically
+    expect_equal(
+        xci_assignments(old_result),
+        xci_assignments(new_result)
+    )
+
+    # Confirm assign_inactive_x_by_clonotype() is deprecated in favour of the xci
+    # name (the fixture already carries clonotype assignments)
+    expect_warning(
+        assign_inactive_x_by_clonotype(fixture$snpdata, n_inits = 3),
+        "deprecated"
+    )
+
+    # Verify the heatmap alias warns and still draws
+    stored <- assign_xci(fixture$snpdata, n_inits = 3)
+    # The alias draws a HeatmapList, so send it to a null device to keep the
+    # test headless and avoid leaving an Rplots.pdf behind.
+    grDevices::pdf(NULL)
+    on.exit(grDevices::dev.off(), add = TRUE)
+    # Confirm plot_inactive_x_assignment_heatmap() forwards to plot_xci_heatmap()
+    expect_warning(
+        hm <- plot_inactive_x_assignment_heatmap(stored, donor = "donor0"),
+        "deprecated"
+    )
+    # Ensure the forwarded call returns a drawn heatmap
+    expect_s4_class(hm, "HeatmapList")
 })
