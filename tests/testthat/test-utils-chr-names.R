@@ -176,6 +176,7 @@ test_that("normalize_chr_names preserves UCSC format", {
 
     # Verify UCSC names are preserved (already canonical)
     result <- normalize_chr_names(chr_names)
+    # Confirm output matches input unchanged
     expect_equal(result, c("chr1", "chr2", "chrX", "chrY", "chrM"))
 })
 
@@ -184,6 +185,7 @@ test_that("normalize_chr_names converts RefSeq mouse to UCSC", {
 
     # Verify RefSeq mouse names are normalized to UCSC
     result <- normalize_chr_names(chr_names, from_style = "refseq_mouse")
+    # Confirm converted names match expected UCSC form
     expect_equal(result, c("chr1", "chrX", "chrM"))
 })
 
@@ -192,6 +194,7 @@ test_that("normalize_chr_names converts GenBank human to UCSC", {
 
     # Verify GenBank human names are normalized to UCSC
     result <- normalize_chr_names(chr_names, from_style = "genbank_human")
+    # Confirm converted names match expected UCSC form
     expect_equal(result, c("chr1", "chrX", "chrM"))
 })
 
@@ -200,6 +203,7 @@ test_that("normalize_chr_names converts numeric to UCSC", {
 
     # Verify numeric format is converted to UCSC
     result <- normalize_chr_names(chr_names)
+    # Confirm converted names match expected UCSC form
     expect_equal(result, c("chr1", "chr2", "chrX", "chrY"))
 })
 
@@ -218,6 +222,7 @@ test_that("normalize_chr_names returns original names for unknown style", {
 
     # Verify original names are returned despite warning
     result <- suppressWarnings(normalize_chr_names(chr_names))
+    # Confirm output is identical to the original unrecognized names
     expect_equal(result, chr_names)
 })
 
@@ -226,6 +231,7 @@ test_that("normalize_chr_names auto-detects style", {
 
     # Verify auto-detection works (numeric -> UCSC)
     result <- normalize_chr_names(chr_names, from_style = "auto")
+    # Confirm auto-detected conversion matches expected UCSC form
     expect_equal(result, c("chr1", "chr2", "chrX"))
 })
 
@@ -234,6 +240,7 @@ test_that("normalize_chr_names handles unmapped chromosomes", {
 
     # Verify unmapped chromosomes are preserved (UCSC -> UCSC)
     result <- normalize_chr_names(chr_names)
+    # Confirm unmapped chromosome name passes through unchanged
     expect_equal(result, c("chr1", "chr2", "chrUn"))
 })
 
@@ -246,6 +253,7 @@ test_that("convert_chr_style converts numeric to UCSC (default)", {
 
     # Verify conversion to UCSC style (default)
     result <- convert_chr_style(chr_names)
+    # Confirm converted names match expected UCSC form
     expect_equal(result, c("chr1", "chr2", "chrX", "chrY", "chrM"))
 })
 
@@ -254,6 +262,7 @@ test_that("convert_chr_style converts UCSC to RefSeq mouse", {
 
     # Verify conversion to RefSeq mouse style
     result <- convert_chr_style(chr_names, from_style = "ucsc", to_style = "refseq_mouse")
+    # Confirm converted names match expected RefSeq mouse accessions
     expect_equal(result, c("NC_000067.6", "NC_000086.7", "NC_005089.1"))
 })
 
@@ -262,6 +271,7 @@ test_that("convert_chr_style converts numeric to GenBank human", {
 
     # Verify conversion to GenBank human style
     result <- convert_chr_style(chr_names, to_style = "genbank_human")
+    # Confirm converted names match expected GenBank human accessions
     expect_equal(result, c("CM000663.2", "CM000685.2", "J01415.2"))
 })
 
@@ -270,6 +280,7 @@ test_that("convert_chr_style auto-detects source style", {
 
     # Verify auto-detection and conversion works (numeric -> UCSC)
     result <- convert_chr_style(chr_names)
+    # Confirm auto-detected conversion matches expected UCSC form
     expect_equal(result, c("chr1", "chr2", "chrX"))
 })
 
@@ -278,6 +289,7 @@ test_that("convert_chr_style handles unmapped chromosomes", {
 
     # Verify unmapped chromosomes are preserved in canonical form
     result <- convert_chr_style(chr_names, to_style = "numeric")
+    # Confirm unmapped chromosome name passes through unchanged
     expect_equal(result, c("1", "2", "custom"))
 })
 

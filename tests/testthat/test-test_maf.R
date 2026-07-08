@@ -11,8 +11,11 @@ library(dplyr)
 # ------------------------------------------------------------------------------
 
 expect_valid_maf_result <- function(result) {
+    # Verify required output columns are present
     expect_true(all(c("minor_allele_count", "p_val", "adj_p_val") %in% colnames(result)))
+    # Verify p-values fall within the valid [0, 1] range
     expect_true(all(result$p_val >= 0 & result$p_val <= 1))
+    # Verify adjusted p-values fall within the valid [0, 1] range
     expect_true(all(result$adj_p_val >= 0 & result$adj_p_val <= 1))
 }
 
@@ -33,20 +36,26 @@ test_that("test_maf returns correct structure and calculations for basic input",
     expect_equal(nrow(result), nrow(test_df))
     # Verify all original columns are preserved
     expect_true("ref_count" %in% colnames(result))
+    # Verify alt_count column is preserved
     expect_true("alt_count" %in% colnames(result))
+    # Verify total_count column is preserved
     expect_true("total_count" %in% colnames(result))
     # Verify new columns are added
     expect_true("minor_allele_count" %in% colnames(result))
+    # Verify p_val column is added
     expect_true("p_val" %in% colnames(result))
+    # Verify adj_p_val column is added
     expect_true("adj_p_val" %in% colnames(result))
     # Verify minor_allele_count calculation (minimum of ref_count and alt_count)
     expected_minor_allele <- pmin(test_df$ref_count, test_df$alt_count)
     expect_equal(result$minor_allele_count, expected_minor_allele)
     # Verify p-values are numeric and within valid range [0,1]
     expect_type(result$p_val, "double")
+    # Check that p-values fall within [0, 1]
     expect_true(all(result$p_val >= 0 & result$p_val <= 1))
     # Verify adjusted p-values are numeric and within valid range [0,1]
     expect_type(result$adj_p_val, "double")
+    # Check that adjusted p-values fall within [0, 1]
     expect_true(all(result$adj_p_val >= 0 & result$adj_p_val <= 1))
     # Verify adjusted p-values satisfy BH correction property
     expect_true(all(result$adj_p_val >= result$p_val))
@@ -90,10 +99,13 @@ test_that("test_maf calculates minor allele counts correctly for edge cases", {
 
     # Verify minor allele count for zero ref, zero alt, and equal counts
     expect_equal(result$minor_allele_count[1], 0)
+    # Verify minor allele count when ref_count is zero
     expect_equal(result$minor_allele_count[2], 0)
+    # Verify minor allele count when ref_count equals alt_count
     expect_equal(result$minor_allele_count[3], 5)
     # Verify p-values are valid
     expect_true(all(result$p_val >= 0 & result$p_val <= 1))
+    # Check that adjusted p-values are valid
     expect_true(all(result$adj_p_val >= 0 & result$adj_p_val <= 1))
 })
 
@@ -108,7 +120,9 @@ test_that("test_maf handles fractional total_count values", {
 
     # Verify function completes successfully with valid results
     expect_s3_class(result, "data.frame")
+    # Check that p-values remain valid with fractional total_count
     expect_true(all(result$p_val >= 0 & result$p_val <= 1))
+    # Check that adjusted p-values remain valid with fractional total_count
     expect_true(all(result$adj_p_val >= 0 & result$adj_p_val <= 1))
 })
 
@@ -149,6 +163,7 @@ test_that("test_maf throws error when alt_count column is missing", {
         total_count = c(10, 15)
     )
 
+    # Verify error when alt_count is missing
     expect_error(
         test_maf(missing_alt),
         "Missing required columns: alt_count"
@@ -161,6 +176,7 @@ test_that("test_maf throws error when total_count column is missing", {
         alt_count = c(2, 5)
     )
 
+    # Verify error when total_count is missing
     expect_error(
         test_maf(missing_total),
         "Missing required columns: total_count"
@@ -172,6 +188,7 @@ test_that("test_maf throws error listing all missing columns", {
         other_col = c(1, 2, 3)
     )
 
+    # Verify error lists all three missing required columns
     expect_error(
         test_maf(missing_multiple),
         "Missing required columns: ref_count, alt_count, total_count"
@@ -189,7 +206,9 @@ test_that("test_maf returns empty data frame with correct structure for empty in
 
     # Verify result has zero rows but correct columns
     expect_s3_class(result, "data.frame")
+    # Verify result has zero rows for empty input
     expect_equal(nrow(result), 0)
+    # Verify all expected columns are present despite empty input
     expect_true(all(
         c("ref_count", "alt_count", "total_count", "minor_allele_count", "p_val", "adj_p_val") %in% colnames(result)
     ))
@@ -206,6 +225,7 @@ test_that("test_maf calculates correct values for single row input", {
 
     # Verify result structure
     expect_s3_class(result, "data.frame")
+    # Verify result has exactly one row for single-row input
     expect_equal(nrow(result), 1)
     # Verify minor allele count calculation
     expect_equal(result$minor_allele_count, 3)
@@ -229,12 +249,17 @@ test_that("test_maf preserves additional columns beyond required ones", {
 
     # Verify all original columns are preserved with correct values
     expect_true("snp_id" %in% colnames(result))
+    # Verify gene_name column is preserved
     expect_true("gene_name" %in% colnames(result))
+    # Verify snp_id values are unchanged
     expect_equal(result$snp_id, extended_df$snp_id)
+    # Verify gene_name values are unchanged
     expect_equal(result$gene_name, extended_df$gene_name)
     # Verify new columns are added
     expect_true("minor_allele_count" %in% colnames(result))
+    # Verify p_val column is added
     expect_true("p_val" %in% colnames(result))
+    # Verify adj_p_val column is added
     expect_true("adj_p_val" %in% colnames(result))
 })
 
@@ -250,12 +275,16 @@ test_that("test_maf processes larger datasets without error", {
         total_count = sample(min_total_count:100, n_rows, replace = TRUE)
     )
 
+    # Verify function runs without error on a larger dataset
     expect_no_error(result <- test_maf(large_df))
 
     # Verify result structure and validity
     expect_s3_class(result, "data.frame")
+    # Verify row count matches the input dataset size
     expect_equal(nrow(result), n_rows)
+    # Verify p-values are valid across the larger dataset
     expect_true(all(result$p_val >= 0 & result$p_val <= 1))
+    # Verify adjusted p-values are valid across the larger dataset
     expect_true(all(result$adj_p_val >= 0 & result$adj_p_val <= 1))
 })
 
@@ -326,6 +355,7 @@ test_that("test_maf accepts data where ref_count plus alt_count equals total_cou
 
     # Verify function accepts exact matches
     expect_s3_class(result, "data.frame")
+    # Verify result columns and p-value ranges remain valid for exact-match data
     expect_valid_maf_result(result)
 })
 
@@ -340,6 +370,7 @@ test_that("test_maf accepts data where ref_count plus alt_count is less than tot
 
     # Verify function accepts valid data
     expect_s3_class(result, "data.frame")
+    # Verify result columns and p-value ranges remain valid
     expect_valid_maf_result(result)
 })
 
@@ -354,8 +385,11 @@ test_that("test_maf handles all zero counts in a row", {
 
     # Verify function handles all-zero row
     expect_s3_class(result, "data.frame")
+    # Verify all rows are retained despite an all-zero row
     expect_equal(nrow(result), 3)
+    # Verify minor allele count is zero for the all-zero row
     expect_equal(result$minor_allele_count[1], 0)
+    # Verify minor allele count is zero for the second all-zero row
     expect_equal(result$minor_allele_count[3], 0)
 })
 
@@ -370,7 +404,9 @@ test_that("test_maf handles NA values in count columns", {
 
     # Verify function handles NA values
     expect_s3_class(result, "data.frame")
+    # Verify minor allele count is NA when ref_count is NA
     expect_true(is.na(result$minor_allele_count[2]))
+    # Verify minor allele count is NA when alt_count is NA
     expect_true(is.na(result$minor_allele_count[3]))
 })
 
@@ -386,6 +422,7 @@ test_that("test_maf handles extreme null hypothesis probability values", {
 
     # Verify function handles extreme p values
     expect_valid_maf_result(result_p_low)
+    # Verify function handles p close to 1
     expect_valid_maf_result(result_p_high)
 })
 
@@ -401,8 +438,11 @@ test_that("test_maf handles boundary p parameter values", {
 
     # Verify function handles boundary p values
     expect_s3_class(result_p_zero, "data.frame")
+    # Verify function completes for p = 1
     expect_s3_class(result_p_one, "data.frame")
+    # Verify p-values remain valid when p = 0
     expect_true(all(result_p_zero$p_val >= 0 & result_p_zero$p_val <= 1))
+    # Verify p-values remain valid when p = 1
     expect_true(all(result_p_one$p_val >= 0 & result_p_one$p_val <= 1))
 })
 
@@ -471,6 +511,7 @@ test_that("test_maf handles very large count values", {
 
     # Verify function handles large numeric values
     expect_s3_class(result, "data.frame")
+    # Verify result columns and p-value ranges remain valid for large counts
     expect_valid_maf_result(result)
 })
 
@@ -485,10 +526,16 @@ test_that("test_maf handles mixed valid and edge case rows", {
 
     # Verify function processes mixed data correctly
     expect_s3_class(result, "data.frame")
+    # Verify all rows are retained
     expect_equal(nrow(result), 4)
+    # Verify minor allele count for first mixed row
     expect_equal(result$minor_allele_count[1], 5)
+    # Verify minor allele count when ref_count is zero
     expect_equal(result$minor_allele_count[2], 0)
+    # Verify minor allele count when alt_count is zero
     expect_equal(result$minor_allele_count[3], 0)
+    # Verify minor allele count for last mixed row
     expect_equal(result$minor_allele_count[4], 5)
+    # Verify result columns and p-value ranges remain valid for mixed data
     expect_valid_maf_result(result)
 })

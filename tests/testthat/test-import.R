@@ -438,12 +438,17 @@ test_that("export_cellsnp creates output files", {
         "filtered_contig_annotations.csv"
     )
 
-    # Verify all expected output files were created
+    # Verify AD matrix file was created
     expect_true(file.exists(file.path(out_dir, "cellSNP.tag.AD.mtx")))
+    # Verify DP matrix file was created
     expect_true(file.exists(file.path(out_dir, "cellSNP.tag.DP.mtx")))
+    # Verify OTH matrix file was created
     expect_true(file.exists(file.path(out_dir, "cellSNP.tag.OTH.mtx")))
+    # Verify base VCF file was created
     expect_true(file.exists(file.path(out_dir, "cellSNP.base.vcf.gz")))
+    # Verify donor IDs file was created
     expect_true(file.exists(file.path(out_dir, "donor_ids.tsv")))
+    # Verify VDJ contig annotations file was created
     expect_true(file.exists(file.path(out_dir, "filtered_contig_annotations.csv")))
 })
 
@@ -472,11 +477,15 @@ test_that("export_cellsnp skips VDJ export when clonotype missing", {
     # Verify VDJ file is not created when clonotype info missing
     expect_false(file.exists(vdj_file))
 
-    # Verify other expected output files were created
+    # Verify AD matrix file was created
     expect_true(file.exists(file.path(out_dir, "cellSNP.tag.AD.mtx")))
+    # Verify DP matrix file was created
     expect_true(file.exists(file.path(out_dir, "cellSNP.tag.DP.mtx")))
+    # Verify OTH matrix file was created
     expect_true(file.exists(file.path(out_dir, "cellSNP.tag.OTH.mtx")))
+    # Verify base VCF file was created
     expect_true(file.exists(file.path(out_dir, "cellSNP.base.vcf.gz")))
+    # Verify donor IDs file was created
     expect_true(file.exists(file.path(out_dir, "donor_ids.tsv")))
 })
 

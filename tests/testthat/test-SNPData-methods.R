@@ -1,3 +1,8 @@
+# ==============================================================================
+# Test Suite: SNPData Methods
+# Description: Tests for data frame conversion and filtering methods on SNPData objects
+# ==============================================================================
+
 library(testthat)
 library(Matrix)
 
@@ -41,8 +46,9 @@ expect_maf_columns_added <- function(result_df) {
     expect_true(all(expected_maf_cols %in% colnames(result_df)))
     # Verify minor_allele_count is calculated correctly
     expect_true(all(result_df$minor_allele_count == pmin(result_df$ref_count, result_df$alt_count)))
-    # Verify p_val and adj_p_val are numeric
+    # Verify p_val is numeric
     expect_true(is.numeric(result_df$p_val))
+    # Verify adj_p_val is numeric
     expect_true(is.numeric(result_df$adj_p_val))
 }
 
@@ -346,8 +352,8 @@ test_that("filter_samples forwards to filter_barcodes", {
         barcode_info = test_barcode_info
     )
 
-    # Verify filter_samples returns a filtered SNPData object
     result <- filter_samples(snp_data, donor == "donor_1")
+    # Verify filter_samples returns a filtered SNPData object
     expect_s4_class(result, "SNPData")
     # Verify filtered object retains expected number of cells
     expect_equal(ncol(result), 2)
@@ -467,7 +473,9 @@ test_that("aggregate_count_df works correctly with various grouping columns", {
     alt_cell2_snp1 <- test_alt_count[1, 2]
     expected_ref_sum <- ref_cell1_snp1 + ref_cell2_snp1 # snp_1: cell_1 + cell_2
     expected_alt_sum <- alt_cell1_snp1 + alt_cell2_snp1 # snp_1: cell_1 + cell_2
+    # Verify ref_count is summed across cells within the donor group
     expect_equal(donor_agg_df$ref_count[1], expected_ref_sum)
+    # Verify alt_count is summed across cells within the donor group
     expect_equal(donor_agg_df$alt_count[1], expected_alt_sum)
 
     # Test aggregation by clonotype
@@ -521,11 +529,11 @@ test_that("aggregate_count_df handles edge cases correctly", {
     snp_data_na <- create_snpdata_with_na_donor()
 
     # Verify function handles NA values by excluding them and logs NA warning
-    log_file <- tempfile("aggregate_count_df_warn_", fileext = ".log")
+    log_file <- withr::local_tempfile(pattern = "aggregate_count_df_warn_", fileext = ".log")
     original_appender_name <- as.character(logger::log_appender())
     original_appender <- get(original_appender_name, asNamespace("logger"))
     logger::log_appender(logger::appender_file(log_file))
-    on.exit(logger::log_appender(original_appender), add = TRUE)
+    withr::defer(logger::log_appender(original_appender))
 
     result_na <- aggregate_count_df(snp_data_na, "donor")
     log_lines <- readLines(log_file, warn = FALSE)
@@ -544,16 +552,22 @@ test_that("aggregate_count_df skips partial NA donors and clonotypes", {
     donor_result <- suppressWarnings(
         aggregate_count_df(snp_data_na_donor, "donor", test_maf = FALSE)
     )
+    # Verify donor aggregation returns a tibble
     expect_s3_class(donor_result, "tbl_df")
+    # Check that NA donor rows are excluded
     expect_equal(nrow(donor_result), 2)
+    # Verify only the non-NA donor remains
     expect_equal(unique(donor_result$donor), "donor_1")
 
     # Verify clonotype aggregation drops NA clonotype values
     clonotype_result <- suppressWarnings(
         aggregate_count_df(snp_data_na_clonotype, "clonotype", test_maf = FALSE)
     )
+    # Verify clonotype aggregation returns a tibble
     expect_s3_class(clonotype_result, "tbl_df")
+    # Check that NA clonotype rows are excluded
     expect_equal(nrow(clonotype_result), 2)
+    # Verify only the non-NA clonotype remains
     expect_equal(unique(clonotype_result$clonotype), "clonotype_2")
 })
 
@@ -815,6 +829,7 @@ test_that("remove_na_clonotypes warns when clonotype column missing", {
 
     # Verify original object is returned
     expect_equal(nrow(result), nrow(snp_data))
+    # Verify column count is also unchanged
     expect_equal(ncol(result), ncol(snp_data))
 })
 
@@ -902,19 +917,22 @@ test_that("clonotype functions work after adding clonotype via add_barcode_metad
         join_by = "cell_id"
     )
 
-    # Verify clonotype column now exists
     barcode_info <- get_barcode_info(snp_data_with_clonotype)
+    # Verify clonotype column now exists
     expect_true("clonotype" %in% colnames(barcode_info))
+    # Verify clonotype values match the added metadata
     expect_equal(barcode_info$clonotype, c("clonotype_1", "clonotype_2"))
 
-    # Verify clonotype_count_df now works
     result <- clonotype_count_df(snp_data_with_clonotype, test_maf = FALSE)
+    # Verify clonotype_count_df now works
     expect_s3_class(result, "data.frame")
+    # Verify clonotype column is present in the result
     expect_true("clonotype" %in% colnames(result))
 
-    # Verify to_expr_matrix with clonotype level now works
     expr_mat <- to_expr_matrix(snp_data_with_clonotype, level = "clonotype")
+    # Verify to_expr_matrix with clonotype level now works
     expect_true(is.matrix(expr_mat))
+    # Verify expression matrix has one column per clonotype
     expect_equal(ncol(expr_mat), 2)
 })
 
@@ -954,18 +972,20 @@ test_that("clonotype functions work after updating clonotype with overwrite=TRUE
         overwrite = TRUE
     )
 
-    # Verify clonotype values are updated
     barcode_info <- get_barcode_info(snp_data_updated)
+    # Verify clonotype values are updated
     expect_equal(barcode_info$clonotype, c("clonotype_1", "clonotype_2"))
+    # Verify no NA clonotype values remain
     expect_false(any(is.na(barcode_info$clonotype)))
 
-    # Verify clonotype_count_df now works
     result <- clonotype_count_df(snp_data_updated, test_maf = FALSE)
+    # Verify clonotype_count_df now works
     expect_s3_class(result, "data.frame")
+    # Verify no NA clonotype values remain in the result
     expect_true(all(!is.na(result$clonotype)))
 
-    # Verify to_expr_matrix with clonotype level now works
     expr_mat <- to_expr_matrix(snp_data_updated, level = "clonotype")
+    # Verify to_expr_matrix with clonotype level now works
     expect_true(is.matrix(expr_mat))
 })
 
@@ -1494,6 +1514,7 @@ test_that("merge_snpdata intersect/intersect retains only overlapping SNPs and c
     # y: snpB/cell2 has ref=0, alt=1
     # Expected: ref=1, alt=3
     expect_equal(as.vector(ref_count(merged)), 1)
+    # Verify alt count is summed correctly
     expect_equal(as.vector(alt_count(merged)), 3)
 })
 

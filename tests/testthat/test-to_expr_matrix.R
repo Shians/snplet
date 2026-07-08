@@ -56,6 +56,7 @@ test_that("to_expr_matrix() returns Matrix class when using barcode level", {
 
     result <- to_expr_matrix(snp_data, level = "barcode")
 
+    # Verify result is a Matrix object
     expect_s4_class(result, "Matrix")
 })
 
@@ -64,6 +65,7 @@ test_that("to_expr_matrix() returns correct dimensions at barcode level", {
 
     result <- to_expr_matrix(snp_data, level = "barcode")
 
+    # Verify dimensions match number of SNPs and cells
     expect_equal(dim(result), c(3, 2))
 })
 
@@ -72,6 +74,7 @@ test_that("to_expr_matrix() preserves SNP names at barcode level", {
 
     result <- to_expr_matrix(snp_data, level = "barcode")
 
+    # Verify row names match SNP identifiers
     expect_equal(rownames(result), c("snp_1", "snp_2", "snp_3"))
 })
 
@@ -80,6 +83,7 @@ test_that("to_expr_matrix() preserves cell names at barcode level", {
 
     result <- to_expr_matrix(snp_data, level = "barcode")
 
+    # Verify column names match cell identifiers
     expect_equal(colnames(result), c("cell_1", "cell_2"))
 })
 
@@ -241,6 +245,7 @@ test_that("to_expr_matrix() returns matrix when using clonotype level", {
 
     result <- to_expr_matrix(snp_data, level = "clonotype")
 
+    # Verify result is a matrix or Matrix-derived object
     expect_true(is.matrix(result) || inherits(result, "Matrix"))
 })
 
@@ -249,6 +254,7 @@ test_that("to_expr_matrix() returns correct dimensions at clonotype level", {
 
     result <- to_expr_matrix(snp_data, level = "clonotype")
 
+    # Verify dimensions match number of SNPs and clonotypes
     expect_equal(dim(result), c(3, 2))
 })
 
@@ -257,6 +263,7 @@ test_that("to_expr_matrix() groups by clonotypes correctly", {
 
     result <- to_expr_matrix(snp_data, level = "clonotype")
 
+    # Verify column names correspond to clonotype identifiers
     expect_equal(colnames(result), c("clonotype_1", "clonotype_2"))
 })
 
@@ -269,6 +276,7 @@ test_that("to_expr_matrix() returns matrix when using donor level", {
 
     result <- to_expr_matrix(snp_data, level = "donor")
 
+    # Verify result is a matrix or Matrix-derived object
     expect_true(is.matrix(result) || inherits(result, "Matrix"))
 })
 
@@ -277,6 +285,7 @@ test_that("to_expr_matrix() returns correct dimensions at donor level", {
 
     result <- to_expr_matrix(snp_data, level = "donor")
 
+    # Verify dimensions match number of SNPs and donors
     expect_equal(dim(result), c(3, 2))
 })
 
@@ -285,6 +294,7 @@ test_that("to_expr_matrix() groups by donors correctly", {
 
     result <- to_expr_matrix(snp_data, level = "donor")
 
+    # Verify column names correspond to donor identifiers
     expect_equal(colnames(result), c("donor_1", "donor_2"))
 })
 
@@ -298,6 +308,7 @@ test_that("to_expr_matrix() defaults to barcode level", {
     result_default <- to_expr_matrix(snp_data)
     result_barcode <- to_expr_matrix(snp_data, level = "barcode")
 
+    # Verify default level argument behaves the same as explicit "barcode"
     expect_equal(result_default, result_barcode)
 })
 
@@ -307,12 +318,14 @@ test_that("to_expr_matrix() supports partial matching for level argument", {
     result_partial <- to_expr_matrix(snp_data, level = "clo")
     result_full <- to_expr_matrix(snp_data, level = "clonotype")
 
+    # Verify partial argument match resolves to the same result as full name
     expect_equal(result_partial, result_full)
 })
 
 test_that("to_expr_matrix() throws error for invalid level", {
     snp_data <- create_test_snp_data()
 
+    # Verify an unrecognized level argument raises an informative error
     expect_error(
         to_expr_matrix(snp_data, level = "invalid"),
         "'arg' should be one of"
@@ -326,6 +339,7 @@ test_that("to_expr_matrix() throws error for invalid level", {
 test_that("to_expr_matrix() errors when clonotype column missing but requested", {
     snp_data <- create_test_snp_data(include_clonotype = FALSE)
 
+    # Verify missing clonotype column raises an informative error
     expect_error(
         to_expr_matrix(snp_data, level = "clonotype"),
         "Clonotype information not available.*add_barcode_metadata"
@@ -336,6 +350,7 @@ test_that("to_expr_matrix() errors when all clonotypes are NA", {
     snp_data <- create_test_snp_data()
     snp_data@barcode_info$clonotype <- NA_character_
 
+    # Verify all-NA clonotype column raises an informative error
     expect_error(
         to_expr_matrix(snp_data, level = "clonotype"),
         "All clonotype values are NA.*add_barcode_metadata"
@@ -349,6 +364,7 @@ test_that("to_expr_matrix() errors when all clonotypes are NA", {
 test_that("to_expr_matrix() errors when donor column missing but requested", {
     snp_data <- create_test_snp_data(include_donor = FALSE)
 
+    # Verify missing donor column raises an informative error
     expect_error(
         to_expr_matrix(snp_data, level = "donor"),
         "No donor column in barcode_info"
@@ -396,7 +412,9 @@ test_that("to_expr_matrix() skips partial NA donors", {
 
     result <- to_expr_matrix(snp_data, level = "donor")
 
+    # Verify the NA donor cell is excluded, leaving a single donor column
     expect_equal(ncol(result), 1)
+    # Verify remaining column corresponds to the non-NA donor
     expect_equal(colnames(result), "donor_2")
 })
 
@@ -406,7 +424,9 @@ test_that("to_expr_matrix() skips partial NA clonotypes", {
 
     result <- to_expr_matrix(snp_data, level = "clonotype")
 
+    # Verify the NA clonotype cell is excluded, leaving a single clonotype column
     expect_equal(ncol(result), 1)
+    # Verify remaining column corresponds to the non-NA clonotype
     expect_equal(colnames(result), "clonotype_2")
 })
 
@@ -498,6 +518,7 @@ test_that("to_expr_matrix() supports partial matching for donor level", {
     result_partial <- to_expr_matrix(snp_data, level = "don")
     result_full <- to_expr_matrix(snp_data, level = "donor")
 
+    # Verify partial argument match resolves to the same result as full name
     expect_equal(result_partial, result_full)
 })
 
@@ -510,7 +531,9 @@ test_that("to_expr_matrix() handles single SNP", {
 
     result <- to_expr_matrix(snp_data, level = "barcode")
 
+    # Verify dimensions reflect a single SNP row and two cell columns
     expect_equal(dim(result), c(1, 2))
+    # Verify SNP name is preserved when only one SNP is present
     expect_equal(rownames(result), "snp_1")
 })
 
@@ -519,7 +542,9 @@ test_that("to_expr_matrix() handles single cell", {
 
     result <- to_expr_matrix(snp_data, level = "barcode")
 
+    # Verify dimensions reflect three SNP rows and a single cell column
     expect_equal(dim(result), c(3, 1))
+    # Verify cell name is preserved when only one cell is present
     expect_equal(colnames(result), "cell_1")
 })
 
@@ -528,7 +553,10 @@ test_that("to_expr_matrix() handles single SNP and single cell", {
 
     result <- to_expr_matrix(snp_data, level = "barcode")
 
+    # Verify dimensions collapse to a single row and column
     expect_equal(dim(result), c(1, 1))
+    # Verify SNP name is preserved for the single-SNP case
     expect_equal(rownames(result), "snp_1")
+    # Verify cell name is preserved for the single-cell case
     expect_equal(colnames(result), "cell_1")
 })

@@ -144,6 +144,7 @@ test_that("percentile_summary handles extreme percentiles", {
 
     # Verify min and max are always included
     expect_true("min" %in% names(result))
+    # Verify max is always included regardless of percentile selection
     expect_true("max" %in% names(result))
 })
 
@@ -155,6 +156,7 @@ test_that("percentile_summary handles empty input", {
 
     # Verify result contains expected structure
     expect_true(is.numeric(result))
+    # Verify all core percentile names are present despite empty input
     expect_true(all(c("min", "median", "max") %in% names(result)))
 })
 
@@ -171,6 +173,7 @@ test_that("groupedRowSums preserves matrix sparsity", {
 
     # Verify result structure
     expect_equal(nrow(result), 3)
+    # Verify result has correct number of groups
     expect_equal(ncol(result), 2)
 
     # Verify calculations are correct with sparse matrices

@@ -65,8 +65,9 @@ test_that("remove_doublets keeps only non-doublet cells", {
 
     filtered_data <- remove_doublets(snp_data)
 
-    # Verify remaining cell is the non-doublet donor
     remaining_barcode_info <- get_barcode_info(filtered_data)
+
+    # Verify remaining cell is the non-doublet donor
     expect_equal(remaining_barcode_info$donor, "donor_1")
 })
 

@@ -114,6 +114,7 @@ test_that("assign_inactive_x recovers the true clonal split at cell level", {
     truth <- get_barcode_info(fixture$snpdata)$true_group
     called <- !is.na(assignments$inactive_x)
     agree <- mean(assignments$inactive_x[called] == truth[called])
+    # Confirm agreement with the true clonal split exceeds 90% either way
     expect_true(max(agree, 1 - agree) > 0.9)
 })
 
@@ -137,12 +138,14 @@ test_that("clonotype fit projects assignments back to cells consistently", {
     donor_data <- filter_samples(fixture$snpdata, donor == "donor0")
     fit <- snplet:::.fit_xci_donor(donor_data, n_inits = 3, by = "clonotype")
 
-    # Verify the clonotype fit records its unit and carries a cell projection
+    # Verify the clonotype fit records its unit
     expect_equal(fit$unit, "clonotype")
+    # Verify the fit carries a cell-level projection of assignments
     expect_true(!is.null(fit$cell_assignments))
 
     # The EM ran per clonotype, one assignment row each
     n_clonotypes <- dplyr::n_distinct(get_barcode_info(fixture$snpdata)$clonotype)
+    # Confirm one assignment row exists per distinct clonotype
     expect_equal(nrow(fit$assignments), n_clonotypes)
 
     # Cells within a clonotype must share an assignment (clonal consistency)
@@ -150,6 +153,7 @@ test_that("clonotype fit projects assignments back to cells consistently", {
     clono_map <- dplyr::select(get_barcode_info(fixture$snpdata), cell_id, clonotype)
     joined <- dplyr::inner_join(cell_assign, clono_map, by = "cell_id")
     per_clono <- tapply(joined$assignment, joined$clonotype, function(a) length(unique(a)))
+    # Confirm every clonotype's cells were all projected to the same assignment
     expect_true(all(per_clono == 1))
 })
 
@@ -168,11 +172,14 @@ test_that("assign_inactive_x promotes diagnostics into SNPData slots and survive
     expect_true(all(c("xci_informative", "xci_allele_on_x1", "xci_escape_fraction") %in% colnames(snp_info)))
     # Confirm some SNPs are flagged informative and none are NA
     expect_true(any(snp_info$xci_informative))
+    # Confirm the informative flag itself is never NA
     expect_false(any(is.na(snp_info$xci_informative)))
 
     # Diagnostics must survive cell subsetting because they live in barcode_info
     subset_cells <- stored[, 1:10]
+    # Verify the inactive_x column is retained after subsetting cells
     expect_true("inactive_x" %in% colnames(get_barcode_info(subset_cells)))
+    # Verify barcode_info row count matches the subset size
     expect_equal(nrow(get_barcode_info(subset_cells)), 10)
 
     # And survive SNP subsetting because they live in snp_info
@@ -198,6 +205,7 @@ test_that("accessors and heatmap work on a stored SNPData object", {
     grDevices::pdf(NULL)
     on.exit(grDevices::dev.off(), add = TRUE)
     hm <- plot_inactive_x_assignment_heatmap(stored, donor = "donor0")
+    # Verify the heatmap method returns a drawn HeatmapList object
     expect_s4_class(hm, "HeatmapList")
 })
 
@@ -216,6 +224,7 @@ test_that("heatmap display parameters control genes and columns shown", {
     full <- plot_inactive_x_assignment_heatmap(stored, donor = "donor0")
     n_all <- nrow(full@ht_list[[1]]@matrix)
     big <- plot_inactive_x_assignment_heatmap(stored, donor = "donor0", max_genes = n_all + 100)
+    # Confirm requesting more genes than available shows all retained genes
     expect_equal(nrow(big@ht_list[[1]]@matrix), n_all)
 
     # Check show_unassigned = FALSE drops unassigned columns
@@ -253,8 +262,9 @@ test_that("heatmap display parameters control genes and columns shown", {
     )
     with_names <- names(with_post@ht_list[[1]]@top_annotation@anno_list)
     without_names <- names(without_post@ht_list[[1]]@top_annotation@anno_list)
-    # Confirm the posterior_X1 annotation is present by default and dropped when off
+    # Confirm the posterior_X1 annotation is present by default
     expect_true("posterior_X1" %in% with_names)
+    # Confirm the posterior_X1 annotation is dropped when show_posterior = FALSE
     expect_false("posterior_X1" %in% without_names)
     # Confirm the assignment annotation is retained either way
     expect_true("assignment" %in% without_names)
@@ -272,6 +282,7 @@ test_that("heatmap display parameters control genes and columns shown", {
     # Confirm the supplied ramp anchors drive the REF fraction body colours
     body_col <- coloured@ht_list[[1]]@matrix_color_mapping@col_fun
     expect_equal(body_col(0), "#2166ACFF")
+    # Confirm the high end of the ramp maps to the supplied top colour
     expect_equal(body_col(1), "#B2182BFF")
     # Confirm na_col was overridden (normalised to hex with alpha)
     expect_equal(coloured@ht_list[[1]]@matrix_color_mapping@na_col, "#FFFFFFFF")
@@ -304,6 +315,7 @@ test_that("heatmap distinguishes no-coverage units from low-confidence unassigne
     )
     ann <- hm@ht_list[[1]]@top_annotation@anno_list$assignment
     ann_colors <- ann@color_mapping@colors
+    # Verify the "no coverage" level is exposed when show_no_coverage = TRUE
     expect_true("no coverage" %in% names(ann_colors))
     # Check "no coverage" uses the dark slate distinct from the default
     # low-confidence "unassigned" grey70 (#B3B3B3)
@@ -372,6 +384,7 @@ test_that("deduplicated kernel evaluation matches the direct per-row computation
 
     # Scatter-back must reproduce the direct evaluation exactly (same values)
     expect_identical(both$L0, direct_L0)
+    # Confirm the L1 (flipped-probability) branch also matches the direct computation
     expect_identical(both$L1, direct_L1)
 })
 
@@ -430,6 +443,7 @@ test_that("refit_after_filter returns a valid fit and drops escapee genes", {
     truth <- get_barcode_info(fixture$snpdata)$true_group
     called <- !is.na(assignments$inactive_x)
     agree <- mean(assignments$inactive_x[called] == truth[called])
+    # Confirm agreement with the true clonal split still exceeds 90% after refitting
     expect_true(max(agree, 1 - agree) > 0.9)
 
     # The escapee gene (last gene, balanced in every cell) carries no XCI signal
@@ -457,6 +471,7 @@ test_that("assign_inactive_x fits each donor independently in a multi-donor obje
     for (d in c("donor0", "donor1")) {
         rows <- barcode_info$donor == d & !is.na(barcode_info$inactive_x)
         agree <- mean(barcode_info$inactive_x[rows] == barcode_info$true_group[rows])
+        # Confirm the clonal split is recovered within this donor
         expect_true(max(agree, 1 - agree) > 0.9)
     }
 })
