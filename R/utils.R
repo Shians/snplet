@@ -111,7 +111,7 @@ groupedRowSums <- function(x, groups) {
     out
 }
 
-#' Generate standardized SNP IDs from genomic coordinates
+#' Generate standardised SNP IDs from genomic coordinates
 #'
 #' Creates SNP identifiers in the format "chr:pos:ref:alt" for consistent
 #' identification across datasets. This format is deterministic and contains

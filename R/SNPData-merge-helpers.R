@@ -12,7 +12,7 @@
     row_idx_in_expanded <- retained_rows_set[rows_to_keep]
 
     if (is.null(col_mapping)) {
-        # Original behavior: match by column names
+        # Original behaviour: match by column names
         retained_cols_set <- setNames(seq_along(retained_cols), retained_cols)
         mat_cols <- colnames(mat)
 
@@ -54,7 +54,7 @@
         rownames(expanded) <- retained_rows
         colnames(expanded) <- retained_cols
     } else {
-        # Barcode-based behavior: use column mapping
+        # Barcode-based behaviour: use column mapping
         # Only process columns that map to retained positions
         valid_cols <- !is.na(col_mapping)
 

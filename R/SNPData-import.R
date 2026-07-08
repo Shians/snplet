@@ -178,7 +178,7 @@ read_vcf_base <- function(vcf_file) {
         )
     )
 
-    # Generate standardized SNP IDs
+    # Generate standardised SNP IDs
     vcf_data$snp_id <- make_snp_id(
         vcf_data$chrom,
         vcf_data$pos,
@@ -202,7 +202,7 @@ read_vcf_base <- function(vcf_file) {
 #' @return Data frame with merged cell annotations
 #' @keywords internal
 merge_cell_annotations <- function(donor_info, vdj_info = NULL, barcode_column = NULL, clonotype_column = NULL) {
-    # Standardize column names
+    # Standardise column names
     if ("cell" %in% colnames(donor_info)) {
         donor_info <- donor_info %>%
             dplyr::rename(barcode = cell)
