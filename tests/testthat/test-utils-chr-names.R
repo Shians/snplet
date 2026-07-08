@@ -66,6 +66,21 @@ make_unknown_style_snpdata <- function(suppress_warnings = TRUE) {
     }
 }
 
+# Helper to build a SNPData object with SNP info in a given chromosome style
+make_snpdata_with_chr_style <- function(chr_style) {
+    snp_info <- make_test_snp_info(chr_style)
+    barcode_info <- data.frame(barcode = c("cell1", "cell2"))
+    alt_count <- sparseMatrix(i = c(1, 2), j = c(1, 2), x = c(5, 3), dims = c(6, 2))
+    ref_count <- sparseMatrix(i = c(1, 2), j = c(1, 2), x = c(10, 7), dims = c(6, 2))
+
+    SNPData(
+        ref_count = ref_count,
+        alt_count = alt_count,
+        snp_info = snp_info,
+        barcode_info = barcode_info
+    )
+}
+
 # ==============================================================================
 # Test: detect_chr_style
 # ==============================================================================
@@ -297,46 +312,31 @@ test_that("convert_chr_style handles unmapped chromosomes", {
 # Test: SNPData chromosome integration
 # ==============================================================================
 
-test_that("SNPData detects and stores chr_style for numeric chromosomes", {
-    snp_info <- make_test_snp_info("numeric")
-    barcode_info <- data.frame(barcode = c("cell1", "cell2"))
-    alt_count <- sparseMatrix(i = c(1, 2), j = c(1, 2), x = c(5, 3), dims = c(6, 2))
-    ref_count <- sparseMatrix(i = c(1, 2), j = c(1, 2), x = c(10, 7), dims = c(6, 2))
-
-    # Verify SNPData object is created with correct chr_style
-    snp_data <- SNPData(
-        ref_count = ref_count,
-        alt_count = alt_count,
-        snp_info = snp_info,
-        barcode_info = barcode_info
-    )
+test_that("SNPData detects chr_style as numeric", {
+    snp_data <- make_snpdata_with_chr_style("numeric")
 
     # Check chr_style is detected as numeric
     expect_equal(chr_style(snp_data), "numeric")
+})
+
+test_that("SNPData converts chrom_canonical to UCSC for numeric chromosomes", {
+    snp_data <- make_snpdata_with_chr_style("numeric")
 
     # Check chrom_canonical column is added
     expect_true("chrom_canonical" %in% colnames(get_snp_info(snp_data)))
-
     # Verify chrom_canonical is converted to UCSC
     expect_equal(get_snp_info(snp_data)$chrom_canonical, c("chr1", "chr2", "chr3", "chrX", "chrY", "chrM"))
 })
 
-test_that("SNPData detects and stores chr_style for UCSC chromosomes", {
-    snp_info <- make_test_snp_info("ucsc")
-    barcode_info <- data.frame(barcode = c("cell1", "cell2"))
-    alt_count <- sparseMatrix(i = c(1, 2), j = c(1, 2), x = c(5, 3), dims = c(6, 2))
-    ref_count <- sparseMatrix(i = c(1, 2), j = c(1, 2), x = c(10, 7), dims = c(6, 2))
-
-    # Verify SNPData object is created with correct chr_style
-    snp_data <- SNPData(
-        ref_count = ref_count,
-        alt_count = alt_count,
-        snp_info = snp_info,
-        barcode_info = barcode_info
-    )
+test_that("SNPData detects chr_style as UCSC", {
+    snp_data <- make_snpdata_with_chr_style("ucsc")
 
     # Check chr_style is detected as UCSC
     expect_equal(chr_style(snp_data), "ucsc")
+})
+
+test_that("SNPData preserves chrom_canonical already in UCSC style", {
+    snp_data <- make_snpdata_with_chr_style("ucsc")
 
     # Check chrom_canonical is preserved (already UCSC)
     expect_equal(
@@ -345,16 +345,19 @@ test_that("SNPData detects and stores chr_style for UCSC chromosomes", {
     )
 })
 
-test_that("SNPData handles unknown chromosome style", {
+test_that("SNPData warns when chromosome style is unknown", {
     # Verify SNPData object is created even with unknown chr_style
     expect_warning(
-        snp_data <- make_unknown_style_snpdata(suppress_warnings = FALSE),
+        make_unknown_style_snpdata(suppress_warnings = FALSE),
         "Chromosome style is unknown"
     )
+})
+
+test_that("SNPData records chr_style as unknown and preserves original chrom names", {
+    snp_data <- make_unknown_style_snpdata()
 
     # Check chr_style is unknown
     expect_equal(chr_style(snp_data), "unknown")
-
     # Check chrom_canonical preserves original names
     expected_chrom <- CHR_STYLES[["unknown"]]
     expect_equal(
@@ -364,17 +367,7 @@ test_that("SNPData handles unknown chromosome style", {
 })
 
 test_that("SNPData subsetting preserves chr_style", {
-    snp_info <- make_test_snp_info("ucsc")
-    barcode_info <- data.frame(barcode = c("cell1", "cell2"))
-    alt_count <- sparseMatrix(i = c(1, 2), j = c(1, 2), x = c(5, 3), dims = c(6, 2))
-    ref_count <- sparseMatrix(i = c(1, 2), j = c(1, 2), x = c(10, 7), dims = c(6, 2))
-
-    snp_data <- SNPData(
-        ref_count = ref_count,
-        alt_count = alt_count,
-        snp_info = snp_info,
-        barcode_info = barcode_info
-    )
+    snp_data <- make_snpdata_with_chr_style("ucsc")
 
     # Verify subsetting preserves chr_style
     subset_data <- snp_data[1:3, ]
@@ -386,17 +379,7 @@ test_that("SNPData subsetting preserves chr_style", {
 # ==============================================================================
 
 test_that(".validate_chr_style passes for known chr_style", {
-    snp_info <- make_test_snp_info("numeric")
-    barcode_info <- data.frame(barcode = c("cell1", "cell2"))
-    alt_count <- sparseMatrix(i = c(1, 2), j = c(1, 2), x = c(5, 3), dims = c(6, 2))
-    ref_count <- sparseMatrix(i = c(1, 2), j = c(1, 2), x = c(10, 7), dims = c(6, 2))
-
-    snp_data <- SNPData(
-        ref_count = ref_count,
-        alt_count = alt_count,
-        snp_info = snp_info,
-        barcode_info = barcode_info
-    )
+    snp_data <- make_snpdata_with_chr_style("numeric")
 
     # Verify validation passes for known style
     expect_true(.validate_chr_style(snp_data))
@@ -429,21 +412,10 @@ test_that(".validate_chr_style provides informative error message", {
 # ==============================================================================
 
 test_that("chr_style accessor handles SNPData objects without chr_style slot", {
-    snp_info <- make_test_snp_info("numeric")
-    barcode_info <- data.frame(barcode = c("cell1", "cell2"))
-    alt_count <- sparseMatrix(i = c(1, 2), j = c(1, 2), x = c(5, 3), dims = c(6, 2))
-    ref_count <- sparseMatrix(i = c(1, 2), j = c(1, 2), x = c(10, 7), dims = c(6, 2))
+    snp_data <- make_snpdata_with_chr_style("numeric")
 
-    snp_data <- SNPData(
-        ref_count = ref_count,
-        alt_count = alt_count,
-        snp_info = snp_info,
-        barcode_info = barcode_info
-    )
-
-    # Simulate an old object by removing chr_style slot content
-    # We cannot actually remove the slot from an S4 object, but we can test the accessor logic
-    # by checking that it correctly handles the .hasSlot check
+    # An S4 slot can't actually be removed, so this exercises the accessor's
+    # .hasSlot() branch rather than a truly slot-less legacy object
     # Verify accessor works for normal objects
     expect_equal(chr_style(snp_data), "numeric")
     # Verify .hasSlot returns TRUE for new objects
@@ -451,17 +423,7 @@ test_that("chr_style accessor handles SNPData objects without chr_style slot", {
 })
 
 test_that("show method handles SNPData objects without chr_style slot gracefully", {
-    snp_info <- make_test_snp_info("ucsc")
-    barcode_info <- data.frame(barcode = c("cell1", "cell2"))
-    alt_count <- sparseMatrix(i = c(1, 2), j = c(1, 2), x = c(5, 3), dims = c(6, 2))
-    ref_count <- sparseMatrix(i = c(1, 2), j = c(1, 2), x = c(10, 7), dims = c(6, 2))
-
-    snp_data <- SNPData(
-        ref_count = ref_count,
-        alt_count = alt_count,
-        snp_info = snp_info,
-        barcode_info = barcode_info
-    )
+    snp_data <- make_snpdata_with_chr_style("ucsc")
 
     # Verify show method works without errors
     expect_output(show(snp_data), "Object of class 'SNPData'")
@@ -470,17 +432,7 @@ test_that("show method handles SNPData objects without chr_style slot gracefully
 })
 
 test_that("subsetting preserves backwards compatibility", {
-    snp_info <- make_test_snp_info("ucsc")
-    barcode_info <- data.frame(barcode = c("cell1", "cell2"))
-    alt_count <- sparseMatrix(i = c(1, 2), j = c(1, 2), x = c(5, 3), dims = c(6, 2))
-    ref_count <- sparseMatrix(i = c(1, 2), j = c(1, 2), x = c(10, 7), dims = c(6, 2))
-
-    snp_data <- SNPData(
-        ref_count = ref_count,
-        alt_count = alt_count,
-        snp_info = snp_info,
-        barcode_info = barcode_info
-    )
+    snp_data <- make_snpdata_with_chr_style("ucsc")
 
     # Verify subsetting works correctly
     subset_data <- snp_data[1:3, ]

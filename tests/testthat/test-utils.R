@@ -8,17 +8,21 @@ library(Matrix)
 
 # ==============================================================================
 
-test_that("percentile_summary works correctly", {
-    # Setup - Test data
+test_that("percentile_summary uses default percentile names", {
     x <- c(1, 2, 3, 4, 5, 6, 7, 8, 9, 10)
+
     result <- percentile_summary(x)
 
-    # Test default percentile names
     expected_names <- c("min", "p10", "p25", "median", "p75", "p90", "p95", "p99", "max")
     # Verify default percentiles produce expected names
     expect_equal(names(result), expected_names)
+})
 
-    # Test specific quantile values
+test_that("percentile_summary calculates correct percentile values", {
+    x <- c(1, 2, 3, 4, 5, 6, 7, 8, 9, 10)
+
+    result <- percentile_summary(x)
+
     # Verify minimum value calculation
     expect_equal(result[["min"]], 1)
     # Verify maximum value calculation
@@ -29,21 +33,31 @@ test_that("percentile_summary works correctly", {
     expect_equal(result[["p25"]], 3.25)
     # Verify 75th percentile calculation
     expect_equal(result[["p75"]], 7.75)
+})
 
-    # Test custom percentiles
+test_that("percentile_summary honors custom percentiles", {
+    x <- c(1, 2, 3, 4, 5, 6, 7, 8, 9, 10)
+
     custom_result <- percentile_summary(x, percentiles = c(0.2, 0.8))
+
     expected_custom_names <- c("min", "p20", "median", "p80", "max")
     # Verify custom percentiles produce expected names
     expect_equal(names(custom_result), expected_custom_names)
+})
 
-    # Test percentiles without median (all < 0.5)
+test_that("percentile_summary omits median when no percentile exceeds 0.5", {
+    x <- c(1, 2, 3, 4, 5, 6, 7, 8, 9, 10)
+
     no_median_result <- percentile_summary(x, percentiles = c(0.1, 0.25))
+
     expected_no_median_names <- c("min", "p10", "p25", "max")
     # Verify median is not included when no percentiles > 0.5
     expect_equal(names(no_median_result), expected_no_median_names)
+})
 
-    # Test single value edge case
+test_that("percentile_summary handles a single-value input", {
     single_result <- percentile_summary(5)
+
     # Verify min equals input value for single value
     expect_equal(single_result[["min"]], 5)
     # Verify max equals input value for single value
@@ -52,16 +66,13 @@ test_that("percentile_summary works correctly", {
     expect_equal(single_result[["median"]], 5)
 })
 
-test_that("groupedRowSums works correctly", {
-    # Setup - Create test matrix
+test_that("groupedRowSums returns correct dimensions and names for basic grouping", {
     test_matrix <- Matrix::Matrix(matrix(c(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12), nrow = 3, ncol = 4))
     rownames(test_matrix) <- c("row1", "row2", "row3")
-
-    # Test basic grouping
     groups <- c("A", "A", "B", "B")
+
     result <- groupedRowSums(test_matrix, groups)
 
-    # Test dimensions and names
     # Verify result has correct number of rows (same as input matrix)
     expect_equal(nrow(result), 3)
     # Verify result has correct number of columns (number of unique groups)
@@ -70,25 +81,42 @@ test_that("groupedRowSums works correctly", {
     expect_equal(colnames(result), c("A", "B"))
     # Verify row names are preserved from input matrix
     expect_equal(rownames(result), c("row1", "row2", "row3"))
+})
 
-    # Test calculations: Group A = cols 1,2; Group B = cols 3,4
-    # Row 1: A = 1+4 = 5, B = 7+10 = 17
+test_that("groupedRowSums sums the correct columns per group", {
+    test_matrix <- Matrix::Matrix(matrix(c(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12), nrow = 3, ncol = 4))
+    rownames(test_matrix) <- c("row1", "row2", "row3")
+    groups <- c("A", "A", "B", "B")
+
+    result <- groupedRowSums(test_matrix, groups)
+
+    # Group A = cols 1,2; Group B = cols 3,4. Row 1: A = 1+4 = 5, B = 7+10 = 17
     # Verify sum calculation for group A, row 1
     expect_equal(result[1, "A"], 5)
     # Verify sum calculation for group B, row 1
     expect_equal(result[1, "B"], 17)
+})
 
-    # Test uneven group sizes
+test_that("groupedRowSums handles uneven group sizes", {
+    test_matrix <- Matrix::Matrix(matrix(c(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12), nrow = 3, ncol = 4))
+    rownames(test_matrix) <- c("row1", "row2", "row3")
     single_groups <- c("A", "B", "B", "B")
+
     single_result <- groupedRowSums(test_matrix, single_groups)
+
     # Verify result has correct number of groups
     expect_equal(ncol(single_result), 2)
-    # Verify sum for single-member group A
-    expect_equal(single_result[1, "A"], 1) # Only first column for group A
+    # Verify sum for single-member group A (only first column for group A)
+    expect_equal(single_result[1, "A"], 1)
+})
 
-    # Test single group
+test_that("groupedRowSums collapses to a single column when all groups match", {
+    test_matrix <- Matrix::Matrix(matrix(c(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12), nrow = 3, ncol = 4))
+    rownames(test_matrix) <- c("row1", "row2", "row3")
     same_groups <- rep("A", 4)
+
     same_result <- groupedRowSums(test_matrix, same_groups)
+
     # Verify single group produces single column
     expect_equal(ncol(same_result), 1)
     # Verify column name matches group name
@@ -111,17 +139,17 @@ test_that("groupedRowSums validates group length and missing values", {
     )
 })
 
-test_that("check_file works correctly", {
-    # Setup - Create temporary file
+test_that("check_file does not error for an existing file", {
     temp_file <- withr::local_tempfile()
     writeLines("test content", temp_file)
 
-    # Test existing file (should not error)
     # Verify no error when checking existing file
     expect_no_error(check_file(temp_file))
+})
 
-    # Test non-existing file (should error)
-    non_existing_file <- tempfile()
+test_that("check_file errors for a non-existing file", {
+    non_existing_file <- withr::local_tempfile()
+
     # Verify error when checking non-existing file
     expect_error(
         check_file(non_existing_file),
@@ -260,13 +288,22 @@ test_that("binom_test recycles p across vectorised inputs", {
     expect_equal(actual, expected)
 })
 
-test_that("binom_test rejects invalid inputs", {
+test_that("binom_test rejects x below 0", {
     # Ensure x outside [0, n] is rejected
     expect_error(binom_test(-1, 10, 0.5), "0 <= x <= n")
+})
+
+test_that("binom_test rejects x greater than n", {
     # Ensure x greater than n is rejected
     expect_error(binom_test(11, 10, 0.5), "0 <= x <= n")
+})
+
+test_that("binom_test rejects p outside [0, 1]", {
     # Ensure p outside [0, 1] is rejected
     expect_error(binom_test(2, 10, 1.5), "p must be in")
+})
+
+test_that("binom_test rejects unsupported alternative", {
     # Confirm two-sided is not an accepted alternative
     expect_error(binom_test(2, 10, 0.5, alternative = "two.sided"))
 })

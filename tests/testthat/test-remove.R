@@ -165,14 +165,15 @@ test_that("remove_doublets keeps NA donors when drop_na is FALSE", {
     expect_equal(ncol(filtered_keep_na), 3)
 })
 
-test_that("remove_doublets validates input", {
-    # Test with non-SNPData object
+test_that("remove_doublets errors when input is not a SNPData object", {
     # Verify error when input is not SNPData object
     expect_error(
         remove_doublets("not_snpdata"),
         "Input must be a SNPData object"
     )
+})
 
+test_that("remove_doublets errors when input is NULL", {
     # Verify error with NULL input
     expect_error(
         remove_doublets(NULL),

@@ -209,51 +209,88 @@ test_that("accessors and heatmap work on a stored SNPData object", {
     expect_s4_class(hm, "HeatmapList")
 })
 
-test_that("heatmap display parameters control genes and columns shown", {
+# Shared stored-object fixture for heatmap display-parameter tests below
+create_stored_xci_fixture <- function() {
     fixture <- make_xci_snpdata()
-    stored <- assign_inactive_x(fixture$snpdata, n_inits = 3)
+    assign_inactive_x(fixture$snpdata, n_inits = 3)
+}
 
+test_that("heatmap max_genes caps the number of displayed rows", {
+    stored <- create_stored_xci_fixture()
     grDevices::pdf(NULL)
     on.exit(grDevices::dev.off(), add = TRUE)
 
-    # Confirm max_genes caps the number of displayed rows
     capped <- plot_inactive_x_assignment_heatmap(stored, donor = "donor0", max_genes = 5)
-    expect_equal(nrow(capped@ht_list[[1]]@matrix), 5)
 
-    # Confirm max_genes above the available count shows all retained genes
+    # Confirm max_genes caps the number of displayed rows
+    expect_equal(nrow(capped@ht_list[[1]]@matrix), 5)
+})
+
+test_that("heatmap max_genes above the available count shows all retained genes", {
+    stored <- create_stored_xci_fixture()
+    grDevices::pdf(NULL)
+    on.exit(grDevices::dev.off(), add = TRUE)
+
     full <- plot_inactive_x_assignment_heatmap(stored, donor = "donor0")
     n_all <- nrow(full@ht_list[[1]]@matrix)
     big <- plot_inactive_x_assignment_heatmap(stored, donor = "donor0", max_genes = n_all + 100)
+
     # Confirm requesting more genes than available shows all retained genes
     expect_equal(nrow(big@ht_list[[1]]@matrix), n_all)
+})
 
-    # Check show_unassigned = FALSE drops unassigned columns
+test_that("heatmap show_unassigned = FALSE drops unassigned columns", {
+    stored <- create_stored_xci_fixture()
+    grDevices::pdf(NULL)
+    on.exit(grDevices::dev.off(), add = TRUE)
+
     assigned_only <- plot_inactive_x_assignment_heatmap(
         stored,
         donor = "donor0",
         show_unassigned = FALSE
     )
     n_assigned <- sum(!is.na(get_barcode_info(stored)$inactive_x))
-    expect_equal(ncol(assigned_only@ht_list[[1]]@matrix), n_assigned)
 
-    # Ensure toggling gene names and clustering still returns a valid plot
+    # Check show_unassigned = FALSE drops unassigned columns
+    expect_equal(ncol(assigned_only@ht_list[[1]]@matrix), n_assigned)
+})
+
+test_that("heatmap accepts toggling gene names and row clustering", {
+    stored <- create_stored_xci_fixture()
+    grDevices::pdf(NULL)
+    on.exit(grDevices::dev.off(), add = TRUE)
+
     variant <- plot_inactive_x_assignment_heatmap(
         stored,
         donor = "donor0",
         show_gene_names = FALSE,
         cluster_rows = TRUE
     )
-    expect_s4_class(variant, "HeatmapList")
 
-    # Ensure toggling the assignment boundary markers still returns a valid plot
+    # Ensure toggling gene names and clustering still returns a valid plot
+    expect_s4_class(variant, "HeatmapList")
+})
+
+test_that("heatmap accepts toggling assignment boundary markers", {
+    stored <- create_stored_xci_fixture()
+    grDevices::pdf(NULL)
+    on.exit(grDevices::dev.off(), add = TRUE)
+
     no_marks <- plot_inactive_x_assignment_heatmap(
         stored,
         donor = "donor0",
         mark_boundaries = FALSE
     )
-    expect_s4_class(no_marks, "HeatmapList")
 
-    # Check show_posterior toggles the posterior annotation row
+    # Ensure toggling the assignment boundary markers still returns a valid plot
+    expect_s4_class(no_marks, "HeatmapList")
+})
+
+test_that("heatmap show_posterior toggles the posterior annotation row", {
+    stored <- create_stored_xci_fixture()
+    grDevices::pdf(NULL)
+    on.exit(grDevices::dev.off(), add = TRUE)
+
     with_post <- plot_inactive_x_assignment_heatmap(stored, donor = "donor0")
     without_post <- plot_inactive_x_assignment_heatmap(
         stored,
@@ -262,14 +299,20 @@ test_that("heatmap display parameters control genes and columns shown", {
     )
     with_names <- names(with_post@ht_list[[1]]@top_annotation@anno_list)
     without_names <- names(without_post@ht_list[[1]]@top_annotation@anno_list)
+
     # Confirm the posterior_X1 annotation is present by default
     expect_true("posterior_X1" %in% with_names)
     # Confirm the posterior_X1 annotation is dropped when show_posterior = FALSE
     expect_false("posterior_X1" %in% without_names)
     # Confirm the assignment annotation is retained either way
     expect_true("assignment" %in% without_names)
+})
 
-    # Ensure custom colour arguments are accepted and applied to the body
+test_that("heatmap applies custom colour arguments to the plot body", {
+    stored <- create_stored_xci_fixture()
+    grDevices::pdf(NULL)
+    on.exit(grDevices::dev.off(), add = TRUE)
+
     coloured <- plot_inactive_x_assignment_heatmap(
         stored,
         donor = "donor0",
@@ -278,9 +321,11 @@ test_that("heatmap display parameters control genes and columns shown", {
         posterior_palette = c("purple", "white", "orange"),
         na_fill = "white"
     )
+    body_col <- coloured@ht_list[[1]]@matrix_color_mapping@col_fun
+
+    # Ensure custom colour arguments are accepted and applied to the body
     expect_s4_class(coloured, "HeatmapList")
     # Confirm the supplied ramp anchors drive the REF fraction body colours
-    body_col <- coloured@ht_list[[1]]@matrix_color_mapping@col_fun
     expect_equal(body_col(0), "#2166ACFF")
     # Confirm the high end of the ramp maps to the supplied top colour
     expect_equal(body_col(1), "#B2182BFF")
@@ -468,10 +513,15 @@ test_that("assign_inactive_x fits each donor independently in a multi-donor obje
 
     # Confirm the clonal split is recovered within each donor (labels are
     # exchangeable per donor, so compare after resolving the swap per donor)
-    for (d in c("donor0", "donor1")) {
-        rows <- barcode_info$donor == d & !is.na(barcode_info$inactive_x)
-        agree <- mean(barcode_info$inactive_x[rows] == barcode_info$true_group[rows])
-        # Confirm the clonal split is recovered within this donor
-        expect_true(max(agree, 1 - agree) > 0.9)
+    agreement_rate <- function(donor) {
+        rows <- barcode_info$donor == donor & !is.na(barcode_info$inactive_x)
+        mean(barcode_info$inactive_x[rows] == barcode_info$true_group[rows])
     }
+    agree_donor0 <- agreement_rate("donor0")
+    agree_donor1 <- agreement_rate("donor1")
+
+    # Confirm the clonal split is recovered within donor0
+    expect_true(max(agree_donor0, 1 - agree_donor0) > 0.9)
+    # Confirm the clonal split is recovered within donor1
+    expect_true(max(agree_donor1, 1 - agree_donor1) > 0.9)
 })

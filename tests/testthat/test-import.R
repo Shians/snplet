@@ -8,26 +8,32 @@ library(Matrix)
 
 # ==============================================================================
 
-test_that("get_example_snpdata works correctly", {
-    # Setup - Load example data
+test_that("get_example_snpdata returns a valid SNPData object with data", {
     snp_data <- get_example_snpdata()
 
-    # Test basic object structure
     # Verify get_example_snpdata returns a valid SNPData object
     expect_s4_class(snp_data, "SNPData")
     # Verify example data has SNPs (rows > 0)
     expect_true(nrow(snp_data) > 0)
     # Verify example data has samples (columns > 0)
     expect_true(ncol(snp_data) > 0)
+})
 
-    # Test SNP info structure
+test_that("get_example_snpdata includes essential SNP info columns", {
+    snp_data <- get_example_snpdata()
+
     snp_info <- get_snp_info(snp_data)
     expected_snp_cols <- c("snp_id", "chrom", "pos")
+
     # Verify essential SNP info columns are present
     expect_true(all(expected_snp_cols %in% colnames(snp_info)))
+})
 
-    # Test sample info structure
+test_that("get_example_snpdata includes cell_id in sample info", {
+    snp_data <- get_example_snpdata()
+
     barcode_info <- get_barcode_info(snp_data)
+
     # Verify cell_id column is present in sample info
     expect_true("cell_id" %in% colnames(barcode_info))
 })
@@ -229,8 +235,8 @@ test_that("merge_cell_annotations handles mixed column naming scenarios", {
     expect_equal(cell2_row$clonotype, "clonotype2")
 })
 
-test_that("import_cellsnp works with example data", {
-    # Setup - Get example data file paths
+# Shared fixture paths and import call for the "works with example data" tests below
+import_example_snpdata <- function() {
     cellsnp_dir <- system.file("extdata/example_snpdata", package = "snplet")
     vdj_file <- system.file("extdata/example_snpdata/filtered_contig_annotations.csv", package = "snplet")
     gene_anno_file <- system.file("extdata/example_gene_anno.tsv", package = "snplet")
@@ -239,43 +245,57 @@ test_that("import_cellsnp works with example data", {
     required_files <- c(cellsnp_dir, vdj_file, gene_anno_file, vireo_file)
     skip_if_not(all(file.exists(required_files)), "Example data files not found")
 
-    # Load gene annotation
     gene_annotation <- readr::read_tsv(gene_anno_file, show_col_types = FALSE)
 
-    # Execute import
-    # Verify import completes without error
-    snp_data <- expect_no_error(import_cellsnp(
+    import_cellsnp(
         cellsnp_dir = cellsnp_dir,
         gene_annotation = gene_annotation,
         vdj_file = vdj_file,
         vireo_file = vireo_file
-    ))
+    )
+}
 
-    # Test return object
+test_that("import_cellsnp completes without error and returns a populated SNPData object", {
+    # Verify import completes without error
+    snp_data <- expect_no_error(import_example_snpdata())
+
     # Verify import_cellsnp returns a valid SNPData object
     expect_s4_class(snp_data, "SNPData")
     # Verify imported data has SNPs (rows > 0)
     expect_true(nrow(snp_data) > 0)
     # Verify imported data has samples (columns > 0)
     expect_true(ncol(snp_data) > 0)
+})
 
-    # Test matrix dimension consistency
+test_that("import_cellsnp returns matrices with consistent dimensions", {
+    snp_data <- import_example_snpdata()
+
     # Verify ref_count and alt_count matrices have same dimensions
     expect_equal(dim(ref_count(snp_data)), dim(alt_count(snp_data)))
     # Verify ref_count and oth_count matrices have same dimensions
     expect_equal(dim(ref_count(snp_data)), dim(oth_count(snp_data)))
+})
 
-    # Test metadata structure
+test_that("import_cellsnp metadata row counts match matrix dimensions", {
+    snp_data <- import_example_snpdata()
+
     snp_info <- get_snp_info(snp_data)
     barcode_info <- get_barcode_info(snp_data)
+
     # Verify SNP info rows match matrix rows
     expect_equal(nrow(snp_info), nrow(snp_data))
     # Verify sample info rows match matrix columns
     expect_equal(nrow(barcode_info), ncol(snp_data))
+})
 
-    # Test required columns
+test_that("import_cellsnp metadata includes all expected columns", {
+    snp_data <- import_example_snpdata()
+
+    snp_info <- get_snp_info(snp_data)
+    barcode_info <- get_barcode_info(snp_data)
     expected_snp_cols <- c("snp_id", "chrom", "pos", "ref", "alt")
     expected_sample_cols <- c("cell_id", "donor", "clonotype")
+
     # Verify all expected SNP info columns are present
     expect_true(all(expected_snp_cols %in% colnames(snp_info)))
     # Verify all expected sample info columns are present
@@ -340,8 +360,8 @@ test_that("merge_cell_annotations works without VDJ info", {
     expect_equal(cell1_row$donor, "donor1")
 })
 
-test_that("import_cellsnp works without vdj_file", {
-    # Setup - Get example data file paths without VDJ
+# Shared fixture for the "import without vdj_file" tests below
+import_snpdata_without_vdj <- function() {
     cellsnp_dir <- system.file("extdata/example_snpdata", package = "snplet")
     gene_anno_file <- system.file("extdata/example_gene_anno.tsv", package = "snplet")
     vireo_file <- system.file("extdata/example_snpdata/donor_ids.tsv", package = "snplet")
@@ -349,66 +369,81 @@ test_that("import_cellsnp works without vdj_file", {
     required_files <- c(cellsnp_dir, gene_anno_file, vireo_file)
     skip_if_not(all(file.exists(required_files)), "Example data files not found")
 
-    # Load gene annotation
     gene_annotation <- readr::read_tsv(gene_anno_file, show_col_types = FALSE)
 
-    # Execute import without VDJ file
-    # Verify import completes without error
-    snp_data <- expect_no_error(import_cellsnp(
+    import_cellsnp(
         cellsnp_dir = cellsnp_dir,
         gene_annotation = gene_annotation,
         vireo_file = vireo_file
-    ))
+    )
+}
 
-    # Test return object
+test_that("import_cellsnp without vdj_file completes without error and returns a populated SNPData object", {
+    # Verify import completes without error
+    snp_data <- expect_no_error(import_snpdata_without_vdj())
+
     # Verify import_cellsnp returns a valid SNPData object without VDJ
     expect_s4_class(snp_data, "SNPData")
     # Verify imported data has SNPs (rows > 0)
     expect_true(nrow(snp_data) > 0)
     # Verify imported data has samples (columns > 0)
     expect_true(ncol(snp_data) > 0)
+})
 
-    # Test metadata structure
+test_that("import_cellsnp without vdj_file leaves clonotype as NA", {
+    snp_data <- import_snpdata_without_vdj()
+
     barcode_info <- get_barcode_info(snp_data)
+
     # Verify clonotype column exists
     expect_true("clonotype" %in% colnames(barcode_info))
     # Verify all clonotype values are NA when no VDJ file provided
     expect_true(all(is.na(barcode_info$clonotype)))
+})
 
-    # Test required columns
+test_that("import_cellsnp without vdj_file includes expected sample columns", {
+    snp_data <- import_snpdata_without_vdj()
+
+    barcode_info <- get_barcode_info(snp_data)
     expected_sample_cols <- c("cell_id", "donor")
+
     # Verify expected sample info columns are present
     expect_true(all(expected_sample_cols %in% colnames(barcode_info)))
 })
 
-test_that("import_cellsnp works without vdj_file or vireo_file", {
-    # Setup - Get example data file paths with minimal inputs
+# Shared fixture for the "import without vdj_file or vireo_file" tests below
+import_snpdata_without_vdj_or_vireo <- function() {
     cellsnp_dir <- system.file("extdata/example_snpdata", package = "snplet")
     gene_anno_file <- system.file("extdata/example_gene_anno.tsv", package = "snplet")
 
     required_files <- c(cellsnp_dir, gene_anno_file)
     skip_if_not(all(file.exists(required_files)), "Example data files not found")
 
-    # Load gene annotation
     gene_annotation <- readr::read_tsv(gene_anno_file, show_col_types = FALSE)
 
-    # Execute import without VDJ or Vireo files
-    # Verify import completes without error
-    snp_data <- expect_no_error(import_cellsnp(
+    import_cellsnp(
         cellsnp_dir = cellsnp_dir,
         gene_annotation = gene_annotation
-    ))
+    )
+}
 
-    # Test return object
+test_that("import_cellsnp without vdj_file or vireo_file completes without error and returns a populated SNPData object", {
+    # Verify import completes without error
+    snp_data <- expect_no_error(import_snpdata_without_vdj_or_vireo())
+
     # Verify import_cellsnp returns a valid SNPData object with minimal inputs
     expect_s4_class(snp_data, "SNPData")
     # Verify imported data has SNPs (rows > 0)
     expect_true(nrow(snp_data) > 0)
     # Verify imported data has samples (columns > 0)
     expect_true(ncol(snp_data) > 0)
+})
 
-    # Test metadata structure
+test_that("import_cellsnp without vdj_file or vireo_file defaults clonotype and donor columns", {
+    snp_data <- import_snpdata_without_vdj_or_vireo()
+
     barcode_info <- get_barcode_info(snp_data)
+
     # Verify clonotype column exists even without VDJ
     expect_true("clonotype" %in% colnames(barcode_info))
     # Verify donor column exists even without Vireo

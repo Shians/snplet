@@ -21,7 +21,7 @@ expect_valid_maf_result <- function(result) {
 
 # ==============================================================================
 
-test_that("test_maf returns correct structure and calculations for basic input", {
+test_that("test_maf preserves original columns and adds expected columns", {
     test_df <- data.frame(
         ref_count = c(10, 5, 20),
         alt_count = c(2, 8, 1),
@@ -46,17 +46,50 @@ test_that("test_maf returns correct structure and calculations for basic input",
     expect_true("p_val" %in% colnames(result))
     # Verify adj_p_val column is added
     expect_true("adj_p_val" %in% colnames(result))
-    # Verify minor_allele_count calculation (minimum of ref_count and alt_count)
+})
+
+test_that("test_maf calculates minor_allele_count as the minimum of ref and alt counts", {
+    test_df <- data.frame(
+        ref_count = c(10, 5, 20),
+        alt_count = c(2, 8, 1),
+        total_count = c(12, 13, 21)
+    )
+
+    result <- test_maf(test_df)
+
     expected_minor_allele <- pmin(test_df$ref_count, test_df$alt_count)
+    # Verify minor_allele_count calculation (minimum of ref_count and alt_count)
     expect_equal(result$minor_allele_count, expected_minor_allele)
-    # Verify p-values are numeric and within valid range [0,1]
+})
+
+test_that("test_maf produces valid p-values and adjusted p-values for basic input", {
+    test_df <- data.frame(
+        ref_count = c(10, 5, 20),
+        alt_count = c(2, 8, 1),
+        total_count = c(12, 13, 21)
+    )
+
+    result <- test_maf(test_df)
+
+    # Verify p-values are numeric
     expect_type(result$p_val, "double")
     # Check that p-values fall within [0, 1]
     expect_true(all(result$p_val >= 0 & result$p_val <= 1))
-    # Verify adjusted p-values are numeric and within valid range [0,1]
+    # Verify adjusted p-values are numeric
     expect_type(result$adj_p_val, "double")
     # Check that adjusted p-values fall within [0, 1]
     expect_true(all(result$adj_p_val >= 0 & result$adj_p_val <= 1))
+})
+
+test_that("test_maf adjusted p-values satisfy the BH correction property", {
+    test_df <- data.frame(
+        ref_count = c(10, 5, 20),
+        alt_count = c(2, 8, 1),
+        total_count = c(12, 13, 21)
+    )
+
+    result <- test_maf(test_df)
+
     # Verify adjusted p-values satisfy BH correction property
     expect_true(all(result$adj_p_val >= result$p_val))
 })
@@ -126,17 +159,23 @@ test_that("test_maf handles fractional total_count values", {
     expect_true(all(result$adj_p_val >= 0 & result$adj_p_val <= 1))
 })
 
-test_that("test_maf throws error when input is not a data frame", {
+test_that("test_maf throws error when input is a string", {
     # Verify error for string input
     expect_error(
         test_maf("not_a_dataframe"),
         "is\\(x, \"data\\.frame\"\\) is not TRUE"
     )
+})
+
+test_that("test_maf throws error when input is NULL", {
     # Verify error for NULL input
     expect_error(
         test_maf(NULL),
         "is\\(x, \"data\\.frame\"\\) is not TRUE"
     )
+})
+
+test_that("test_maf throws error when input is a list", {
     # Verify error for list input
     expect_error(
         test_maf(list(a = 1, b = 2)),
@@ -264,6 +303,8 @@ test_that("test_maf preserves additional columns beyond required ones", {
 })
 
 test_that("test_maf processes larger datasets without error", {
+    withr::local_seed(42)
+
     n_rows <- 100
     max_ref_count <- 30
     max_alt_count <- 20

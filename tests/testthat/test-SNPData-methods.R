@@ -528,12 +528,18 @@ test_that("aggregate_count_df handles edge cases correctly", {
     # Test with NA values in grouping column
     snp_data_na <- create_snpdata_with_na_donor()
 
-    # Verify function handles NA values by excluding them and logs NA warning
+    # Verify function handles NA values by excluding them and logs NA warning.
+    # The package test suite raises the global log threshold to FATAL (see
+    # tests/testthat/setup.R) to keep test output quiet, so this test must
+    # lower it locally to actually capture the WARN-level message below.
     log_file <- withr::local_tempfile(pattern = "aggregate_count_df_warn_", fileext = ".log")
     original_appender_name <- as.character(logger::log_appender())
     original_appender <- get(original_appender_name, asNamespace("logger"))
+    original_threshold <- logger::log_threshold()
     logger::log_appender(logger::appender_file(log_file))
+    logger::log_threshold(logger::WARN)
     withr::defer(logger::log_appender(original_appender))
+    withr::defer(logger::log_threshold(original_threshold))
 
     result_na <- aggregate_count_df(snp_data_na, "donor")
     log_lines <- readLines(log_file, warn = FALSE)
@@ -993,8 +999,15 @@ test_that("clonotype functions work after updating clonotype with overwrite=TRUE
 # Tests for Metadata Updates
 # ==============================================================================
 
-test_that("add_barcode_metadata validates inputs and join keys", {
-    # Setup
+test_that("add_barcode_metadata errors for non-SNPData input", {
+    # Verify error for non-SNPData input
+    expect_error(
+        add_barcode_metadata("not_snpdata", data.frame()),
+        "Input must be a SNPData object"
+    )
+})
+
+test_that("add_barcode_metadata errors for non-data.frame metadata", {
     snp_data <- SNPData(
         alt_count = test_alt_count,
         ref_count = test_ref_count,
@@ -1002,66 +1015,100 @@ test_that("add_barcode_metadata validates inputs and join keys", {
         barcode_info = test_barcode_info
     )
 
-    # Verify error for non-SNPData input
-    expect_error(
-        add_barcode_metadata("not_snpdata", data.frame()),
-        "Input must be a SNPData object"
-    )
     # Verify error for non-data.frame metadata
     expect_error(
         add_barcode_metadata(snp_data, "not_a_df"),
         "metadata must be a data.frame"
     )
+})
+
+test_that("add_barcode_metadata errors when join_by column is missing from metadata", {
+    snp_data <- SNPData(
+        alt_count = test_alt_count,
+        ref_count = test_ref_count,
+        snp_info = test_snp_info,
+        barcode_info = test_barcode_info
+    )
+
     # Verify error for missing join_by in metadata
     expect_error(
         add_barcode_metadata(snp_data, data.frame(other = "x"), join_by = "cell_id"),
         "Column 'cell_id' not found in metadata data.frame"
     )
-    # Verify error for duplicate join values in metadata
+})
+
+test_that("add_barcode_metadata errors for duplicate join values in metadata", {
+    snp_data <- SNPData(
+        alt_count = test_alt_count,
+        ref_count = test_ref_count,
+        snp_info = test_snp_info,
+        barcode_info = test_barcode_info
+    )
     dup_metadata <- data.frame(
         cell_id = c("cell_1", "cell_1"),
         donor = c("d1", "d2"),
         stringsAsFactors = FALSE
     )
+
+    # Verify error for duplicate join values in metadata
     expect_error(
         add_barcode_metadata(snp_data, dup_metadata),
         "Duplicate values found in join column 'cell_id'"
     )
 })
 
-test_that("add_barcode_metadata handles conflicts and preserves computed columns", {
-    # Setup
+test_that("add_barcode_metadata errors on conflicting columns when overwrite is FALSE", {
     snp_data <- SNPData(
         alt_count = test_alt_count,
         ref_count = test_ref_count,
         snp_info = test_snp_info,
         barcode_info = test_barcode_info
     )
-    original_info <- get_barcode_info(snp_data)
-    original_library_size <- original_info$library_size
-
-    # Verify conflicting columns error when overwrite is FALSE
     conflict_metadata <- data.frame(
         cell_id = c("cell_1", "cell_2"),
         donor = c("d1_new", "d2_new"),
         stringsAsFactors = FALSE
     )
+
+    # Verify conflicting columns error when overwrite is FALSE
     expect_error(
         add_barcode_metadata(snp_data, conflict_metadata, overwrite = FALSE),
         "Column\\(s\\) already exist in barcode_info"
     )
+})
 
-    # Verify overwrite replaces existing columns and preserves library_size
+test_that("add_barcode_metadata overwrite replaces columns and preserves computed columns", {
+    snp_data <- SNPData(
+        alt_count = test_alt_count,
+        ref_count = test_ref_count,
+        snp_info = test_snp_info,
+        barcode_info = test_barcode_info
+    )
+    original_library_size <- get_barcode_info(snp_data)$library_size
+    conflict_metadata <- data.frame(
+        cell_id = c("cell_1", "cell_2"),
+        donor = c("d1_new", "d2_new"),
+        stringsAsFactors = FALSE
+    )
+
     updated <- add_barcode_metadata(snp_data, conflict_metadata, overwrite = TRUE)
     updated_info <- get_barcode_info(updated)
+
     # Verify donor values are overwritten by new metadata
     expect_equal(updated_info$donor, c("d1_new", "d2_new"))
     # Verify library_size is preserved from original object
     expect_equal(updated_info$library_size, original_library_size)
 })
 
-test_that("add_snp_metadata validates inputs and join keys", {
-    # Setup
+test_that("add_snp_metadata errors for non-SNPData input", {
+    # Verify error for non-SNPData input
+    expect_error(
+        add_snp_metadata("not_snpdata", data.frame()),
+        "Input must be a SNPData object"
+    )
+})
+
+test_that("add_snp_metadata errors for non-data.frame metadata", {
     snp_data <- SNPData(
         alt_count = test_alt_count,
         ref_count = test_ref_count,
@@ -1069,58 +1116,85 @@ test_that("add_snp_metadata validates inputs and join keys", {
         barcode_info = test_barcode_info
     )
 
-    # Verify error for non-SNPData input
-    expect_error(
-        add_snp_metadata("not_snpdata", data.frame()),
-        "Input must be a SNPData object"
-    )
     # Verify error for non-data.frame metadata
     expect_error(
         add_snp_metadata(snp_data, "not_a_df"),
         "metadata must be a data.frame"
     )
+})
+
+test_that("add_snp_metadata errors when join_by column is missing from metadata", {
+    snp_data <- SNPData(
+        alt_count = test_alt_count,
+        ref_count = test_ref_count,
+        snp_info = test_snp_info,
+        barcode_info = test_barcode_info
+    )
+
     # Verify error for missing join_by in metadata
     expect_error(
         add_snp_metadata(snp_data, data.frame(other = "x"), join_by = "snp_id"),
         "Column 'snp_id' not found in metadata data.frame"
     )
-    # Verify error for duplicate join values in metadata
+})
+
+test_that("add_snp_metadata errors for duplicate join values in metadata", {
+    snp_data <- SNPData(
+        alt_count = test_alt_count,
+        ref_count = test_ref_count,
+        snp_info = test_snp_info,
+        barcode_info = test_barcode_info
+    )
     dup_metadata <- data.frame(
         snp_id = c("snp_1", "snp_1"),
         gene = c("g1", "g2"),
         stringsAsFactors = FALSE
     )
+
+    # Verify error for duplicate join values in metadata
     expect_error(
         add_snp_metadata(snp_data, dup_metadata),
         "Duplicate values found in join column 'snp_id'"
     )
 })
 
-test_that("add_snp_metadata handles conflicts, overwrite, and preserves computed columns", {
-    # Setup
+test_that("add_snp_metadata errors on conflicting columns when overwrite is FALSE", {
     snp_data <- SNPData(
         alt_count = test_alt_count,
         ref_count = test_ref_count,
         snp_info = test_snp_info,
         barcode_info = test_barcode_info
     )
-    original_info <- get_snp_info(snp_data)
-    original_coverage <- original_info$coverage
-
-    # Verify conflicting columns error when overwrite is FALSE
     conflict_metadata <- data.frame(
         snp_id = c("snp_1", "snp_2"),
         pos = c(101, 202),
         stringsAsFactors = FALSE
     )
+
+    # Verify conflicting columns error when overwrite is FALSE
     expect_error(
         add_snp_metadata(snp_data, conflict_metadata, overwrite = FALSE),
         "Column\\(s\\) already exist in snp_info"
     )
+})
 
-    # Verify overwrite replaces existing columns and preserves coverage
+test_that("add_snp_metadata overwrite replaces columns and preserves computed columns", {
+    snp_data <- SNPData(
+        alt_count = test_alt_count,
+        ref_count = test_ref_count,
+        snp_info = test_snp_info,
+        barcode_info = test_barcode_info
+    )
+    original_coverage <- get_snp_info(snp_data)$coverage
+    conflict_metadata <- data.frame(
+        snp_id = c("snp_1", "snp_2"),
+        pos = c(101, 202),
+        stringsAsFactors = FALSE
+    )
+
     updated <- add_snp_metadata(snp_data, conflict_metadata, overwrite = TRUE)
     updated_info <- get_snp_info(updated)
+
     # Verify SNP positions are overwritten by new metadata
     expect_equal(updated_info$pos, c(101, 202))
     # Verify coverage is preserved from original object
