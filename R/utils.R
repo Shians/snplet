@@ -26,6 +26,8 @@ utils::globalVariables(c(
     "xci_informative",
     "xci_informative_donor",
     "xci_allele_on_x1",
+    "xci_allele_on_x1_by_donor",
+    "xci_escape_fraction_by_donor",
     "xci_escape_fraction",
     "xci_post_X1",
     "xci_fit_unit",

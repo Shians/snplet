@@ -123,11 +123,28 @@ test_that("xci_haplotypes reports phase and escape fraction per informative SNP"
     stored <- assign_inactive_x(fixture$snpdata, n_inits = 3)
 
     haplotypes <- xci_haplotypes(stored)
-    # Verify haplotype columns are present
-    expect_true(all(c("snp_id", "gene_name", "allele_on_x1", "escape_fraction") %in% colnames(haplotypes)))
+    # Verify haplotype columns are present, including the per-donor donor column
+    expect_true(all(c("snp_id", "gene_name", "donor", "allele_on_x1", "escape_fraction") %in% colnames(haplotypes)))
     # Check phase is reported as REF/ALT
     expect_true(all(haplotypes$allele_on_x1 %in% c("REF", "ALT")))
     # Confirm escape fraction is a valid minor fraction
+    expect_true(all(haplotypes$escape_fraction > 0 & haplotypes$escape_fraction < 0.5))
+})
+
+test_that("xci_haplotypes emits one row per SNP and donor for a multi-donor fit", {
+    fixture <- make_xci_snpdata(n_donors = 2)
+    stored <- assign_inactive_x(fixture$snpdata, n_inits = 3)
+
+    haplotypes <- xci_haplotypes(stored)
+    # Confirm both donors are represented in the unnested output
+    expect_setequal(haplotypes$donor, c("donor0", "donor1"))
+    # Each row keys on one donor, so no donor cell is comma-joined
+    expect_false(any(grepl(",", haplotypes$donor)))
+    # A SNP informative in both donors yields one row per donor
+    per_snp <- table(haplotypes$snp_id)
+    expect_true(all(per_snp <= 2))
+    # Escape fraction parses back to a numeric minor fraction in every donor
+    expect_type(haplotypes$escape_fraction, "double")
     expect_true(all(haplotypes$escape_fraction > 0 & haplotypes$escape_fraction < 0.5))
 })
 
@@ -169,7 +186,7 @@ test_that("assign_inactive_x promotes diagnostics into SNPData slots and survive
     # Check barcode diagnostics were written
     expect_true(all(c("inactive_x", "xci_post_X1") %in% colnames(barcode_info)))
     # Check SNP diagnostics were written
-    expect_true(all(c("xci_informative", "xci_allele_on_x1", "xci_escape_fraction") %in% colnames(snp_info)))
+    expect_true(all(c("xci_informative", "xci_allele_on_x1_by_donor", "xci_escape_fraction_by_donor") %in% colnames(snp_info)))
     # Confirm some SNPs are flagged informative and none are NA
     expect_true(any(snp_info$xci_informative))
     # Confirm the informative flag itself is never NA
@@ -196,8 +213,8 @@ test_that("accessors and heatmap work on a stored SNPData object", {
     expect_true(all(c("cell_id", "inactive_x", "xci_post_X1") %in% colnames(assignments)))
 
     haplotypes <- xci_haplotypes(stored)
-    # Verify stored-object haplotypes expose phase and escape fraction
-    expect_true(all(c("snp_id", "allele_on_x1", "escape_fraction") %in% colnames(haplotypes)))
+    # Verify stored-object haplotypes expose donor, phase and escape fraction
+    expect_true(all(c("snp_id", "donor", "allele_on_x1", "escape_fraction") %in% colnames(haplotypes)))
 
     # Confirm the heatmap method runs on a stored object. It returns a drawn
     # HeatmapList (donor as title, unit-labelled column axis), so draw to a null

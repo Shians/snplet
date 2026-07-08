@@ -279,19 +279,23 @@ setMethod("xci_assignments", signature(x = "SNPData"), function(x) {
 #' Extract SNP haplotypes from a SNPData object with stored XCI diagnostics
 #'
 #' Returns the inferred phase and escape fraction for each SNP in the final
-#' gene set used by the EM model.
+#' gene set used by the EM model. Phase is donor-specific — a SNP retained in
+#' several donors carries a distinct X1-allele in each — so the result has one
+#' row per SNP and donor rather than flattening to a single value.
 #'
 #' @param x A SNPData object that had XCI diagnostics stored by
 #'   \code{\link{assign_inactive_x}} or
 #'   \code{\link{assign_inactive_x_by_clonotype}}.
 #'
-#' @return A tibble with one row per informative SNP and columns \code{snp_id}
-#'   (character), \code{gene_name} (character; present only when the object
-#'   carries gene annotation), \code{allele_on_x1} (character, "REF" or "ALT" —
-#'   the allele carried by the X1 haplotype), and \code{escape_fraction}
-#'   (numeric estimated fraction of reads from the inactive allele).
+#' @return A tibble with one row per informative SNP and donor, with columns
+#'   \code{snp_id} (character), \code{gene_name} (character; present only when
+#'   the object carries gene annotation), \code{donor} (character),
+#'   \code{allele_on_x1} (character, "REF" or "ALT" — the allele carried by the
+#'   X1 haplotype in that donor's model), and \code{escape_fraction} (numeric
+#'   estimated fraction of reads from the inactive allele in that donor).
 #'
 #' @family X-chromosome inactivation functions
+#' @importFrom tidyr separate_longer_delim
 #' @export
 setGeneric("xci_haplotypes", function(x) standardGeneric("xci_haplotypes"))
 
@@ -307,9 +311,17 @@ setMethod("xci_haplotypes", signature(x = "SNPData"), function(x) {
         dplyr::select(
             snp_id,
             dplyr::any_of("gene_name"),
-            allele_on_x1 = xci_allele_on_x1,
-            escape_fraction = xci_escape_fraction
-        )
+            donor = xci_informative_donor,
+            allele_on_x1 = xci_allele_on_x1_by_donor,
+            escape_fraction = xci_escape_fraction_by_donor
+        ) %>%
+        # The three *_by_donor fields are comma-separated and aligned; unnest
+        # them in parallel to one row per SNP x donor.
+        tidyr::separate_longer_delim(
+            c(donor, allele_on_x1, escape_fraction),
+            delim = ","
+        ) %>%
+        dplyr::mutate(escape_fraction = as.numeric(escape_fraction))
 })
 
 #' Plot assignment heatmap from a SNPData object with stored XCI diagnostics
@@ -885,8 +897,10 @@ setMethod(
 #' Promotes the fit diagnostics into the object's indexable metadata slots so
 #' they survive subsetting: barcode metadata gains \code{inactive_x} and
 #' \code{xci_post_X1}; SNP metadata gains \code{xci_informative},
-#' \code{xci_allele_on_x1}, and \code{xci_escape_fraction}. For a clonotype-level fit the
-#' per-cell projection is used for barcode annotation.
+#' \code{xci_informative_donor}, \code{xci_allele_on_x1_by_donor}, and
+#' \code{xci_escape_fraction_by_donor} (the latter two comma-separated and
+#' aligned to \code{xci_informative_donor}, one entry per donor). For a
+#' clonotype-level fit the per-cell projection is used for barcode annotation.
 #'
 #' @keywords internal
 .store_xci_fit <- function(x, fit) {
@@ -919,13 +933,16 @@ setMethod(
         dplyr::bind_rows() %>%
         # A SNP can be retained in more than one donor's model; record every
         # donor it was informative in (comma-separated) and collapse to one row
-        # per snp_id so the snp_info join column has no duplicates. Per-donor
-        # allele/escape columns keep the first donor's values.
+        # per snp_id so the snp_info join column has no duplicates. Phase is
+        # donor-specific, so the *_by_donor columns preserve every donor's value
+        # (aligned to xci_informative_donor) as the single source of truth; they
+        # are unnested per donor by xci_haplotypes() and haplotype_expression().
+        dplyr::distinct(snp_id, xci_informative_donor, .keep_all = TRUE) %>%
         dplyr::summarise(
             xci_informative = TRUE,
-            xci_informative_donor = paste(unique(xci_informative_donor), collapse = ","),
-            xci_allele_on_x1 = dplyr::first(xci_allele_on_x1),
-            xci_escape_fraction = dplyr::first(xci_escape_fraction),
+            xci_informative_donor = paste(xci_informative_donor, collapse = ","),
+            xci_allele_on_x1_by_donor = paste(xci_allele_on_x1, collapse = ","),
+            xci_escape_fraction_by_donor = paste(xci_escape_fraction, collapse = ","),
             .by = snp_id
         )
 
