@@ -68,6 +68,7 @@ Collate:
     'VCFData-class.R'
     'add_snp_gene_names.R'
     'assign_inactive_x.R'
+    'haplotype_expression.R'
     'plots.R'
     'plotting.R'
     'remove.R'

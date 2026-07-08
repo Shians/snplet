@@ -15,20 +15,24 @@ xci_haplotypes(x)
 \code{\link{assign_inactive_x_by_clonotype}}.}
 }
 \value{
-A tibble with one row per informative SNP and columns \code{snp_id}
-  (character), \code{gene_name} (character; present only when the object
-  carries gene annotation), \code{allele_on_x1} (character, "REF" or "ALT" —
-  the allele carried by the X1 haplotype), and \code{escape_fraction}
-  (numeric estimated fraction of reads from the inactive allele).
+A tibble with one row per informative SNP and donor, with columns
+  \code{snp_id} (character), \code{gene_name} (character; present only when
+  the object carries gene annotation), \code{donor} (character),
+  \code{allele_on_x1} (character, "REF" or "ALT" — the allele carried by the
+  X1 haplotype in that donor's model), and \code{escape_fraction} (numeric
+  estimated fraction of reads from the inactive allele in that donor).
 }
 \description{
 Returns the inferred phase and escape fraction for each SNP in the final
-gene set used by the EM model.
+gene set used by the EM model. Phase is donor-specific — a SNP retained in
+several donors carries a distinct X1-allele in each — so the result has one
+row per SNP and donor rather than flattening to a single value.
 }
 \seealso{
 Other X-chromosome inactivation functions:
 \code{\link[=assign_inactive_x]{assign_inactive_x()}},
 \code{\link[=assign_inactive_x_by_clonotype]{assign_inactive_x_by_clonotype()}},
+\code{\link[=haplotype_expression]{haplotype_expression()}},
 \code{\link[=plot_inactive_x_assignment_heatmap]{plot_inactive_x_assignment_heatmap()}},
 \code{\link[=xci_assignments]{xci_assignments()}}
 }

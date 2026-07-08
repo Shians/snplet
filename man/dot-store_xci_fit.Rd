@@ -10,7 +10,9 @@
 Promotes the fit diagnostics into the object's indexable metadata slots so
 they survive subsetting: barcode metadata gains \code{inactive_x} and
 \code{xci_post_X1}; SNP metadata gains \code{xci_informative},
-\code{xci_allele_on_x1}, and \code{xci_escape_fraction}. For a clonotype-level fit the
-per-cell projection is used for barcode annotation.
+\code{xci_informative_donor}, \code{xci_allele_on_x1_by_donor}, and
+\code{xci_escape_fraction_by_donor} (the latter two comma-separated and
+aligned to \code{xci_informative_donor}, one entry per donor). For a
+clonotype-level fit the per-cell projection is used for barcode annotation.
 }
 \keyword{internal}

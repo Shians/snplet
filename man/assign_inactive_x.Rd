@@ -83,6 +83,7 @@ plot_inactive_x_assignment_heatmap(snp_data, donor = "donor1")
 \seealso{
 Other X-chromosome inactivation functions:
 \code{\link[=assign_inactive_x_by_clonotype]{assign_inactive_x_by_clonotype()}},
+\code{\link[=haplotype_expression]{haplotype_expression()}},
 \code{\link[=plot_inactive_x_assignment_heatmap]{plot_inactive_x_assignment_heatmap()}},
 \code{\link[=xci_assignments]{xci_assignments()}},
 \code{\link[=xci_haplotypes]{xci_haplotypes()}}
