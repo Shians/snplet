@@ -1027,6 +1027,8 @@ setMethod(
     # Post-convergence escapee filter: genes with LLR <= 0 are inconsistent with
     # current cell assignments; MAD filter on pi_g removes outlier escape fractions.
     passes_escapee_filter <- .filter_escapee_genes(dat, n_genes, best$h_g, best$pi_g, best$rho, best$post)
+    # Positions (in outlier-filtered gene space) of genes that survived the
+    # escapee filter — used to map the refit result back to original coordinates.
     escaped_gene_indices <- which(passes_escapee_filter)
 
     if (refit_after_filter && !all(passes_escapee_filter)) {
@@ -1057,18 +1059,21 @@ setMethod(
         )
 
     # gene_keep: logical of length nrow(original ref_mat), TRUE = gene survived
-    # both the outlier filter and the post-convergence escapee filter
+    # both the outlier filter and the post-convergence escapee filter. The
+    # outlier-filtered positions that survive escaping are escaped_gene_indices;
+    # map those back onto the subset of original positions the outlier filter kept.
     gene_keep <- passes_outlier_filter
-    if (refit_after_filter) {
-        # Map filtered gene indices back to original space
-        gene_keep[escaped_gene_indices] <- passes_escapee_filter
-    } else {
-        # Direct assignment works when no refit (passes_escapee_filter has same length as filtered genes)
-        gene_keep[passes_outlier_filter] <- passes_escapee_filter
-    }
+    outlier_kept_positions <- which(passes_outlier_filter)
+    gene_keep[outlier_kept_positions] <- FALSE
+    gene_keep[outlier_kept_positions[escaped_gene_indices]] <- TRUE
 
-    best$h_g <- best$h_g[passes_escapee_filter]
-    best$pi_g <- best$pi_g[passes_escapee_filter]
+    if (!refit_after_filter) {
+        # No refit: best$h_g / pi_g span the outlier-filtered genes, so subset
+        # them down to the escapee survivors. After a refit they already span
+        # exactly the retained set and need no subsetting.
+        best$h_g <- best$h_g[passes_escapee_filter]
+        best$pi_g <- best$pi_g[passes_escapee_filter]
+    }
 
     c(best, list(gene_keep = gene_keep))
 }

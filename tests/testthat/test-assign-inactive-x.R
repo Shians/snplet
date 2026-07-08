@@ -20,14 +20,23 @@ make_xci_snpdata <- function(
     n_genes = 20,
     n_cells_per_group = 40,
     depth = 20,
-    seed = 1
+    seed = 1,
+    n_donors = 1,
+    escapee = FALSE
 ) {
     withr::with_seed(seed, {
         n_cells <- 2 * n_cells_per_group
         group <- rep(c("X1", "X2"), each = n_cells_per_group)
 
-        # Per gene, which allele sits on X1 (0 = REF active when X2 inactive)
+        # Per gene, which allele sits on X1 (0 = REF active when X2 inactive).
+        # When escapee = TRUE the last gene is an escapee: it stays balanced
+        # (p_ref = 0.5) in every cell regardless of inactivation state, so it
+        # carries no XCI signal and should be filtered out.
         allele_on_x1 <- sample(0:1, n_genes, replace = TRUE)
+        is_escapee <- rep(FALSE, n_genes)
+        if (escapee) {
+            is_escapee[n_genes] <- TRUE
+        }
 
         ref_mat <- matrix(0L, nrow = n_genes, ncol = n_cells)
         alt_mat <- matrix(0L, nrow = n_genes, ncol = n_cells)
@@ -35,7 +44,9 @@ make_xci_snpdata <- function(
             for (c in seq_len(n_cells)) {
                 # X1-inactive cells silence the X1 allele; probability of REF
                 x1_inactive <- group[c] == "X1"
-                p_ref <- if (allele_on_x1[g] == 0) {
+                p_ref <- if (is_escapee[g]) {
+                    0.5
+                } else if (allele_on_x1[g] == 0) {
                     if (x1_inactive) 0.05 else 0.95
                 } else {
                     if (x1_inactive) 0.95 else 0.05
@@ -61,9 +72,13 @@ make_xci_snpdata <- function(
         # groups, preserving clonal consistency of X-inactivation state.
         clono_within <- rep(seq_len(n_cells_per_group %/% 4 + 1), each = 4)[seq_len(n_cells_per_group)]
         clonotype <- paste0("clono_", group, "_", c(clono_within, clono_within))
+        # Spread cells evenly across donors. Clonotypes stay donor-specific by
+        # tagging the donor into the clonotype id, preserving clonal consistency.
+        donor <- paste0("donor", (seq_len(n_cells) - 1) %% n_donors)
+        clonotype <- paste0(donor, "_", clonotype)
         barcode_info <- data.frame(
             barcode = paste0("cell", seq_len(n_cells)),
-            donor = "donor0",
+            donor = donor,
             clonotype = clonotype,
             true_group = group,
             stringsAsFactors = FALSE
@@ -358,4 +373,90 @@ test_that("deduplicated kernel evaluation matches the direct per-row computation
     # Scatter-back must reproduce the direct evaluation exactly (same values)
     expect_identical(both$L0, direct_L0)
     expect_identical(both$L1, direct_L1)
+})
+
+test_that("assign_inactive_x_by_clonotype recovers the clonal split and stores diagnostics", {
+    fixture <- make_xci_snpdata()
+    stored <- assign_inactive_x_by_clonotype(fixture$snpdata, n_inits = 3)
+
+    # Verify a stored SNPData object is returned
+    expect_s4_class(stored, "SNPData")
+
+    barcode_info <- get_barcode_info(stored)
+    # Check the fit recorded that it ran on clonotype units
+    expect_true(all(barcode_info$xci_fit_unit == "clonotype"))
+
+    assignments <- xci_assignments(stored)
+    # Verify every cell received an assignment row via the cell projection
+    expect_equal(nrow(assignments), ncol(fixture$snpdata))
+
+    # Confirm the inferred groups recover the true clonal split up to a label
+    # swap (labels are exchangeable in the model)
+    truth <- barcode_info$true_group
+    called <- !is.na(assignments$inactive_x)
+    agree <- mean(assignments$inactive_x[called] == truth[called])
+    expect_true(max(agree, 1 - agree) > 0.9)
+})
+
+test_that("confidence_threshold controls how many cells are hard-assigned", {
+    fixture <- make_xci_snpdata()
+
+    strict <- assign_inactive_x(fixture$snpdata, n_inits = 3, confidence_threshold = 0.999)
+    lax <- assign_inactive_x(fixture$snpdata, n_inits = 3, confidence_threshold = 0.6)
+
+    n_called_strict <- sum(!is.na(get_barcode_info(strict)$inactive_x))
+    n_called_lax <- sum(!is.na(get_barcode_info(lax)$inactive_x))
+
+    # Verify a looser threshold assigns at least as many cells as a strict one
+    expect_gte(n_called_lax, n_called_strict)
+
+    # Confirm cells below the strict threshold receive NA rather than a call
+    post <- get_barcode_info(strict)$xci_post_X1
+    unassigned <- is.na(get_barcode_info(strict)$inactive_x)
+    borderline <- post > 1 - 0.999 & post < 0.999
+    # Every cell whose posterior sits inside the strict band must be unassigned
+    expect_true(all(unassigned[borderline]))
+})
+
+test_that("refit_after_filter returns a valid fit and drops escapee genes", {
+    fixture <- make_xci_snpdata(escapee = TRUE)
+
+    # Verify the refit path returns a valid stored object
+    stored <- assign_inactive_x(fixture$snpdata, n_inits = 3, refit_after_filter = TRUE)
+    expect_s4_class(stored, "SNPData")
+
+    # The clonal split must still be recovered after refitting
+    assignments <- xci_assignments(stored)
+    truth <- get_barcode_info(fixture$snpdata)$true_group
+    called <- !is.na(assignments$inactive_x)
+    agree <- mean(assignments$inactive_x[called] == truth[called])
+    expect_true(max(agree, 1 - agree) > 0.9)
+
+    # The escapee gene (last gene, balanced in every cell) carries no XCI signal
+    # and must be filtered out of the informative set by the refit pass
+    snp_info <- get_snp_info(stored)
+    escapee_snp <- snp_info$snp_id[snp_info$gene_name == paste0("gene", 20)]
+    escapee_informative <- snp_info$xci_informative[snp_info$snp_id == escapee_snp]
+    # Confirm the escapee gene is not marked informative
+    expect_false(isTRUE(escapee_informative))
+
+    # Confirm genuine XCI genes are still retained
+    expect_true(any(snp_info$xci_informative))
+})
+
+test_that("assign_inactive_x fits each donor independently in a multi-donor object", {
+    fixture <- make_xci_snpdata(n_donors = 2)
+    stored <- assign_inactive_x(fixture$snpdata, n_inits = 3)
+
+    barcode_info <- get_barcode_info(stored)
+    # Verify both donors received assignments
+    expect_setequal(unique(barcode_info$donor), c("donor0", "donor1"))
+
+    # Confirm the clonal split is recovered within each donor (labels are
+    # exchangeable per donor, so compare after resolving the swap per donor)
+    for (d in c("donor0", "donor1")) {
+        rows <- barcode_info$donor == d & !is.na(barcode_info$inactive_x)
+        agree <- mean(barcode_info$inactive_x[rows] == barcode_info$true_group[rows])
+        expect_true(max(agree, 1 - agree) > 0.9)
+    }
 })
