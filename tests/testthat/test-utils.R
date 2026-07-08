@@ -266,6 +266,7 @@ test_that("binom_test recycles p across vectorised inputs", {
 test_that("binom_test rejects invalid inputs", {
     # Ensure x outside [0, n] is rejected
     expect_error(binom_test(-1, 10, 0.5), "0 <= x <= n")
+    # Ensure x greater than n is rejected
     expect_error(binom_test(11, 10, 0.5), "0 <= x <= n")
     # Ensure p outside [0, 1] is rejected
     expect_error(binom_test(2, 10, 1.5), "p must be in")
