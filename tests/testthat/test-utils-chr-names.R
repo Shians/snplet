@@ -183,78 +183,78 @@ test_that("detect_chr_style detects style with any matches", {
 })
 
 # ==============================================================================
-# Test: normalize_chr_names
+# Test: normalise_chr_names
 # ==============================================================================
 
-test_that("normalize_chr_names preserves UCSC format", {
+test_that("normalise_chr_names preserves UCSC format", {
     chr_names <- c("chr1", "chr2", "chrX", "chrY", "chrM")
 
     # Verify UCSC names are preserved (already canonical)
-    result <- normalize_chr_names(chr_names)
+    result <- normalise_chr_names(chr_names)
     # Confirm output matches input unchanged
     expect_equal(result, c("chr1", "chr2", "chrX", "chrY", "chrM"))
 })
 
-test_that("normalize_chr_names converts RefSeq mouse to UCSC", {
+test_that("normalise_chr_names converts RefSeq mouse to UCSC", {
     chr_names <- c("NC_000067.6", "NC_000086.7", "NC_005089.1")
 
-    # Verify RefSeq mouse names are normalized to UCSC
-    result <- normalize_chr_names(chr_names, from_style = "refseq_mouse")
+    # Verify RefSeq mouse names are normalised to UCSC
+    result <- normalise_chr_names(chr_names, from_style = "refseq_mouse")
     # Confirm converted names match expected UCSC form
     expect_equal(result, c("chr1", "chrX", "chrM"))
 })
 
-test_that("normalize_chr_names converts GenBank human to UCSC", {
+test_that("normalise_chr_names converts GenBank human to UCSC", {
     chr_names <- c("CM000663.2", "CM000685.2", "J01415.2")
 
-    # Verify GenBank human names are normalized to UCSC
-    result <- normalize_chr_names(chr_names, from_style = "genbank_human")
+    # Verify GenBank human names are normalised to UCSC
+    result <- normalise_chr_names(chr_names, from_style = "genbank_human")
     # Confirm converted names match expected UCSC form
     expect_equal(result, c("chr1", "chrX", "chrM"))
 })
 
-test_that("normalize_chr_names converts numeric to UCSC", {
+test_that("normalise_chr_names converts numeric to UCSC", {
     chr_names <- c("1", "2", "X", "Y")
 
     # Verify numeric format is converted to UCSC
-    result <- normalize_chr_names(chr_names)
+    result <- normalise_chr_names(chr_names)
     # Confirm converted names match expected UCSC form
     expect_equal(result, c("chr1", "chr2", "chrX", "chrY"))
 })
 
-test_that("normalize_chr_names issues warning for unknown style", {
+test_that("normalise_chr_names issues warning for unknown style", {
     chr_names <- c("custom1", "custom2")
 
     # Verify warning is issued for unknown style
     expect_warning(
-        normalize_chr_names(chr_names),
+        normalise_chr_names(chr_names),
         "Chromosome style is unknown"
     )
 })
 
-test_that("normalize_chr_names returns original names for unknown style", {
+test_that("normalise_chr_names returns original names for unknown style", {
     chr_names <- c("custom1", "custom2")
 
     # Verify original names are returned despite warning
-    result <- suppressWarnings(normalize_chr_names(chr_names))
+    result <- suppressWarnings(normalise_chr_names(chr_names))
     # Confirm output is identical to the original unrecognized names
     expect_equal(result, chr_names)
 })
 
-test_that("normalize_chr_names auto-detects style", {
+test_that("normalise_chr_names auto-detects style", {
     chr_names <- c("1", "2", "X")
 
     # Verify auto-detection works (numeric -> UCSC)
-    result <- normalize_chr_names(chr_names, from_style = "auto")
+    result <- normalise_chr_names(chr_names, from_style = "auto")
     # Confirm auto-detected conversion matches expected UCSC form
     expect_equal(result, c("chr1", "chr2", "chrX"))
 })
 
-test_that("normalize_chr_names handles unmapped chromosomes", {
+test_that("normalise_chr_names handles unmapped chromosomes", {
     chr_names <- c("chr1", "chr2", "chrUn")
 
     # Verify unmapped chromosomes are preserved (UCSC -> UCSC)
-    result <- normalize_chr_names(chr_names)
+    result <- normalise_chr_names(chr_names)
     # Confirm unmapped chromosome name passes through unchanged
     expect_equal(result, c("chr1", "chr2", "chrUn"))
 })

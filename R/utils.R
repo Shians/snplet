@@ -310,10 +310,10 @@ detect_chr_style <- function(chr_names) {
     "unknown"
 }
 
-#' Normalize chromosome names to canonical form
+#' Normalise chromosome names to canonical form
 #'
-#' Converts chromosome names from any recognized style to the canonical UCSC form (chr1, chr2, chrX).
-#' Recognized styles include: numeric, UCSC (chr-prefix), RefSeq, and GenBank accessions
+#' Converts chromosome names from any recognised style to the canonical UCSC form (chr1, chr2, chrX).
+#' Recognised styles include: numeric, UCSC (chr-prefix), RefSeq, and GenBank accessions
 #' for mouse and human genomes.
 #'
 #' @param chr_names Character vector of chromosome names
@@ -323,17 +323,9 @@ detect_chr_style <- function(chr_names) {
 #'
 #' @return Character vector of chromosome names in canonical UCSC form
 #'
-#' @examples
-#' \dontrun{
-#' normalize_chr_names(c("1", "2", "X"))  # Returns c("chr1", "chr2", "chrX")
-#' normalize_chr_names(c("NC_000067.6", "NC_000086.7"), from_style = "refseq_mouse")
-#' # Returns c("chr1", "chrX")
-#' }
-#'
 #' @importFrom magrittr set_names
-#' @family chromosome naming functions
-#' @export
-normalize_chr_names <- function(chr_names, from_style = "auto") {
+#' @noRd
+normalise_chr_names <- function(chr_names, from_style = "auto") {
     if (from_style == "auto") {
         from_style <- detect_chr_style(chr_names)
     }
@@ -353,12 +345,12 @@ normalize_chr_names <- function(chr_names, from_style = "auto") {
     lookup <- magrittr::set_names(chr_table$ucsc, chr_table[[from_style]])
 
     # Map chromosomes, keeping NA for unmatched values
-    normalized <- lookup[chr_names]
+    normalised <- lookup[chr_names]
 
     # For any NA values, keep original
-    normalized[is.na(normalized)] <- chr_names[is.na(normalized)]
+    normalised[is.na(normalised)] <- chr_names[is.na(normalised)]
 
-    as.character(normalized)
+    as.character(normalised)
 }
 
 #' Convert chromosome names between styles
@@ -386,8 +378,8 @@ normalize_chr_names <- function(chr_names, from_style = "auto") {
 #' @family chromosome naming functions
 #' @export
 convert_chr_style <- function(chr_names, from_style = "auto", to_style = "ucsc") {
-    # First normalize to canonical UCSC form
-    canonical <- normalize_chr_names(chr_names, from_style)
+    # First normalise to canonical UCSC form
+    canonical <- normalise_chr_names(chr_names, from_style)
 
     if (to_style == "ucsc") {
         return(canonical)
