@@ -7,20 +7,51 @@
 test_maf(x, p = 0.1)
 }
 \arguments{
-\item{x}{A data.frame containing columns 'ref_count', 'alt_count', and 'total_count'}
+\item{x}{A data.frame (or tibble) with one row per observation, containing the
+integer columns \code{ref_count}, \code{alt_count} and \code{total_count}.
+All counts must be non-negative and satisfy
+\code{ref_count + alt_count <= total_count}.}
 
-\item{p}{Null hypothesis minor allele frequency (default: 0.10)}
+\item{p}{Numeric scalar giving the null hypothesis minor allele frequency, in
+\code{[0, 1]} (default: 0.10).}
 }
 \value{
-A data.frame with columns for minor_allele_count, p_val, and adj_p_val (BH adjusted)
+The input \code{x} with three columns appended:
+  \describe{
+    \item{\code{minor_allele_count}}{\code{pmin(ref_count, alt_count)} for each row.}
+    \item{\code{p_val}}{One-sided exact binomial p-value for observing at least
+      \code{minor_allele_count} minor alleles out of \code{ceiling(total_count)}
+      trials under \code{Binomial(n, p)}.}
+    \item{\code{adj_p_val}}{Benjamini-Hochberg (BH) adjusted p-value.}
+  }
 }
 \description{
-Performs a binomial test for each row to assess whether the observed minor allele count
-is significantly greater than expected under a null minor allele frequency (MAF).
+Performs a one-sided exact binomial test for each row to assess whether the
+observed minor allele count is significantly greater than expected under a null
+minor allele frequency (MAF). Assumes each row's counts are independent; the
+returned p-values are adjusted for multiple testing across all rows.
+}
+\details{
+The test is an exact binomial test, not a beta-binomial test: it does not model
+overdispersion in the allele counts. The one-sided p-value \eqn{P(X \ge x)} for
+\eqn{X \sim \mathrm{Binomial}(n, p)} is evaluated exactly via the regularised
+incomplete beta function rather than by simulation. The number of trials is taken
+as \code{ceiling(total_count)} so that fractional counts (e.g. from aggregation)
+yield a valid integer size, and the major allele count is floored at zero.
 }
 \examples{
-\dontrun{
-df <- tibble::tibble(ref_count = c(10, 5), alt_count = c(2, 8), total_count = c(12, 13))
+df <- tibble::tibble(
+    ref_count = c(10, 5),
+    alt_count = c(2, 8),
+    total_count = c(12, 13)
+)
 test_maf(df)
 }
+\seealso{
+Other count aggregation functions:
+\code{\link[=aggregate_count_df]{aggregate_count_df()}},
+\code{\link[=barcode_count_df]{barcode_count_df()}},
+\code{\link[=clonotype_count_df]{clonotype_count_df()}},
+\code{\link[=donor_count_df]{donor_count_df()}}
 }
+\concept{count aggregation functions}
