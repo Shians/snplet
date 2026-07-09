@@ -36,6 +36,7 @@ aggregate_count_df(snp_data, "clonotype")
 Other count aggregation functions:
 \code{\link[=barcode_count_df]{barcode_count_df()}},
 \code{\link[=clonotype_count_df]{clonotype_count_df()}},
-\code{\link[=donor_count_df]{donor_count_df()}}
+\code{\link[=donor_count_df]{donor_count_df()}},
+\code{\link[=test_maf]{test_maf()}}
 }
 \concept{count aggregation functions}

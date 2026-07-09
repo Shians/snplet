@@ -10,12 +10,13 @@ Authors@R: c(
       comment = c(ORCID = "0000-0003-0800-3567")
     )
   )
-Description: Enables downstream analysis of allele-specific expression and clonal evolution in
-    single-cell RNA sequencing data using output from cellSNP-lite, Vireo, and cellranger VDJ.
-    The package integrates SNP genotype calls, donor assignments, and clonotype annotations to
-    assess allelic imbalance and analyze clonal relationships across individual cells. Core
-    functionality includes statistical testing for differential allele usage and aggregation
-    of allele counts across cells sharing clonotypes or donor identities.
+Description: Enables downstream analysis of allele-specific expression in single-cell RNA
+    sequencing data using output from cellSNP-lite, Vireo, and cellranger VDJ. The package
+    integrates SNP genotype calls, donor assignments, and clonotype annotations to assess
+    allelic imbalance across individual cells. Clonotype annotations are used to aggregate
+    cells for X-chromosome inactivation assignment. Core functionality includes statistical
+    testing for allele usage against a null minor allele frequency and aggregation of allele
+    counts across cells sharing clonotypes or donor identities.
 Depends:
     methods,
     Matrix
