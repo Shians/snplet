@@ -119,8 +119,6 @@ get_donor_het_snpdata <- function(snp_data, donor, ...) {
     if (length(het_snps) > 0) {
         filter_snps(donor_data, snp_id %in% het_snps)
     } else {
-        # Return empty SNPData object if no heterozygous SNPs
         filter_snps(donor_data, FALSE)
     }
 }
-
