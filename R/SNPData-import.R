@@ -7,6 +7,14 @@
 #' @param gene_annotation Data frame with gene annotations (must contain chrom, start, end, gene_name)
 #' @param vdj_file Path to filtered_contig_annotations.csv from cellranger VDJ (optional, default: NULL)
 #' @param vireo_file Path to donors.tsv file from Vireo (optional, default: NULL)
+#' @param gt_file Path to a Vireo genotype VCF (\code{GT_donors.vireo.vcf.gz}, one sample
+#'   column per donor), used to populate per-(SNP, donor) zygosity calls at construction
+#'   time (optional, default: NULL)
+#' @param donor_map A named character vector, \code{c(new_label = old_label, ...)} (the same
+#'   \code{new = old} convention as \code{dplyr::rename()}), optional.
+#'   Relabels donors at import time -- useful since Vireo assigns arbitrary labels
+#'   (\code{donor0}, \code{donor1}, ...) to both \code{vireo_file} and \code{gt_file}, so
+#'   applying the map here keeps every donor-keyed table consistent from the start (default: NULL)
 #' @param barcode_column Name of the column in vdj_file that contains cell barcodes (only used if vdj_file provided)
 #' @param clonotype_column Name of the column in vdj_file that contains clonotype information (only used if vdj_file provided)
 #'
@@ -29,12 +37,31 @@
 #'   cellsnp_dir = "path/to/cellsnp_output",
 #'   gene_annotation = gene_anno_df
 #' )
+#'
+#' # Import with Vireo genotype calls for per-donor zygosity
+#' snp_data <- import_cellsnp(
+#'   cellsnp_dir = "path/to/cellsnp_output",
+#'   gene_annotation = gene_anno_df,
+#'   vireo_file = "path/to/donor_ids.tsv",
+#'   gt_file = "path/to/GT_donors.vireo.vcf.gz"
+#' )
+#'
+#' # Relabel Vireo's arbitrary donor0/donor1 to real identities at import time
+#' snp_data <- import_cellsnp(
+#'   cellsnp_dir = "path/to/cellsnp_output",
+#'   gene_annotation = gene_anno_df,
+#'   vireo_file = "path/to/donor_ids.tsv",
+#'   gt_file = "path/to/GT_donors.vireo.vcf.gz",
+#'   donor_map = c(PatientA = "donor0", PatientB = "donor1")
+#' )
 #' }
 import_cellsnp <- function(
     cellsnp_dir,
     gene_annotation,
     vdj_file = NULL,
     vireo_file = NULL,
+    gt_file = NULL,
+    donor_map = NULL,
     barcode_column = "barcode",
     clonotype_column = "raw_clonotype_id"
 ) {
@@ -66,6 +93,9 @@ import_cellsnp <- function(
     }
     if (!is.null(vireo_file)) {
         check_file(vireo_file)
+    }
+    if (!is.null(gt_file)) {
+        check_file(gt_file)
     }
 
     # Read cellSNP matrices
@@ -133,6 +163,14 @@ import_cellsnp <- function(
         clonotype_column
     )
 
+    # Read Vireo genotype calls, if provided, to populate per-(SNP, donor)
+    # zygosity at construction time
+    donor_snp_info <- if (!is.null(gt_file)) {
+        .read_vireo_gt(gt_file, snp_info)
+    } else {
+        NULL
+    }
+
     # Create SNPData object
     logger::log_info("Creating SNPData object with {nrow(barcode_info)} barcodes and {nrow(snp_info)} SNPs")
     snp_data <- SNPData(
@@ -140,10 +178,83 @@ import_cellsnp <- function(
         ref_count = ref_count,
         oth_count = oth_count,
         snp_info = snp_info,
-        barcode_info = barcode_info
+        barcode_info = barcode_info,
+        donor_snp_info = donor_snp_info,
+        donor_map = donor_map
     )
 
     return(snp_data)
+}
+
+#' Read Vireo genotype calls and classify per-donor zygosity
+#'
+#' Parses a Vireo genotype VCF (\code{GT_donors.vireo.vcf.gz}, one sample column per
+#' donor) into the long \code{donor_snp_info} shape: GT calls of \code{"0/1"}/\code{"1/0"}
+#' are classified \code{"het"}, \code{"0/0"}/\code{"1/1"} are classified \code{"hom"}.
+#' When a \code{PL} (phred-scaled genotype likelihood) field is present, the posterior
+#' probability of the called genotype is derived from it
+#' (\code{10^(-PL/10)} normalised across the three genotypes) and stored as
+#' \code{zygosity_gt_prob}.
+#'
+#' @param gt_file Path to a Vireo genotype VCF
+#' @param snp_info The snp_info being constructed for this import, used to restrict
+#'   calls to SNPs actually present (matched on the \code{chrom:pos:ref:alt} snp_id key)
+#'
+#' @return A tibble with columns \code{snp_id}, \code{donor}, \code{zygosity},
+#'   \code{zygosity_source}, \code{zygosity_gt_prob}
+#' @keywords internal
+.read_vireo_gt <- function(gt_file, snp_info) {
+    vcf <- read_vcf(gt_file)
+    variants <- get_variants(vcf)
+    donors <- get_samples(vcf)
+
+    variants$snp_id <- make_snp_id(variants$CHROM, variants$POS, variants$REF, variants$ALT)
+
+    format_fields <- strsplit(variants$FORMAT[1], ":")[[1]]
+    gt_idx <- match("GT", format_fields)
+    pl_idx <- match("PL", format_fields)
+    if (is.na(gt_idx)) {
+        stop("Vireo GT VCF has no GT field in its FORMAT column")
+    }
+
+    donor_calls <- purrr::map(donors, function(d) {
+        fields <- stringr::str_split_fixed(variants[[d]], ":", length(format_fields))
+        gt <- fields[, gt_idx]
+        zygosity <- dplyr::case_when(
+            gt %in% c("0/1", "1/0") ~ "het",
+            gt %in% c("0/0", "1/1") ~ "hom",
+            TRUE ~ NA_character_
+        )
+
+        zygosity_gt_prob <- rep(NA_real_, length(gt))
+        if (!is.na(pl_idx)) {
+            pl <- stringr::str_split_fixed(fields[, pl_idx], ",", 3)
+            # A missing PL is written as "." by Vireo; coerces to NA as intended.
+            suppressWarnings(storage.mode(pl) <- "double")
+            gt_index <- dplyr::case_when(
+                gt == "0/0" ~ 1L,
+                gt %in% c("0/1", "1/0") ~ 2L,
+                gt == "1/1" ~ 3L,
+                TRUE ~ NA_integer_
+            )
+            has_pl <- !is.na(gt_index) & !apply(pl, 1, anyNA)
+            likelihood <- 10^(-pl[has_pl, , drop = FALSE] / 10)
+            posterior <- likelihood / rowSums(likelihood)
+            zygosity_gt_prob[has_pl] <- posterior[cbind(seq_len(sum(has_pl)), gt_index[has_pl])]
+        }
+
+        tibble::tibble(
+            snp_id = variants$snp_id,
+            donor = d,
+            zygosity = zygosity,
+            zygosity_source = ifelse(is.na(zygosity), NA_character_, "vireo_gt"),
+            zygosity_gt_prob = zygosity_gt_prob
+        )
+    }) %>%
+        dplyr::bind_rows()
+
+    donor_calls %>%
+        dplyr::filter(snp_id %in% snp_info$snp_id, !is.na(zygosity))
 }
 
 #' Read the base VCF file from cellSNP output

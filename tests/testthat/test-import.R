@@ -835,3 +835,108 @@ test_that("merge_cell_annotations handles empty vdj_info data frame", {
     # Verify donors are assigned correctly
     expect_equal(result$donor[result$barcode == "CELL1"], "donor1")
 })
+
+# ==============================================================================
+# Test Suite: Vireo genotype ingestion
+# Description: .read_vireo_gt() parses a Vireo GT VCF into per-(SNP, donor)
+#              zygosity calls, and import_cellsnp(gt_file=) wires it in.
+# ==============================================================================
+
+# A small multi-sample GT VCF matching Vireo's GT_donors.vireo.vcf.gz layout
+# (FORMAT = GT:AD:DP:PL, one sample column per donor).
+#   snp1: donor0 het (0/1), donor1 hom-ref (0/0)
+#   snp2: donor0 hom-alt (1/1) with a confident PL, donor1 missing PL
+#   snp3: not present in snp_info, so it must be filtered out
+write_test_vireo_gt_vcf <- function(path) {
+    header_lines <- c("##fileformat=VCFv4.2", "##source=snplet-test")
+    col_line <- "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\tdonor0\tdonor1"
+    data_lines <- c(
+        "chr1\t100\t.\tA\tG\t.\tPASS\t.\tGT:AD:DP:PL\t0/1:5:10:50,0,50\t0/0:0:10:0,30,300",
+        "chr1\t200\t.\tC\tT\t.\tPASS\t.\tGT:AD:DP:PL\t1/1:10:10:300,30,0\t1/1:.:.:.",
+        "chr1\t300\t.\tG\tA\t.\tPASS\t.\tGT:AD:DP:PL\t0/1:5:10:50,0,50\t0/1:5:10:50,0,50"
+    )
+    writeLines(c(header_lines, col_line, data_lines), path)
+}
+
+test_that(".read_vireo_gt() classifies zygosity from the GT field per donor", {
+    gt_file <- withr::local_tempfile(fileext = ".vcf")
+    write_test_vireo_gt_vcf(gt_file)
+    snp_info <- data.frame(snp_id = c("chr1:100:A:G", "chr1:200:C:T"))
+
+    calls <- snplet:::.read_vireo_gt(gt_file, snp_info)
+
+    snp1_d0 <- dplyr::filter(calls, snp_id == "chr1:100:A:G", donor == "donor0")
+    snp1_d1 <- dplyr::filter(calls, snp_id == "chr1:100:A:G", donor == "donor1")
+    # Verify a 0/1 call is classified heterozygous
+    expect_equal(snp1_d0$zygosity, "het")
+    # Verify a 0/0 call is classified homozygous
+    expect_equal(snp1_d1$zygosity, "hom")
+    # Verify the source is stamped for every call
+    expect_true(all(calls$zygosity_source == "vireo_gt"))
+})
+
+test_that(".read_vireo_gt() derives zygosity_gt_prob as the normalised posterior of the called genotype", {
+    gt_file <- withr::local_tempfile(fileext = ".vcf")
+    write_test_vireo_gt_vcf(gt_file)
+    snp_info <- data.frame(snp_id = c("chr1:100:A:G", "chr1:200:C:T"))
+
+    calls <- snplet:::.read_vireo_gt(gt_file, snp_info)
+    snp2_d0 <- dplyr::filter(calls, snp_id == "chr1:200:C:T", donor == "donor0")
+
+    # PL = 300,30,0 for genotypes 0/0, 0/1, 1/1; the called 1/1 genotype's
+    # posterior is 10^0 / (10^-30 + 10^-3 + 10^0)
+    expect_equal(snp2_d0$zygosity_gt_prob, 0.999000999, tolerance = 1e-6)
+})
+
+test_that(".read_vireo_gt() leaves zygosity_gt_prob NA when the PL field is missing", {
+    gt_file <- withr::local_tempfile(fileext = ".vcf")
+    write_test_vireo_gt_vcf(gt_file)
+    snp_info <- data.frame(snp_id = c("chr1:100:A:G", "chr1:200:C:T"))
+
+    calls <- snplet:::.read_vireo_gt(gt_file, snp_info)
+    snp2_d1 <- dplyr::filter(calls, snp_id == "chr1:200:C:T", donor == "donor1")
+
+    # donor1's PL field for snp2 is "." (missing)
+    expect_true(is.na(snp2_d1$zygosity_gt_prob))
+})
+
+test_that(".read_vireo_gt() restricts calls to SNPs present in snp_info", {
+    gt_file <- withr::local_tempfile(fileext = ".vcf")
+    write_test_vireo_gt_vcf(gt_file)
+    snp_info <- data.frame(snp_id = c("chr1:100:A:G", "chr1:200:C:T"))
+
+    calls <- snplet:::.read_vireo_gt(gt_file, snp_info)
+
+    # chr1:300:G:A is in the VCF but absent from snp_info, so it must be dropped
+    expect_false("chr1:300:G:A" %in% calls$snp_id)
+})
+
+test_that("import_cellsnp(gt_file=) populates donor_snp_info from real Vireo genotypes", {
+    cellsnp_dir <- testthat::test_path("..", "..", "example_data", "village", "cell_snp", "cellsnp_HealthyVillage")
+    vireo_file <- testthat::test_path(
+        "..", "..", "example_data", "village", "vireo", "vireo_HealthyVillage", "donor_ids.tsv"
+    )
+    gt_file <- testthat::test_path(
+        "..", "..", "example_data", "village", "vireo", "vireo_HealthyVillage", "GT_donors.vireo.vcf.gz"
+    )
+    skip_if_not(
+        all(file.exists(cellsnp_dir, vireo_file, gt_file)),
+        "Village example dataset not found (not part of the installed package)"
+    )
+
+    gene_annotation <- data.frame(chrom = "chr1", start = 1, end = 1e9, gene_name = "dummy")
+    snp_data <- import_cellsnp(
+        cellsnp_dir = cellsnp_dir,
+        gene_annotation = gene_annotation,
+        vireo_file = vireo_file,
+        gt_file = gt_file
+    )
+
+    donor_snp_info <- get_donor_snp_info(snp_data)
+    # Verify zygosity calls were populated from the real GT VCF
+    expect_true(nrow(donor_snp_info) > 0)
+    # Verify every call is sourced from Vireo genotypes
+    expect_true(all(donor_snp_info$zygosity_source == "vireo_gt"))
+    # Verify every call's snp_id matches a SNP actually present in the object
+    expect_true(all(donor_snp_info$snp_id %in% get_snp_info(snp_data)$snp_id))
+})
