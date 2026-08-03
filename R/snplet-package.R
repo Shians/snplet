@@ -23,7 +23,7 @@
 #' @importFrom fs path
 #' @importFrom furrr future_map future_map2
 #' @importFrom future nbrOfWorkers
-#' @importFrom purrr map map2_dbl
+#' @importFrom purrr map map2_dbl map_dbl
 #' @importFrom R.utils gzip
 #' @importFrom grid unit
 #' @importFrom VGAM dbetabinom

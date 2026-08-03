@@ -10,7 +10,7 @@
 #' @return Invisibly returns NULL if all columns exist, otherwise throws an error
 #' @keywords internal
 check_filter_expr <- function(df, dots, df_name = "data.frame") {
-    vars <- unique(unlist(lapply(dots, function(q) all.vars(rlang::get_expr(q)))))
+    vars <- unique(unlist(purrr::map(dots, function(q) all.vars(rlang::get_expr(q)))))
     # Exclude rlang pronouns (.env, .data) — they are not column names or user variables
     vars <- setdiff(vars, c(".env", ".data"))
     missing_vars <- setdiff(vars, colnames(df))
@@ -26,10 +26,9 @@ check_filter_expr <- function(df, dots, df_name = "data.frame") {
                     parent_frame <- parent.frame(i)
 
                     # Check which missing variables exist in this frame
-                    found_vars <- still_missing[vapply(
+                    found_vars <- still_missing[purrr::map_lgl(
                         still_missing,
                         exists,
-                        logical(1),
                         envir = parent_frame,
                         inherits = TRUE # Allow inheritance to check enclosing environments
                     )]

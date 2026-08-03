@@ -234,7 +234,7 @@ setMethod(
 
     # Split the data per donor up front so each worker only receives its own
     # subset rather than the full SNPData object, keeping serialised globals small.
-    donor_data <- lapply(unique_donors, function(d) filter_samples(x, donor == d))
+    donor_data <- purrr::map(unique_donors, function(d) filter_samples(x, donor == d))
 
     result <- furrr::future_map2(
         donor_data,
@@ -1075,12 +1075,12 @@ setMethod(
     logger::log_info(
         "[{donor}] Running EM: {n_inits} random restarts over {n_genes} genes, {nrow(dat)} observations"
     )
-    fits <- lapply(seq_len(n_inits), function(s) {
+    fits <- purrr::map(seq_len(n_inits), function(s) {
         fit <- .run_em(dat, n_genes, init_seed = s)
         logger::log_debug("[{donor}] EM restart {s}/{n_inits} done (logLik = {round(fit$ll, 2)})")
         fit
     })
-    best <- fits[[which.max(sapply(fits, `[[`, "ll"))]]
+    best <- fits[[which.max(purrr::map_dbl(fits, "ll"))]]
     logger::log_info("[{donor}] EM complete: best logLik = {round(best$ll, 2)}")
 
     # Post-convergence escapee filter: genes with LLR <= 0 are inconsistent with

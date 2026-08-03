@@ -246,7 +246,7 @@ import_cellsnp <- function(
                 gt == "1/1" ~ 3L,
                 TRUE ~ NA_integer_
             )
-            has_pl <- !is.na(gt_index) & !apply(pl, 1, anyNA)
+            has_pl <- !is.na(gt_index) & !purrr::map_lgl(asplit(pl, 1), anyNA)
             likelihood <- 10^(-pl[has_pl, , drop = FALSE] / 10)
             posterior <- likelihood / rowSums(likelihood)
             zygosity_gt_prob[has_pl] <- posterior[cbind(seq_len(sum(has_pl)), gt_index[has_pl])]
