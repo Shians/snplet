@@ -270,6 +270,33 @@ setMethod("chr_style", signature(x = "SNPData"), function(x) {
     x@chr_style
 })
 
+#' @exportMethod updateObject
+#' @rdname SNPData-class
+setMethod("updateObject", signature(object = "SNPData"), function(object, ..., verbose = FALSE) {
+    if (methods::.hasSlot(object, "chr_style")) {
+        return(object)
+    }
+
+    snp_info <- object@snp_info
+    if ("chrom" %in% colnames(snp_info)) {
+        chr_style <- detect_chr_style(snp_info$chrom)
+        if (!"chrom_canonical" %in% colnames(snp_info)) {
+            snp_info$chrom_canonical <- normalise_chr_names(snp_info$chrom, from_style = chr_style)
+        }
+    } else {
+        chr_style <- "unknown"
+    }
+
+    if (verbose) {
+        log_info("updateObject(SNPData): detected chromosome style '{chr_style}'")
+    }
+
+    object@snp_info <- snp_info
+    object@chr_style <- chr_style
+    methods::validObject(object)
+    object
+})
+
 # Setters
 #' @exportMethod barcode_info<-
 #' @rdname SNPData-class
