@@ -227,7 +227,10 @@ setMethod(
         .check_clonotype_available(x)
     }
 
-    unique_donors <- sort(unique(get_barcode_info(x)$donor))
+    unique_donors <- get_barcode_info(x)$donor %>%
+        unique() %>%
+        setdiff(c("doublet", "unassigned")) %>%
+        sort()
 
     # Split the data per donor up front so each worker only receives its own
     # subset rather than the full SNPData object, keeping serialised globals small.
