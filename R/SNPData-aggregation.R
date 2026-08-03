@@ -113,8 +113,7 @@ setGeneric("barcode_count_df", function(x, test_maf = TRUE) standardGeneric("bar
         metadata$groups
     )
     if (group_by == "donor") {
-        ref_count_grouped <- ref_count_grouped[
-            ,
+        ref_count_grouped <- ref_count_grouped[,
             !colnames(ref_count_grouped) %in% c("unassigned", "doublet"),
             drop = FALSE
         ]
@@ -126,8 +125,7 @@ setGeneric("barcode_count_df", function(x, test_maf = TRUE) standardGeneric("bar
         metadata$groups
     )
     if (group_by == "donor") {
-        alt_count_grouped <- alt_count_grouped[
-            ,
+        alt_count_grouped <- alt_count_grouped[,
             !colnames(alt_count_grouped) %in% c("unassigned", "doublet"),
             drop = FALSE
         ]

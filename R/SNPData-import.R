@@ -402,7 +402,10 @@ merge_cell_annotations <- function(donor_info, vdj_info = NULL, barcode_column =
 get_example_snpdata <- function() {
     import_cellsnp(
         cellsnp_dir = system.file("extdata/example_snpdata", package = "snplet"),
-        gene_annotation = readr::read_tsv(system.file("extdata/example_gene_anno.tsv", package = "snplet"), show_col_types = FALSE),
+        gene_annotation = readr::read_tsv(
+            system.file("extdata/example_gene_anno.tsv", package = "snplet"),
+            show_col_types = FALSE
+        ),
         vdj_file = system.file("extdata/example_snpdata/filtered_contig_annotations.csv", package = "snplet"),
         vireo_file = system.file("extdata/example_snpdata/donor_ids.tsv", package = "snplet")
     )
