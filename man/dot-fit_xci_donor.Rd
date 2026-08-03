@@ -8,7 +8,6 @@
   snp_data,
   n_inits = 10,
   confidence_threshold = 0.95,
-  refit_after_filter = FALSE,
   zygosity_source = NULL,
   by = c("cell", "clonotype")
 )

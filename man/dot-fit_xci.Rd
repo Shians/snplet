@@ -8,7 +8,6 @@
   x,
   n_inits = 10,
   confidence_threshold = 0.95,
-  refit_after_filter = FALSE,
   zygosity_source = NULL,
   by = c("cell", "clonotype")
 )
@@ -22,9 +21,6 @@ clonotype information must also be present.}
 
 \item{confidence_threshold}{Posterior probability threshold for hard
 assignment.}
-
-\item{refit_after_filter}{Logical; if TRUE, re-run the EM algorithm after
-filtering genes with inconsistent allelic patterns.}
 
 \item{zygosity_source}{Character vector of \code{donor_snp_info$zygosity_source} values
 the het-SNP filtering step should trust, or \code{NULL} to trust a stored call from

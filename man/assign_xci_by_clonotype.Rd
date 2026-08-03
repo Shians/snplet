@@ -9,7 +9,6 @@ assign_xci_by_clonotype(
   x,
   n_inits = 10,
   confidence_threshold = 0.95,
-  refit_after_filter = FALSE,
   zygosity_source = NULL
 )
 
@@ -17,7 +16,6 @@ assign_xci_by_clonotype(
   x,
   n_inits = 10,
   confidence_threshold = 0.95,
-  refit_after_filter = FALSE,
   zygosity_source = NULL
 )
 }
@@ -33,10 +31,6 @@ assignment. Clonotypes whose posterior probability that a given X is the
 active one reaches \code{confidence_threshold} are assigned that X;
 clonotypes where neither X reaches the threshold receive \code{NA}.
 Default 0.95.}
-
-\item{refit_after_filter}{Logical; if TRUE, re-run the EM algorithm after
-filtering genes with inconsistent allelic patterns. Provides sharper
-posteriors on the cleaned gene set. Default FALSE.}
 
 \item{zygosity_source}{Character vector of \code{donor_snp_info$zygosity_source} values
 the het-SNP filtering step should trust, or \code{NULL} (default) to trust a stored

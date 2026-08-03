@@ -577,23 +577,20 @@ test_that("confidence_threshold controls how many cells are hard-assigned", {
     expect_true(all(unassigned[borderline]))
 })
 
-test_that("refit_after_filter returns a valid fit and drops escapee genes", {
+test_that("assign_xci drops an escapee gene from the informative set", {
     fixture <- make_xci_snpdata(escapee = TRUE)
+    stored <- assign_xci(fixture$snpdata, n_inits = 3)
 
-    # Verify the refit path returns a valid stored object
-    stored <- assign_xci(fixture$snpdata, n_inits = 3, refit_after_filter = TRUE)
-    expect_s4_class(stored, "SNPData")
-
-    # The clonal split must still be recovered after refitting
+    # The clonal split must still be recovered
     assignments <- xci_assignments(stored)
     truth <- get_barcode_info(fixture$snpdata)$true_group
     called <- !is.na(assignments$active_x)
     agree <- mean(assignments$active_x[called] == truth[called])
-    # Confirm agreement with the true clonal split still exceeds 90% after refitting
+    # Confirm agreement with the true clonal split exceeds 90%
     expect_true(max(agree, 1 - agree) > 0.9)
 
     # The escapee gene (last gene, balanced in every cell) carries no XCI signal
-    # and must be filtered out of the informative set by the refit pass
+    # and must be filtered out of the informative set
     snp_info <- get_snp_info(stored)
     donor_snp_info <- get_donor_snp_info(stored)
     escapee_snp <- snp_info$snp_id[snp_info$gene_name == paste0("gene", 20)]

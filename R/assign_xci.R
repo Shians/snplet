@@ -30,9 +30,6 @@
 #'   assignment. Cells whose posterior probability that a given X is the active
 #'   one reaches \code{confidence_threshold} are assigned that X; cells where
 #'   neither X reaches the threshold receive \code{NA}. Default 0.95.
-#' @param refit_after_filter Logical; if TRUE, re-run the EM algorithm after
-#'   filtering genes with inconsistent allelic patterns. Provides sharper
-#'   posteriors on the cleaned gene set. Default FALSE.
 #' @param zygosity_source Character vector of \code{donor_snp_info$zygosity_source} values
 #'   the het-SNP filtering step should trust, or \code{NULL} (default) to trust a stored
 #'   call from any source. See \code{\link{donor_het_status_df}}. Pass \code{character(0)}
@@ -71,7 +68,6 @@ setGeneric(
         x,
         n_inits = 10,
         confidence_threshold = 0.95,
-        refit_after_filter = FALSE,
         zygosity_source = NULL
     ) {
         standardGeneric("assign_xci")
@@ -83,12 +79,11 @@ setGeneric(
 setMethod(
     "assign_xci",
     signature(x = "SNPData"),
-    function(x, n_inits = 10, confidence_threshold = 0.95, refit_after_filter = FALSE, zygosity_source = NULL) {
+    function(x, n_inits = 10, confidence_threshold = 0.95, zygosity_source = NULL) {
         .fit_xci(
             x,
             n_inits = n_inits,
             confidence_threshold = confidence_threshold,
-            refit_after_filter = refit_after_filter,
             zygosity_source = zygosity_source,
             by = "cell"
         )
@@ -131,9 +126,6 @@ setMethod(
 #'   active one reaches \code{confidence_threshold} are assigned that X;
 #'   clonotypes where neither X reaches the threshold receive \code{NA}.
 #'   Default 0.95.
-#' @param refit_after_filter Logical; if TRUE, re-run the EM algorithm after
-#'   filtering genes with inconsistent allelic patterns. Provides sharper
-#'   posteriors on the cleaned gene set. Default FALSE.
 #' @param zygosity_source Character vector of \code{donor_snp_info$zygosity_source} values
 #'   the het-SNP filtering step should trust, or \code{NULL} (default) to trust a stored
 #'   call from any source. See \code{\link{donor_het_status_df}}. Pass \code{character(0)}
@@ -173,7 +165,6 @@ setGeneric(
         x,
         n_inits = 10,
         confidence_threshold = 0.95,
-        refit_after_filter = FALSE,
         zygosity_source = NULL
     ) {
         standardGeneric("assign_xci_by_clonotype")
@@ -185,12 +176,11 @@ setGeneric(
 setMethod(
     "assign_xci_by_clonotype",
     signature(x = "SNPData"),
-    function(x, n_inits = 10, confidence_threshold = 0.95, refit_after_filter = FALSE, zygosity_source = NULL) {
+    function(x, n_inits = 10, confidence_threshold = 0.95, zygosity_source = NULL) {
         .fit_xci(
             x,
             n_inits = n_inits,
             confidence_threshold = confidence_threshold,
-            refit_after_filter = refit_after_filter,
             zygosity_source = zygosity_source,
             by = "clonotype"
         )
@@ -215,8 +205,6 @@ setMethod(
 #' @param n_inits Number of random initialisations for the EM algorithm.
 #' @param confidence_threshold Posterior probability threshold for hard
 #'   assignment.
-#' @param refit_after_filter Logical; if TRUE, re-run the EM algorithm after
-#'   filtering genes with inconsistent allelic patterns.
 #' @param zygosity_source Character vector of \code{donor_snp_info$zygosity_source} values
 #'   the het-SNP filtering step should trust, or \code{NULL} to trust a stored call from
 #'   any source. See \code{\link{donor_het_status_df}}.
@@ -231,7 +219,6 @@ setMethod(
     x,
     n_inits = 10,
     confidence_threshold = 0.95,
-    refit_after_filter = FALSE,
     zygosity_source = NULL,
     by = c("cell", "clonotype")
 ) {
@@ -255,7 +242,6 @@ setMethod(
                     dd,
                     n_inits,
                     confidence_threshold,
-                    refit_after_filter,
                     zygosity_source = zygosity_source,
                     by = by
                 ),
@@ -811,7 +797,6 @@ setMethod(
     snp_data,
     n_inits = 10,
     confidence_threshold = 0.95,
-    refit_after_filter = FALSE,
     zygosity_source = NULL,
     by = c("cell", "clonotype")
 ) {
@@ -857,7 +842,6 @@ setMethod(
         alt_mat,
         n_inits = n_inits,
         confidence_threshold = confidence_threshold,
-        refit_after_filter = refit_after_filter,
         donor = donor
     )
 
@@ -1066,7 +1050,6 @@ setMethod(
     confidence_threshold = 0.95,
     min_cells = 10,
     min_cov = 1,
-    refit_after_filter = FALSE,
     donor = NULL
 ) {
     passes_outlier_filter <- .filter_outlier_genes(ref_mat, alt_mat, min_cells, min_cov)
@@ -1089,28 +1072,13 @@ setMethod(
 
     # Post-convergence escapee filter: genes with LLR <= 0 are inconsistent with
     # current cell assignments; MAD filter on pi_g removes outlier escape fractions.
+    # This decides which genes get reported as xci_informative (drove active-X
+    # calling) — it does not change best$post, so escapee genes' contribution to
+    # the cell-assignment posterior above is already baked in either way.
     passes_escapee_filter <- .filter_escapee_genes(dat, n_genes, best$h_g, best$pi_g, best$rho, best$post)
     # Positions (in outlier-filtered gene space) of genes that survived the
-    # escapee filter — used to map the refit result back to original coordinates.
+    # escapee filter.
     escaped_gene_indices <- which(passes_escapee_filter)
-
-    if (refit_after_filter && !all(passes_escapee_filter)) {
-        # Re-run EM on the cleaned gene set for sharper posteriors.
-        n_removed <- sum(!passes_escapee_filter)
-        logger::log_info("[{donor}] Removing {n_removed} escape genes after initial EM; re-running")
-
-        gene_indices <- which(passes_escapee_filter)
-        dat <- dat %>%
-            dplyr::filter(gene %in% gene_indices) %>%
-            dplyr::mutate(gene = match(gene, gene_indices))
-        n_genes <- length(gene_indices)
-
-        fits <- lapply(seq_len(n_inits), function(s) .run_em(dat, n_genes, init_seed = s))
-        best <- fits[[which.max(sapply(fits, `[[`, "ll"))]]
-
-        # After refit, all genes in dat passed the escapee filter, so mark them all TRUE
-        passes_escapee_filter <- rep(TRUE, n_genes)
-    }
 
     best$post <- best$post %>%
         dplyr::mutate(
@@ -1147,14 +1115,6 @@ setMethod(
     outlier_kept_positions <- which(passes_outlier_filter)
     gene_keep[outlier_kept_positions] <- FALSE
     gene_keep[outlier_kept_positions[escaped_gene_indices]] <- TRUE
-
-    if (!refit_after_filter) {
-        # No refit: best$h_g / pi_g span the outlier-filtered genes, so subset
-        # them down to the escapee survivors. After a refit they already span
-        # exactly the retained set and need no subsetting.
-        best$h_g <- best$h_g[passes_escapee_filter]
-        best$pi_g <- best$pi_g[passes_escapee_filter]
-    }
 
     c(best, list(gene_keep = gene_keep))
 }
