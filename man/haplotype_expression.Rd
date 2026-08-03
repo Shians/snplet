@@ -18,10 +18,10 @@ haplotype_expression(x, escape_threshold = 0.1)
 group is flagged as escaping in \code{escapes}. Default 0.1.}
 }
 \value{
-A tibble with one row per donor, informative SNP, and inactive-X
+A tibble with one row per donor, informative SNP, and active-X
   group, with columns \code{donor} (when the object carries donor
   assignments), \code{snp_id}, \code{gene_name} (when the object carries gene
-  annotation), \code{inactive_x} (the silenced X, "X1" or "X2"),
+  annotation), \code{active_x} (the expressed X, "X1" or "X2"),
   \code{n_cells} (cells in the group), \code{active_count},
   \code{inactive_count}, \code{coverage}, \code{dominant_allele} (the physical
   allele, "REF"/"ALT", with more reads in this group; \code{NA} when
@@ -33,10 +33,10 @@ A tibble with one row per donor, informative SNP, and inactive-X
 \description{
 Splits each informative SNP's ALT/REF counts into active- and
 inactive-haplotype reads using the phase inferred by
-\code{\link{assign_xci}}, computed separately within the X1-inactive
-and X2-inactive cell groups. Unlike a per-group \code{pmin}/\code{pmax} on
+\code{\link{assign_xci}}, computed separately within the X1-active
+and X2-active cell groups. Unlike a per-group \code{pmin}/\code{pmax} on
 raw counts, the allele-to-haplotype assignment comes from the stored
-per-donor phase (\code{xci_allele_on_x1_by_donor}) and is applied
+per-donor phase (\code{donor_snp_info$allele_on_x1}) and is applied
 consistently to both groups, so the same physical allele can never be
 silently relabelled as "active" in both — that contradiction is instead
 surfaced explicitly.
@@ -44,13 +44,13 @@ surfaced explicitly.
 \details{
 For each SNP and donor, the stored phase records which physical allele (REF
 or ALT) is carried by the X1 haplotype; the other allele is carried by X2. The
-active haplotype is the one that is \emph{not} inactivated: X2 in the
-X1-inactive group, X1 in the X2-inactive group. Counts are assigned to
-\code{active_count} / \code{inactive_count} accordingly.
+active haplotype is the one named by \code{active_x}: X1 in the X1-active
+group, X2 in the X2-active group; the other X is silenced. Counts are
+assigned to \code{active_count} / \code{inactive_count} accordingly.
 
 Under canonical XCI, the active haplotype dominates in both groups, so the
-\emph{physical} allele that dominates should flip between the groups (X2's
-allele in X1-inactive cells, X1's allele in X2-inactive cells). When the same
+\emph{physical} allele that dominates should flip between the groups (X1's
+allele in X1-active cells, X2's allele in X2-active cells). When the same
 physical allele dominates in both groups — biologically impossible for a
 cleanly inactivated SNP — \code{same_allele_dominant} is \code{TRUE},
 identifying escaping or XCI-independent allelic imbalance rather than

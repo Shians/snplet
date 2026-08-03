@@ -2076,6 +2076,30 @@ test_that("donor_het_status_df handles cases with no tested SNPs", {
     expect_true(all(is.na(status_df$adj_p_val)))
 })
 
+test_that("donor_het_status_df returns a stored zygosity call as-is instead of recomputing it", {
+    snp_data <- create_heterozygous_test_data()
+    # snp2/donor1 would binomial-test as homozygous (see the fixture comment
+    # above); stash a contradicting stored call to confirm it is trusted
+    # rather than recomputed.
+    snp_data <- add_donor_snp_metadata(
+        snp_data,
+        data.frame(snp_id = "snp2", donor = "donor1", zygosity = "het", zygosity_source = "vireo_gt")
+    )
+
+    status_df <- donor_het_status_df(snp_data, min_total_count = 10)
+    snp2_d1 <- status_df %>% dplyr::filter(snp_id == "snp2", donor == "donor1")
+    snp1_d1 <- status_df %>% dplyr::filter(snp_id == "snp1", donor == "donor1")
+
+    # Verify the stored call wins over the binomial test's "hom" result
+    expect_equal(snp2_d1$zygosity, "het")
+    # Verify its source is reported as the stored source, not "binomial"
+    expect_equal(snp2_d1$zygosity_source, "vireo_gt")
+    # Verify no binomial test was actually run for this pair
+    expect_true(is.na(snp2_d1$p_val))
+    # Verify a pair with no stored call still falls back to the binomial test
+    expect_equal(snp1_d1$zygosity_source, "binomial")
+})
+
 test_that("get_donor_het_snpdata returns heterozygous SNPs for a donor", {
     snp_data <- create_heterozygous_test_data()
 

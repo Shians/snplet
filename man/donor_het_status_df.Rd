@@ -29,10 +29,20 @@ donor_het_status_df(
 \item{minor_allele_prop}{Minor allele proportion used as the null threshold for monoallelic expression testing (default: 0.1).}
 }
 \value{
-A tibble with columns: snp_id, gene_name, chrom, pos, strand (if available in snp_info), donor, ref_count, alt_count, total_count, ref_ratio, maf, minor_allele_count, p_val, adj_p_val, tested, zygosity
+A tibble with columns: snp_id, gene_name, chrom, pos, strand (if available in
+  snp_info), donor, ref_count, alt_count, total_count, ref_ratio, maf,
+  minor_allele_count, p_val, adj_p_val, tested, zygosity, zygosity_source. For a pair
+  with a stored call, \code{p_val}/\code{adj_p_val} are \code{NA} (no binomial test was
+  run) and \code{zygosity_source} names the origin (e.g. \code{"vireo_gt"}); for a
+  binomial-tested pair \code{zygosity_source} is \code{"binomial"}.
 }
 \description{
 Returns a long-format data frame with heterozygosity status per SNP and donor.
+A \code{(snp_id, donor)} pair with a zygosity call already stored in
+\code{donor_snp_info} (e.g. from Vireo genotypes read at import) is returned as-is
+rather than recomputed, so the same pair's zygosity doesn't silently flip depending
+on which chromosomes happen to be loaded alongside it. Pairs with no stored call fall
+back to the binomial test as before.
 }
 \examples{
 \dontrun{

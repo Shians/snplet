@@ -1,13 +1,13 @@
-#' Assign inactive X chromosome to cells
+#' Assign the active X chromosome to cells
 #'
-#' Identifies which X chromosome is inactive in female cells based on allelic
+#' Identifies which X chromosome is active in female cells based on allelic
 #' imbalance at heterozygous SNPs using an Expectation-Maximisation (EM)
 #' algorithm with a beta-binomial likelihood.
 #'
 #' @details
 #' X-chromosome inactivation (XCI) is a dosage compensation mechanism in female
 #' mammals where one of the two X chromosomes is randomly silenced in each cell.
-#' This function infers which X is inactive by fitting an EM model to allelic
+#' This function infers which X remains active by fitting an EM model to allelic
 #' read counts at heterozygous SNPs on the X chromosome.
 #'
 #' The algorithm works as follows:
@@ -20,23 +20,23 @@
 #' }
 #'
 #' Cells that do not meet \code{confidence_threshold} receive \code{NA} in
-#' the \code{inactive_x} column.
+#' the \code{active_x} column.
 #'
 #' @param x SNPData object containing X chromosome SNP data with donor
 #'   assignments and heterozygosity information
 #' @param n_inits Number of random initialisations for the EM algorithm.
 #'   The run with the highest log-likelihood is returned. Default 10.
 #' @param confidence_threshold Posterior probability threshold for hard
-#'   assignment. Cells with \code{post_X1 >= confidence_threshold} are
-#'   assigned "X1", those with \code{post_X1 <= 1 - confidence_threshold}
-#'   are assigned "X2", and the remainder receive \code{NA}. Default 0.95.
+#'   assignment. Cells whose posterior probability that a given X is the active
+#'   one reaches \code{confidence_threshold} are assigned that X; cells where
+#'   neither X reaches the threshold receive \code{NA}. Default 0.95.
 #' @param refit_after_filter Logical; if TRUE, re-run the EM algorithm after
 #'   filtering genes with inconsistent allelic patterns. Provides sharper
 #'   posteriors on the cleaned gene set. Default FALSE.
 #'
-#' @return SNPData object with an additional \code{inactive_x} column in
+#' @return SNPData object with an additional \code{active_x} column in
 #'   barcode metadata, with values "X1" or "X2" indicating the inferred
-#'   inactive X chromosome state. Cells that do not meet the confidence
+#'   active X chromosome state. Cells that do not meet the confidence
 #'   threshold receive \code{NA}. The full XCI diagnostics are also written
 #'   into the object's metadata slots, so the result can be
 #'   passed directly to \code{\link{plot_xci_heatmap}},
@@ -47,12 +47,12 @@
 #'
 #' @examples
 #' \dontrun{
-#' # Assign inactive X chromosome to cells
+#' # Assign the active X chromosome to cells
 #' snp_data <- assign_xci(snp_data)
 #'
 #' # View results
 #' get_barcode_info(snp_data) %>%
-#'   count(donor, inactive_x)
+#'   count(donor, active_x)
 #'
 #' # Diagnostics are stored, so plotting works directly
 #' plot_xci_heatmap(snp_data, donor = "donor1")
@@ -77,9 +77,9 @@ setMethod(
     }
 )
 
-#' Assign inactive X chromosome to cells by clonotype
+#' Assign the active X chromosome to cells by clonotype
 #'
-#' Identifies which X chromosome is inactive in female cells based on allelic
+#' Identifies which X chromosome is active in female cells based on allelic
 #' imbalance at heterozygous SNPs, aggregating counts to the clonotype level
 #' before running the EM model and projecting assignments back to individual cells.
 #'
@@ -109,16 +109,17 @@ setMethod(
 #' @param n_inits Number of random initialisations for the EM algorithm.
 #'   The run with the highest log-likelihood is returned. Default 10.
 #' @param confidence_threshold Posterior probability threshold for hard
-#'   assignment. Clonotypes with \code{post_X1 >= confidence_threshold} are
-#'   assigned "X1", those with \code{post_X1 <= 1 - confidence_threshold}
-#'   are assigned "X2", and the remainder receive \code{NA}. Default 0.95.
+#'   assignment. Clonotypes whose posterior probability that a given X is the
+#'   active one reaches \code{confidence_threshold} are assigned that X;
+#'   clonotypes where neither X reaches the threshold receive \code{NA}.
+#'   Default 0.95.
 #' @param refit_after_filter Logical; if TRUE, re-run the EM algorithm after
 #'   filtering genes with inconsistent allelic patterns. Provides sharper
 #'   posteriors on the cleaned gene set. Default FALSE.
 #'
-#' @return SNPData object with an additional \code{inactive_x} column in
+#' @return SNPData object with an additional \code{active_x} column in
 #'   barcode metadata, with values "X1" or "X2" indicating the inferred
-#'   inactive X chromosome state. Cells from clonotypes that do not meet the
+#'   active X chromosome state. Cells from clonotypes that do not meet the
 #'   confidence threshold receive \code{NA}. The full XCI diagnostics are also
 #'   written into the object's metadata slots,
 #'   so the result can be passed directly to
@@ -130,12 +131,12 @@ setMethod(
 #'
 #' @examples
 #' \dontrun{
-#' # Assign inactive X chromosome to cells by clonotype
+#' # Assign the active X chromosome to cells by clonotype
 #' snp_data <- assign_xci_by_clonotype(snp_data)
 #'
 #' # View results
 #' get_barcode_info(snp_data) %>%
-#'   count(donor, clonotype, inactive_x)
+#'   count(donor, clonotype, active_x)
 #'
 #' # Diagnostics are stored, so plotting works directly
 #' plot_xci_heatmap(snp_data, donor = "donor1")
@@ -244,7 +245,7 @@ setMethod(
     invisible(TRUE)
 }
 
-#' Extract per-cell inactive-X assignments
+#' Extract per-cell active-X assignments
 #'
 #' Pulls the stored X-chromosome inactivation call and posterior for every cell
 #' out of a SNPData object's barcode metadata. Requires that
@@ -257,9 +258,9 @@ setMethod(
 #'
 #' @return A tibble with one row per cell and columns \code{cell_id}
 #'   (character), \code{donor} (character; present only when the object carries
-#'   donor information), \code{inactive_x} (character "X1"/"X2", or \code{NA}
-#'   for cells below the confidence threshold), and \code{xci_post_X1} (numeric
-#'   posterior probability that X1 is the inactive chromosome).
+#'   donor information), \code{active_x} (character "X1"/"X2", or \code{NA}
+#'   for cells below the confidence threshold), and \code{xci_post_X1_active}
+#'   (numeric posterior probability that X1 is the active chromosome).
 #'
 #' @family X-chromosome inactivation functions
 #' @export
@@ -269,11 +270,11 @@ setGeneric("xci_assignments", function(x) standardGeneric("xci_assignments"))
 #' @include SNPData-class.R
 setMethod("xci_assignments", signature(x = "SNPData"), function(x) {
     barcode_info <- get_barcode_info(x)
-    if (!"inactive_x" %in% colnames(barcode_info)) {
+    if (!"active_x" %in% colnames(barcode_info)) {
         stop("No stored XCI diagnostics found. Run assign_xci(x) first.")
     }
     barcode_info %>%
-        dplyr::select(cell_id, dplyr::any_of("donor"), inactive_x, xci_post_X1)
+        dplyr::select(cell_id, dplyr::any_of("donor"), active_x, xci_post_X1_active)
 })
 
 #' Extract SNP haplotypes from a SNPData object with stored XCI diagnostics
@@ -302,26 +303,20 @@ setGeneric("xci_haplotypes", function(x) standardGeneric("xci_haplotypes"))
 #' @rdname xci_haplotypes
 #' @include SNPData-class.R
 setMethod("xci_haplotypes", signature(x = "SNPData"), function(x) {
-    snp_info <- get_snp_info(x)
-    if (!"xci_informative" %in% colnames(snp_info)) {
+    if (!.has_xci_diagnostics(x)) {
         stop("No stored XCI diagnostics found. Run assign_xci(x) first.")
     }
-    snp_info %>%
+    snp_info <- get_snp_info(x)
+    get_donor_snp_info(x) %>%
         dplyr::filter(xci_informative) %>%
+        dplyr::left_join(dplyr::select(snp_info, snp_id, dplyr::any_of("gene_name")), by = "snp_id") %>%
         dplyr::select(
             snp_id,
             dplyr::any_of("gene_name"),
-            donor = xci_informative_donor,
-            allele_on_x1 = xci_allele_on_x1_by_donor,
-            escape_fraction = xci_escape_fraction_by_donor
-        ) %>%
-        # The three *_by_donor fields are comma-separated and aligned; unnest
-        # them in parallel to one row per SNP x donor.
-        tidyr::separate_longer_delim(
-            c(donor, allele_on_x1, escape_fraction),
-            delim = ","
-        ) %>%
-        dplyr::mutate(escape_fraction = as.numeric(escape_fraction))
+            donor,
+            allele_on_x1,
+            escape_fraction = xci_escape_fraction
+        )
 })
 
 #' Plot assignment heatmap from a SNPData object with stored XCI diagnostics
@@ -329,9 +324,9 @@ setMethod("xci_haplotypes", signature(x = "SNPData"), function(x) {
 #' Visualizes the REF allele fraction at the genes this donor's model retained.
 #' Columns (cells or clonotypes) are ordered by posterior and annotated at the
 #' top. Rows are ordered by discriminative power (the difference in mean REF
-#' fraction between X1 and X2 cells) so the genes that most cleanly flip allele
-#' between the two states appear at the bottom. A right-hand annotation shows
-#' how many cells cover each gene. In the "Inactive X" annotation, units the
+#' fraction between X1-active and X2-active cells) so the genes that most
+#' cleanly flip allele between the two states appear at the bottom. A right-hand
+#' annotation shows how many cells cover each gene. In the "Active X" annotation, units the
 #' model could not call are split into "unassigned" (covered but low posterior
 #' confidence) and "no coverage" (no covered informative SNPs, hence never
 #' scored), so the two reasons are visually distinct. When any no-coverage units
@@ -350,7 +345,7 @@ setMethod("xci_haplotypes", signature(x = "SNPData"), function(x) {
 #'   \code{NULL} (show all retained genes).
 #' @param show_gene_names Whether to draw gene names as row labels. Useful to
 #'   turn off when many genes are shown. Defaults to \code{TRUE}.
-#' @param show_posterior Whether to draw the "P(inactive = X1)" posterior
+#' @param show_posterior Whether to draw the "P(active = X1)" posterior
 #'   probability annotation row. Defaults to \code{TRUE}.
 #' @param mark_boundaries Whether to draw dotted vertical lines at the
 #'   transitions between assignment groups (X1 -> unassigned -> X2). Defaults to
@@ -369,8 +364,8 @@ setMethod("xci_haplotypes", signature(x = "SNPData"), function(x) {
 #' @param assignment_palette Named vector of colours for the assignment
 #'   annotation, with names \code{"X1"}, \code{"X2"}, and \code{"unassigned"}.
 #'   Defaults to green / purple.
-#' @param posterior_palette Length-3 vector of colours for the posterior_X1
-#'   annotation ramp, mapped to posteriors 0, 0.5, and 1. Defaults to a
+#' @param posterior_palette Length-3 vector of colours for the
+#'   posterior_X1_active annotation ramp, mapped to posteriors 0, 0.5, and 1. Defaults to a
 #'   brown-orange diverging ramp. The three scales use distinct hue families
 #'   (blue-red, green/purple, brown-orange) so viewers do not relate them.
 #' @param na_fill Colour for uncovered (missing) cells. Defaults to
@@ -434,34 +429,32 @@ setMethod(
         na_fill = "grey90"
     ) {
         barcode_info <- get_barcode_info(x)
-        snp_info <- get_snp_info(x)
-        if (!"inactive_x" %in% colnames(barcode_info) || !"xci_informative" %in% colnames(snp_info)) {
+        if (!"active_x" %in% colnames(barcode_info) || !.has_xci_diagnostics(x)) {
             stop("No stored XCI diagnostics found. Run assign_xci(x) first.")
         }
 
         donor_data <- filter_samples(x, donor == !!donor)
         # Restrict to the genes this donor's model actually retained, not the union
         # of informative genes across all donors.
-        donor_pattern <- paste0("(^|,)", stringr::str_escape(donor), "(,|$)")
-        donor_data <- filter_snps(
-            donor_data,
-            xci_informative & stringr::str_detect(xci_informative_donor, !!donor_pattern)
-        )
+        donor_informative_snps <- get_donor_snp_info(x) %>%
+            dplyr::filter(donor == !!donor, xci_informative) %>%
+            dplyr::pull(snp_id)
+        donor_data <- filter_snps(donor_data, snp_id %in% donor_informative_snps)
 
-        donor_snp_info <- get_snp_info(donor_data)
+        filtered_snp_info <- get_snp_info(donor_data)
         donor_barcode_info <- get_barcode_info(donor_data)
 
-        # Cells this donor's model actually assigned (drop NA inactive_x)
+        # Cells this donor's model actually assigned (drop NA active_x)
         assigned <- donor_barcode_info %>%
             dplyr::mutate(
-                assignment = ifelse(is.na(inactive_x), "unassigned", inactive_x),
+                assignment = ifelse(is.na(active_x), "unassigned", active_x),
                 unit_id = cell_id
             )
 
         ref_mat <- ref_count(donor_data)
         alt_mat <- alt_count(donor_data)
-        rownames(ref_mat) <- donor_snp_info$snp_id
-        rownames(alt_mat) <- donor_snp_info$snp_id
+        rownames(ref_mat) <- filtered_snp_info$snp_id
+        rownames(alt_mat) <- filtered_snp_info$snp_id
 
         # For a clonotype-level fit, aggregate the per-cell counts and assignments up
         # to the modelling unit (clonotype) so the heatmap columns match how the
@@ -478,7 +471,7 @@ setMethod(
         # Optionally drop the two kinds of uncalled columns independently:
         # no-coverage units have an NA posterior (never scored); low-confidence
         # unassigned units were scored but not confidently assigned.
-        no_coverage <- is.na(assigned$xci_post_X1)
+        no_coverage <- is.na(assigned$xci_post_X1_active)
         low_confidence <- assigned$assignment == "unassigned" & !no_coverage
         drop_cols <- (!show_unassigned & low_confidence) | (!show_no_coverage & no_coverage)
         if (any(drop_cols)) {
@@ -487,12 +480,12 @@ setMethod(
             alt_mat <- alt_mat[, assigned$unit_id, drop = FALSE]
         }
 
-        gene_name_map <- stats::setNames(donor_snp_info$gene_name, donor_snp_info$snp_id)
+        gene_name_map <- stats::setNames(filtered_snp_info$gene_name, filtered_snp_info$snp_id)
         .plot_xci_heatmap_from_parts(
             ref_mat = ref_mat,
             alt_mat = alt_mat,
             assignment = assigned$assignment,
-            post_X1 = assigned$xci_post_X1,
+            post_X1_active = assigned$xci_post_X1_active,
             unit_ids = assigned$unit_id,
             gene_name_map = gene_name_map,
             min_coverage_cells = min_coverage_cells,
@@ -554,7 +547,7 @@ setMethod(
     ref_mat,
     alt_mat,
     assignment,
-    post_X1,
+    post_X1_active,
     unit_ids,
     gene_name_map,
     title = NULL,
@@ -589,19 +582,21 @@ setMethod(
     # A unit the model never scored (NA posterior) had no covered informative
     # SNPs; it is unassigned for lack of data rather than lack of confidence.
     # These sort to the far end of the plot (NA posteriors order last).
-    no_coverage <- is.na(post_X1)
+    no_coverage <- is.na(post_X1_active)
 
-    # Order units: X1 → X2 → unassigned → no-coverage (by posterior, NAs last).
-    # Dense matrix from here so rowMeans(na.rm) and subsetting behave predictably.
-    idx <- order(post_X1, decreasing = TRUE)
+    # Order units: X1-active → X2-active → unassigned → no-coverage (by
+    # posterior, NAs last). Dense matrix from here so rowMeans(na.rm) and
+    # subsetting behave predictably.
+    idx <- order(post_X1_active, decreasing = TRUE)
     frac_mat <- as.matrix(frac_mat[, unit_ids[idx], drop = FALSE])
     assignment <- assignment[idx]
-    post_X1 <- post_X1[idx]
+    post_X1_active <- post_X1_active[idx]
     no_coverage <- no_coverage[idx]
 
     # Order genes by discriminative power rather than clustering a mostly-NA
-    # matrix: the difference in mean REF fraction between X1 and X2 cells. Genes
-    # that cleanly flip allele between the two states rise to the top.
+    # matrix: the difference in mean REF fraction between X1-active and
+    # X2-active cells. Genes that cleanly flip allele between the two states
+    # rise to the top.
     #
     # Naively taking abs(mean_X1 - mean_X2) lets a gene covered in only a
     # handful of cells score a perfect flip and outrank a well-covered gene with
@@ -645,16 +640,16 @@ setMethod(
         assignment_palette <- c(assignment_palette, "no coverage" = "grey30")
     }
 
-    # Assemble the column annotation. The posterior_X1 row is optional. Internal
-    # names stay code-friendly for the colour mapping; display labels are set via
-    # annotation_label.
+    # Assemble the column annotation. The posterior_X1_active row is optional.
+    # Internal names stay code-friendly for the colour mapping; display labels
+    # are set via annotation_label.
     ann_args <- list(assignment = assignment)
     ann_col <- list(assignment = assignment_palette)
-    ann_label <- c(assignment = "Inactive X")
+    ann_label <- c(assignment = "Active X")
     if (show_posterior) {
-        ann_args$posterior_X1 <- post_X1
-        ann_col$posterior_X1 <- circlize::colorRamp2(c(0, 0.5, 1), posterior_palette)
-        ann_label <- c(ann_label, posterior_X1 = "P(inactive = X1)")
+        ann_args$posterior_X1_active <- post_X1_active
+        ann_col$posterior_X1_active <- circlize::colorRamp2(c(0, 0.5, 1), posterior_palette)
+        ann_label <- c(ann_label, posterior_X1_active = "P(active = X1)")
     }
     col_ann <- do.call(
         ComplexHeatmap::HeatmapAnnotation,
@@ -838,7 +833,7 @@ setMethod(
         fit$cell_assignments <- fit$assignments %>%
             dplyr::rename(clonotype = cell_id) %>%
             dplyr::inner_join(cell_to_clonotype, by = "clonotype") %>%
-            dplyr::select(cell_id, post_X1, post_X2, assignment)
+            dplyr::select(cell_id, post_X1_inactive, post_X2_inactive, assignment)
     }
 
     fit
@@ -858,8 +853,8 @@ setMethod(
     unit_label <- if (unit == "clonotype") "clonotypes" else "cells"
 
     assignments <- xci_result$post %>%
-        dplyr::mutate(cell_id = unit_ids[cell], post_X2 = 1 - post_X1) %>%
-        dplyr::select(cell_id, post_X1, post_X2, assignment)
+        dplyr::mutate(cell_id = unit_ids[cell], post_X2_inactive = 1 - post_X1_inactive) %>%
+        dplyr::select(cell_id, post_X1_inactive, post_X2_inactive, assignment)
 
     snp_info_filtered <- snp_info[xci_result$gene_keep, ]
     haplotypes <- tibble::tibble(
@@ -869,10 +864,13 @@ setMethod(
         escape_fraction = xci_result$pi_g
     )
 
-    counts <- table(factor(assignments$assignment, c("X1", "X2", "unassigned")))
+    # The EM labels the inactive X; report the active X so the log agrees with
+    # the stored active_x column rather than inverting it.
+    active <- .active_from_inactive(assignments$assignment)
+    counts <- table(factor(active, c("X1", "X2")))
     logger::log_info(
         "[{donor}] XCI fit complete: {nrow(haplotypes)} genes retained, {nrow(assignments)} {unit_label} ",
-        "(X1={counts[['X1']]}, X2={counts[['X2']]}, unassigned={counts[['unassigned']]})"
+        "(active X1={counts[['X1']]}, active X2={counts[['X2']]}, unassigned={sum(is.na(active))})"
     )
 
     ref_mat_filtered <- ref_mat[xci_result$gene_keep, , drop = FALSE]
@@ -892,15 +890,28 @@ setMethod(
     )
 }
 
+#' Flip an inactive-X label to the X that is active
+#'
+#' The EM works in inactive-X terms throughout; the stored metadata and every
+#' user-facing surface speak in active-X terms. This is the single definition of
+#' that flip, so the two framings cannot drift apart. Labels that name neither X
+#' (\code{"unassigned"}) carry no active call and map to \code{NA}.
+#'
+#' @keywords internal
+.active_from_inactive <- function(inactive) {
+    unname(c(X1 = "X2", X2 = "X1")[inactive])
+}
+
 #' Write XCI diagnostics from a fit into a SNPData object
 #'
 #' Promotes the fit diagnostics into the object's indexable metadata slots so
-#' they survive subsetting: barcode metadata gains \code{inactive_x} and
-#' \code{xci_post_X1}; SNP metadata gains \code{xci_informative},
-#' \code{xci_informative_donor}, \code{xci_allele_on_x1_by_donor}, and
-#' \code{xci_escape_fraction_by_donor} (the latter two comma-separated and
-#' aligned to \code{xci_informative_donor}, one entry per donor). For a
-#' clonotype-level fit the per-cell projection is used for barcode annotation.
+#' they survive subsetting: barcode metadata gains \code{active_x} and
+#' \code{xci_post_X1_active}; \code{donor_snp_info} gains one row per
+#' informative SNP x donor with \code{xci_informative}, \code{allele_on_x1}
+#' and \code{xci_escape_fraction}; SNP metadata gains a per-SNP
+#' \code{xci_informative} flag (\code{TRUE} if any donor's model retained the
+#' SNP). For a clonotype-level fit the per-cell projection is used for
+#' barcode annotation.
 #'
 #' @keywords internal
 .store_xci_fit <- function(x, fit) {
@@ -911,8 +922,8 @@ setMethod(
         assignments %>%
             dplyr::transmute(
                 cell_id,
-                inactive_x = ifelse(assignment == "unassigned", NA_character_, assignment),
-                xci_post_X1 = post_X1,
+                active_x = .active_from_inactive(assignment),
+                xci_post_X1_active = 1 - post_X1_inactive,
                 # Record the unit the model was fit on so downstream plotting can
                 # aggregate cells back to clonotypes when appropriate.
                 xci_fit_unit = f$unit %||% "cell"
@@ -924,44 +935,34 @@ setMethod(
         f$haplotypes %>%
             dplyr::transmute(
                 snp_id,
+                donor = f$donor,
                 xci_informative = TRUE,
-                xci_informative_donor = f$donor,
-                xci_allele_on_x1 = allele_on_x1,
+                allele_on_x1,
                 xci_escape_fraction = escape_fraction
             )
     }) %>%
-        dplyr::bind_rows() %>%
-        # A SNP can be retained in more than one donor's model; record every
-        # donor it was informative in (comma-separated) and collapse to one row
-        # per snp_id so the snp_info join column has no duplicates. Phase is
-        # donor-specific, so the *_by_donor columns preserve every donor's value
-        # (aligned to xci_informative_donor) as the single source of truth; they
-        # are unnested per donor by xci_haplotypes() and haplotype_expression().
-        dplyr::distinct(snp_id, xci_informative_donor, .keep_all = TRUE) %>%
-        dplyr::summarise(
-            xci_informative = TRUE,
-            xci_informative_donor = paste(xci_informative_donor, collapse = ","),
-            xci_allele_on_x1_by_donor = paste(xci_allele_on_x1, collapse = ","),
-            xci_escape_fraction_by_donor = paste(xci_escape_fraction, collapse = ","),
-            .by = snp_id
-        )
+        dplyr::bind_rows()
 
     if (nrow(barcode_diag) > 0) {
         x <- add_barcode_metadata(x, barcode_diag, join_by = "cell_id", overwrite = TRUE)
     }
     if (nrow(snp_diag) > 0) {
-        x <- add_snp_metadata(x, snp_diag, join_by = "snp_id", overwrite = TRUE)
-        # SNPs not in the final EM set are non-informative rather than NA
-        snp_info <- get_snp_info(x)
-        snp_info$xci_informative[is.na(snp_info$xci_informative)] <- FALSE
-        x <- add_snp_metadata(
-            x,
-            dplyr::select(snp_info, snp_id, xci_informative),
-            join_by = "snp_id",
-            overwrite = TRUE
-        )
+        x <- add_donor_snp_metadata(x, snp_diag, join_by = c("snp_id", "donor"), overwrite = TRUE)
     }
     x
+}
+
+#' Whether a SNPData object carries stored XCI fit diagnostics
+#'
+#' \code{\link{.store_xci_fit}} is the only writer of \code{xci_informative},
+#' so at least one \code{TRUE} in \code{donor_snp_info} is a reliable signal
+#' that \code{assign_xci}/\code{assign_xci_by_clonotype} has run, even though
+#' the column itself may already exist (as \code{NA}) from zygosity calling.
+#'
+#' @keywords internal
+.has_xci_diagnostics <- function(x) {
+    donor_snp_info <- get_donor_snp_info(x)
+    "xci_informative" %in% colnames(donor_snp_info) && any(donor_snp_info$xci_informative, na.rm = TRUE)
 }
 
 #' @keywords internal
@@ -1069,11 +1070,29 @@ setMethod(
     best$post <- best$post %>%
         dplyr::mutate(
             assignment = dplyr::case_when(
-                post_X1 >= confidence_threshold ~ "X1",
-                post_X1 <= 1 - confidence_threshold ~ "X2",
+                post_X1_inactive >= confidence_threshold ~ "X1",
+                post_X1_inactive <= 1 - confidence_threshold ~ "X2",
                 TRUE ~ "unassigned"
             )
         )
+
+    # Canonicalise which mixture component is called "X1": the EM's component
+    # naming is arbitrary (fixed only by the random phase initialisation), so
+    # the same biological haplotype could end up "X1" in one run and "X2" in
+    # the next. Fix this by always relabelling so X1 denotes the active-X
+    # majority (assignment "X2" == X1 active, per .active_from_inactive).
+    if (sum(best$post$assignment == "X1") > sum(best$post$assignment == "X2")) {
+        best$post <- best$post %>%
+            dplyr::mutate(
+                post_X1_inactive = 1 - post_X1_inactive,
+                assignment = dplyr::case_when(
+                    assignment == "X1" ~ "X2",
+                    assignment == "X2" ~ "X1",
+                    TRUE ~ assignment
+                )
+            )
+        best$h_g <- 1L - best$h_g
+    }
 
     # gene_keep: logical of length nrow(original ref_mat), TRUE = gene survived
     # both the outlier filter and the post-convergence escapee filter. The
@@ -1104,10 +1123,10 @@ setMethod(
     ll_X2 <- .loglik_obs(dat$ref, dat$n, p_if_X2, rho)
 
     dat %>%
-        dplyr::left_join(post %>% dplyr::select(cell, post_X1), by = "cell") %>%
+        dplyr::left_join(post %>% dplyr::select(cell, post_X1_inactive), by = "cell") %>%
         # Expected LLR per observation: weighted by P(X1-inactive) for each cell.
         # Positive contribution means the observation is consistent with current assignments.
-        dplyr::mutate(llr = post_X1 * (ll_X1 - ll_X2)) %>%
+        dplyr::mutate(llr = post_X1_inactive * (ll_X1 - ll_X2)) %>%
         dplyr::group_by(gene) %>%
         dplyr::summarise(llr = sum(llr), .groups = "drop")
 }
@@ -1177,7 +1196,7 @@ setMethod(
 
     tibble::tibble(
         cell = as.integer(rownames(cell_lor)),
-        post_X1 = 1 / (1 + exp(-lor)), # sigmoid converts LOR to posterior
+        post_X1_inactive = 1 / (1 + exp(-lor)), # sigmoid converts LOR to posterior
         lor = lor
     )
 }
@@ -1187,18 +1206,18 @@ setMethod(
     # Expected log-likelihood under each phase: E_q[log p(ref | h, pi_g)], built
     # from the shared orientation pair. ll$L0 = loglik at pi_g (REF silenced),
     # ll$L1 = loglik at 1 - pi_g (REF active).
-    # h=0: X1-inactive cells (weight post_X1) see REF fraction pi_g → L0;
-    #       X2-inactive cells (weight 1-post_X1) see 1 - pi_g → L1.
+    # h=0: X1-inactive cells (weight post_X1_inactive) see REF fraction pi_g → L0;
+    #       X2-inactive cells (weight 1-post_X1_inactive) see 1 - pi_g → L1.
     # h=1: the two orientations swap.
     # Scatter cell posteriors into a lookup indexed by cell id. post$cell is a
     # sorted subset of cell ids (cells with no covered gene are absent), so a
     # positional index would misalign — index by id instead.
     post_lookup <- numeric(max(dat$cell))
-    post_lookup[post$cell] <- post$post_X1
-    post_X1 <- post_lookup[dat$cell]
+    post_lookup[post$cell] <- post$post_X1_inactive
+    post_X1_inactive <- post_lookup[dat$cell]
 
-    obs_h0 <- post_X1 * ll$L0 + (1 - post_X1) * ll$L1
-    obs_h1 <- post_X1 * ll$L1 + (1 - post_X1) * ll$L0
+    obs_h0 <- post_X1_inactive * ll$L0 + (1 - post_X1_inactive) * ll$L1
+    obs_h1 <- post_X1_inactive * ll$L1 + (1 - post_X1_inactive) * ll$L0
 
     ll_h0 <- rowsum(obs_h0, dat$gene)
     ll_h1 <- rowsum(obs_h1, dat$gene)
@@ -1212,15 +1231,15 @@ setMethod(
 #' @keywords internal
 .m_step_pi <- function(dat, post, h_g, pi_bounds = c(0.001, 0.499)) {
     counts_with_posterior <- dat %>%
-        dplyr::left_join(post %>% dplyr::select(cell, post_X1), by = "cell") %>%
+        dplyr::left_join(post %>% dplyr::select(cell, post_X1_inactive), by = "cell") %>%
         dplyr::mutate(
             # Soft-assigned inactive-allele read count:
             # h=0 (X1 carries REF): X1-inactive cells contribute REF, X2-inactive contribute ALT
             # h=1 (X1 carries ALT): roles reversed
             xi_ref_count = ifelse(
                 h_g[gene] == 0,
-                post_X1 * ref + (1 - post_X1) * alt,
-                post_X1 * alt + (1 - post_X1) * ref
+                post_X1_inactive * ref + (1 - post_X1_inactive) * alt,
+                post_X1_inactive * alt + (1 - post_X1_inactive) * ref
             ),
             xi_total = n
         )
@@ -1358,52 +1377,4 @@ setMethod(
         alt = alt_mat[idx],
         n = n_mat[idx]
     )
-}
-
-# ==============================================================================
-# Deprecated aliases
-# ==============================================================================
-
-#' Deprecated functions in snplet
-#'
-#' These functions have been renamed to use the \code{xci} prefix for
-#' consistency with the rest of the X-chromosome inactivation API
-#' (\code{\link{xci_assignments}}, \code{\link{xci_haplotypes}}). The old names
-#' still work but issue a deprecation warning and will be removed in a future
-#' release.
-#'
-#' \itemize{
-#'   \item \code{assign_inactive_x()} -> \code{\link{assign_xci}()}
-#'   \item \code{assign_inactive_x_by_clonotype()} ->
-#'     \code{\link{assign_xci_by_clonotype}()}
-#'   \item \code{plot_inactive_x_assignment_heatmap()} ->
-#'     \code{\link{plot_xci_heatmap}()}
-#' }
-#'
-#' @param x A SNPData object.
-#' @param ... Arguments passed on to the replacement function.
-#'
-#' @name snplet-deprecated
-#' @keywords internal
-NULL
-
-#' @rdname snplet-deprecated
-#' @export
-assign_inactive_x <- function(x, ...) {
-    .Deprecated("assign_xci")
-    assign_xci(x, ...)
-}
-
-#' @rdname snplet-deprecated
-#' @export
-assign_inactive_x_by_clonotype <- function(x, ...) {
-    .Deprecated("assign_xci_by_clonotype")
-    assign_xci_by_clonotype(x, ...)
-}
-
-#' @rdname snplet-deprecated
-#' @export
-plot_inactive_x_assignment_heatmap <- function(x, ...) {
-    .Deprecated("plot_xci_heatmap")
-    plot_xci_heatmap(x, ...)
 }

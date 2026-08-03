@@ -15,12 +15,12 @@ library(Matrix)
 # Build a SNPData with XCI diagnostics injected directly (rather than fitting the
 # EM) so the counts and stored phase are fully controlled and deterministic.
 #
-# 8 cells: two donors, each with two X1-inactive and two X2-inactive cells.
-# Columns:  d0_x1 d0_x1 d0_x2 d0_x2 | d1_x1 d1_x1 d1_x2 d1_x2
+# 8 cells: two donors, each with two X2-active and two X1-active cells.
+# Columns:  d0_x2a d0_x2a d0_x1a d0_x1a | d1_x2a d1_x2a d1_x1a d1_x1a
 #
 # Three SNPs, each depth 10 per cell:
-#   snp1 - clean XCI in donor0 only. X1 carries REF, so X1-inactive cells express
-#          ALT and X2-inactive cells express REF: the dominant physical allele
+#   snp1 - clean XCI in donor0 only. X1 carries REF, so X2-active cells express
+#          ALT and X1-active cells express REF: the dominant physical allele
 #          flips between groups.
 #   snp2 - escaper in donor0. REF dominates in BOTH groups (biologically
 #          impossible under clean XCI), with elevated inactive-haplotype reads.
@@ -65,28 +65,31 @@ make_hap_fixture <- function() {
     snp_ids <- get_snp_info(obj)$snp_id
     cell_ids <- get_barcode_info(obj)$cell_id
 
-    snp_diag <- data.frame(
-        snp_id = snp_ids,
+    # One row per informative (snp_id, donor) pair: snp1 and snp2 are
+    # informative in donor0 only; snp3 is informative in both donors, with
+    # opposite phase.
+    donor_snp_diag <- data.frame(
+        snp_id = c(snp_ids[1], snp_ids[2], snp_ids[3], snp_ids[3]),
+        donor = c("donor0", "donor0", "donor0", "donor1"),
         xci_informative = TRUE,
-        xci_informative_donor = c("donor0", "donor0", "donor0,donor1"),
-        xci_allele_on_x1_by_donor = c("REF", "REF", "REF,ALT"),
+        allele_on_x1 = c("REF", "REF", "REF", "ALT"),
         stringsAsFactors = FALSE
     )
     barcode_diag <- data.frame(
         cell_id = cell_ids,
-        inactive_x = c("X1", "X1", "X2", "X2", "X1", "X1", "X2", "X2"),
+        active_x = c("X2", "X2", "X1", "X1", "X2", "X2", "X1", "X1"),
         stringsAsFactors = FALSE
     )
 
-    obj <- add_snp_metadata(obj, snp_diag, join_by = "snp_id", overwrite = TRUE)
+    obj <- add_donor_snp_metadata(obj, donor_snp_diag, join_by = c("snp_id", "donor"), overwrite = TRUE)
     obj <- add_barcode_metadata(obj, barcode_diag, join_by = "cell_id", overwrite = TRUE)
 
     list(obj = obj, snp_ids = snp_ids)
 }
 
-# Pull the single row for one donor / SNP / inactive-X group.
-hap_row <- function(res, donor, snp_id, inactive_x) {
-    dplyr::filter(res, donor == !!donor, snp_id == !!snp_id, inactive_x == !!inactive_x)
+# Pull the single row for one donor / SNP / active-X group.
+hap_row <- function(res, donor, snp_id, active_x) {
+    dplyr::filter(res, donor == !!donor, snp_id == !!snp_id, active_x == !!active_x)
 }
 
 # ==============================================================================
@@ -121,10 +124,10 @@ test_that("haplotype_expression() reports a clean XCI SNP as flipping alleles", 
     x1 <- hap_row(res, "donor0", snp1, "X1")
     x2 <- hap_row(res, "donor0", snp1, "X2")
 
-    # In X1-inactive cells the active X2 haplotype (ALT) dominates
-    expect_equal(x1$dominant_allele, "ALT")
-    # In X2-inactive cells the active X1 haplotype (REF) dominates
-    expect_equal(x2$dominant_allele, "REF")
+    # In X1-active cells the active X1 haplotype (REF) dominates
+    expect_equal(x1$dominant_allele, "REF")
+    # In X2-active cells the active X2 haplotype (ALT) dominates
+    expect_equal(x2$dominant_allele, "ALT")
     # Inactive-haplotype reads are absent, so escape fraction is zero both ways
     expect_equal(x1$escape_fraction, 0)
     expect_equal(x2$escape_fraction, 0)
@@ -140,12 +143,14 @@ test_that("haplotype_expression() flags an escaper where the same allele dominat
     x1 <- hap_row(res, "donor0", snp2, "X1")
     x2 <- hap_row(res, "donor0", snp2, "X2")
 
-    # REF dominates in both inactive-X groups
+    # REF dominates in both active-X groups
     expect_equal(x1$dominant_allele, "REF")
     expect_equal(x2$dominant_allele, "REF")
-    # Elevated inactive-haplotype fraction quantifies the escape (14/20 and 4/20)
-    expect_equal(x1$escape_fraction, 0.7)
-    expect_equal(x2$escape_fraction, 0.2)
+    # Elevated inactive-haplotype fraction quantifies the escape. X1 carries REF,
+    # so the X1-active group reads 4/20 from the silenced X2 and the X2-active
+    # group reads 14/20 from the silenced X1.
+    expect_equal(x1$escape_fraction, 0.2)
+    expect_equal(x2$escape_fraction, 0.7)
     # Confirm the biologically impossible same-allele dominance is flagged
     expect_true(x1$same_allele_dominant)
     expect_true(x2$same_allele_dominant)
@@ -156,13 +161,13 @@ test_that("haplotype_expression() splits active/inactive counts by the stored ph
     snp2 <- fixture$snp_ids[2]
 
     res <- haplotype_expression(fixture$obj)
-    x1 <- hap_row(res, "donor0", snp2, "X1")
+    x2 <- hap_row(res, "donor0", snp2, "X2")
 
-    # X1 carries REF; in X1-inactive cells REF is the silenced (inactive) allele:
+    # X1 carries REF; in X2-active cells REF is the silenced (inactive) allele:
     # pooled ref = 14 (inactive), pooled alt = 6 (active X2 haplotype)
-    expect_equal(x1$inactive_count, 14)
-    expect_equal(x1$active_count, 6)
-    expect_equal(x1$coverage, 20)
+    expect_equal(x2$inactive_count, 14)
+    expect_equal(x2$active_count, 6)
+    expect_equal(x2$coverage, 20)
 })
 
 test_that("haplotype_expression() applies each donor's own phase, not the flattened scalar", {
@@ -179,8 +184,8 @@ test_that("haplotype_expression() applies each donor's own phase, not the flatte
     expect_equal(d1_x1$escape_fraction, 0)
     expect_equal(d1_x2$escape_fraction, 0)
     # Confirm the dominant physical allele still flips between groups in donor1
-    expect_equal(d1_x1$dominant_allele, "REF")
-    expect_equal(d1_x2$dominant_allele, "ALT")
+    expect_equal(d1_x1$dominant_allele, "ALT")
+    expect_equal(d1_x2$dominant_allele, "REF")
 })
 
 test_that("haplotype_expression() omits SNPs a donor's model never retained", {

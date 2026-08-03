@@ -18,16 +18,15 @@ utils::globalVariables(c(
     "donor_id",
     "end",
     "gene_name",
-    "inactive_x",
+    "active_x",
     "pi_g",
     "escape_fraction",
     "xci_informative",
     "xci_informative_donor",
-    "xci_allele_on_x1",
     "xci_allele_on_x1_by_donor",
     "xci_escape_fraction_by_donor",
     "xci_escape_fraction",
-    "xci_post_X1",
+    "xci_post_X1_active",
     "xci_fit_unit",
     "unit_id",
     "library_size",
@@ -43,8 +42,8 @@ utils::globalVariables(c(
     "llr",
     "lor",
     "pi",
-    "post_X1",
-    "post_X2",
+    "post_X1_inactive",
+    "post_X2_inactive",
     "xi_ref_count",
     "xi_total",
     "seqnames",
@@ -57,7 +56,8 @@ utils::globalVariables(c(
     "dominant_allele",
     "same_allele_dominant",
     "escapes",
-    "zygosity"
+    "zygosity",
+    "zygosity_source"
 ))
 
 percentile_summary <- function(x, percentiles = c(0.1, 0.25, 0.75, 0.9, 0.95, 0.99)) {

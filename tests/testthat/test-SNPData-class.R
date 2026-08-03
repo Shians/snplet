@@ -615,6 +615,21 @@ test_that("SNPData() donor_map also relabels a caller-supplied donor_snp_info", 
     expect_equal(get_donor_snp_info(snp_data)$donor, "PatientA")
 })
 
+test_that("rename_donor() cascades a relabel across barcode_info, donor_info, and donor_snp_info", {
+    snp_data <- create_test_snpdata()
+    snp_data <- add_donor_snp_metadata(
+        snp_data,
+        data.frame(snp_id = "snp_1", donor = "donor_1", zygosity = "het", zygosity_source = "vireo_gt")
+    )
+
+    renamed <- rename_donor(snp_data, c(PatientA = "donor_1"))
+
+    # Verify all three donor-keyed tables agree on the new label
+    expect_equal(unique(get_barcode_info(renamed)$donor), "PatientA")
+    expect_equal(get_donor_info(renamed)$donor, "PatientA")
+    expect_equal(get_donor_snp_info(renamed)$donor, "PatientA")
+})
+
 test_that("rename_donor() swaps two donor labels without corrupting either", {
     barcode_info <- data.frame(cell_id = c("cell_1", "cell_2"), donor = c("A", "B"))
     snp_data <- SNPData(

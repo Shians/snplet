@@ -8,7 +8,7 @@
 #' @importFrom scales percent label_comma label_number cut_short_scale
 #' @importFrom logger log_info log_success log_warn
 #' @importFrom glue glue
-#' @importFrom stringr str_remove str_to_title str_detect str_escape
+#' @importFrom stringr str_remove str_to_title str_detect str_escape str_split_fixed
 #' @importFrom methods as is new setClass setGeneric setMethod show
 #' @importFrom BiocGenerics nrow ncol rownames colnames updateObject
 #' @importFrom magrittr %>%
@@ -27,7 +27,7 @@
 #' @importFrom R.utils gzip
 #' @importFrom grid unit
 #' @importFrom VGAM dbetabinom
-#' @importFrom stats median quantile p.adjust pbeta setNames cor as.dist hclust cutree dist mad
+#' @importFrom stats median quantile p.adjust pbeta setNames cor as.dist hclust cutree dist mad na.omit
 #' @importFrom utils head
 #' @importFrom DelayedArray colsum
 #' @importFrom mclust Mclust predict.Mclust

@@ -26,9 +26,12 @@ make_xci_snpdata <- function(
 ) {
     withr::with_seed(seed, {
         n_cells <- 2 * n_cells_per_group
+        # The X that stays active in each cell, i.e. the truth assign_xci() should
+        # recover in its active_x column.
         group <- rep(c("X1", "X2"), each = n_cells_per_group)
 
-        # Per gene, which allele sits on X1 (0 = REF active when X2 inactive).
+        # Per gene, which allele sits on X1 (0 = REF sits on X1, so REF is the
+        # expressed allele in X1-active cells).
         # When escapee = TRUE the last gene is an escapee: it stays balanced
         # (p_ref = 0.5) in every cell regardless of inactivation state, so it
         # carries no XCI signal and should be filtered out.
@@ -42,14 +45,14 @@ make_xci_snpdata <- function(
         alt_mat <- matrix(0L, nrow = n_genes, ncol = n_cells)
         for (g in seq_len(n_genes)) {
             for (c in seq_len(n_cells)) {
-                # X1-inactive cells silence the X1 allele; probability of REF
-                x1_inactive <- group[c] == "X1"
+                # X1-active cells express the X1 allele; probability of REF
+                x1_active <- group[c] == "X1"
                 p_ref <- if (is_escapee[g]) {
                     0.5
                 } else if (allele_on_x1[g] == 0) {
-                    if (x1_inactive) 0.05 else 0.95
+                    if (x1_active) 0.95 else 0.05
                 } else {
-                    if (x1_inactive) 0.95 else 0.05
+                    if (x1_active) 0.05 else 0.95
                 }
                 ref_mat[g, c] <- rbinom(1, depth, p_ref)
                 alt_mat[g, c] <- depth - ref_mat[g, c]
@@ -104,7 +107,7 @@ test_that("assign_xci recovers the true clonal split at cell level", {
 
     assignments <- xci_assignments(stored)
     # Verify assignments carry the stored annotation columns
-    expect_true(all(c("cell_id", "inactive_x", "xci_post_X1") %in% colnames(assignments)))
+    expect_true(all(c("cell_id", "active_x", "xci_post_X1_active") %in% colnames(assignments)))
     # Verify every cell received an assignment row
     expect_equal(nrow(assignments), ncol(fixture$snpdata))
 
@@ -112,10 +115,66 @@ test_that("assign_xci recovers the true clonal split at cell level", {
     # label swap, since X1/X2 labels are exchangeable in the model). Compare
     # only cells that met the confidence threshold.
     truth <- get_barcode_info(fixture$snpdata)$true_group
-    called <- !is.na(assignments$inactive_x)
-    agree <- mean(assignments$inactive_x[called] == truth[called])
+    called <- !is.na(assignments$active_x)
+    agree <- mean(assignments$active_x[called] == truth[called])
     # Confirm agreement with the true clonal split exceeds 90% either way
     expect_true(max(agree, 1 - agree) > 0.9)
+})
+
+test_that("assign_xci always labels the majority active-X group X1", {
+    # Which physical haplotype the EM's random phase initialisation happens to
+    # call "X1" is otherwise arbitrary and can flip between runs. Build an
+    # imbalanced split (most cells true X2) across several data seeds so the
+    # majority group is not the one the EM would land on by chance, and check
+    # it is always relabelled X1 regardless.
+    for (seed in 1:3) {
+        fixture <- make_xci_snpdata(seed = seed)
+        bi <- get_barcode_info(fixture$snpdata)
+        minority_cells <- bi$barcode[bi$true_group == "X1"][1:10]
+        imbalanced <- filter_barcodes(fixture$snpdata, true_group == "X2" | barcode %in% minority_cells)
+
+        stored <- assign_xci(imbalanced, n_inits = 3)
+        called <- xci_assignments(stored)$active_x
+        called <- called[!is.na(called)]
+        tab <- table(called)
+
+        # Confirm the larger group is always reported as X1
+        expect_equal(names(which.max(tab)), "X1")
+    }
+})
+
+test_that("assign_xci labels active_x by the allele the cell expresses", {
+    fixture <- make_xci_snpdata()
+    stored <- assign_xci(fixture$snpdata, n_inits = 3)
+
+    # The X1/X2 labels are exchangeable, so the recovery tests above pass under
+    # either polarity. Phase pins the direction: allele_on_x1 and active_x share
+    # the same X1 label, so a cell calling X1 active must show X1's allele. This
+    # is the property the heatmap relies on, and it fails if the inactive-to-
+    # active flip in .store_xci_fit is dropped or inverted.
+    haplotypes <- xci_haplotypes(stored)
+    snp_rows <- match(haplotypes$snp_id, get_snp_info(stored)$snp_id)
+    ref <- as.matrix(ref_count(stored))[snp_rows, , drop = FALSE]
+    alt <- as.matrix(alt_count(stored))[snp_rows, , drop = FALSE]
+
+    assignments <- xci_assignments(stored)
+    x1_active <- which(assignments$active_x %in% "X1")
+    x2_active <- which(assignments$active_x %in% "X2")
+    ref_on_x1 <- haplotypes$allele_on_x1 == "REF"
+
+    # Pooled REF fraction over a set of SNPs x cells
+    ref_fraction <- function(snps, cells) {
+        r <- sum(ref[snps, cells])
+        r / (r + sum(alt[snps, cells]))
+    }
+
+    # Verify X1-active cells express X1's allele: REF-heavy where X1 carries REF
+    expect_gt(ref_fraction(ref_on_x1, x1_active), 0.8)
+    # Verify the same cells are ALT-heavy where X1 instead carries ALT
+    expect_lt(ref_fraction(!ref_on_x1, x1_active), 0.2)
+    # Confirm X2-active cells mirror it, expressing X2's allele at both SNP sets
+    expect_lt(ref_fraction(ref_on_x1, x2_active), 0.2)
+    expect_gt(ref_fraction(!ref_on_x1, x2_active), 0.8)
 })
 
 test_that("xci_haplotypes reports phase and escape fraction per informative SNP", {
@@ -183,25 +242,50 @@ test_that("assign_xci promotes diagnostics into SNPData slots and survives subse
 
     barcode_info <- get_barcode_info(stored)
     snp_info <- get_snp_info(stored)
+    donor_snp_info <- get_donor_snp_info(stored)
     # Check barcode diagnostics were written
-    expect_true(all(c("inactive_x", "xci_post_X1") %in% colnames(barcode_info)))
-    # Check SNP diagnostics were written
-    expect_true(all(c("xci_informative", "xci_allele_on_x1_by_donor", "xci_escape_fraction_by_donor") %in% colnames(snp_info)))
-    # Confirm some SNPs are flagged informative and none are NA
-    expect_true(any(snp_info$xci_informative))
+    expect_true(all(c("active_x", "xci_post_X1_active") %in% colnames(barcode_info)))
+    # Check the per-SNP informative flag was NOT duplicated into snp_info; it
+    # belongs solely to donor_snp_info since informativeness is donor-specific
+    expect_false("xci_informative" %in% colnames(snp_info))
+    # Check per-(SNP, donor) diagnostics were written to donor_snp_info
+    expect_true(all(
+        c("snp_id", "donor", "xci_informative", "allele_on_x1", "xci_escape_fraction") %in%
+            colnames(donor_snp_info)
+    ))
+    # Confirm some (SNP, donor) pairs are flagged informative and none are NA
+    expect_true(any(donor_snp_info$xci_informative))
     # Confirm the informative flag itself is never NA
-    expect_false(any(is.na(snp_info$xci_informative)))
+    expect_false(any(is.na(donor_snp_info$xci_informative)))
+    # Confirm donor_snp_info has one row per informative (SNP, donor) pair
+    expect_equal(nrow(donor_snp_info), sum(donor_snp_info$xci_informative))
 
     # Diagnostics must survive cell subsetting because they live in barcode_info
     subset_cells <- stored[, 1:10]
-    # Verify the inactive_x column is retained after subsetting cells
-    expect_true("inactive_x" %in% colnames(get_barcode_info(subset_cells)))
+    # Verify the active_x column is retained after subsetting cells
+    expect_true("active_x" %in% colnames(get_barcode_info(subset_cells)))
     # Verify barcode_info row count matches the subset size
     expect_equal(nrow(get_barcode_info(subset_cells)), 10)
 
-    # And survive SNP subsetting because they live in snp_info
-    subset_snps <- filter_snps(stored, xci_informative)
-    expect_true(all(get_snp_info(subset_snps)$xci_informative))
+    # And survive SNP subsetting because donor_snp_info rows are restricted
+    # to the kept SNPs
+    informative_snp_ids <- donor_snp_info$snp_id[donor_snp_info$xci_informative]
+    subset_snps <- filter_snps(stored, snp_id %in% informative_snp_ids)
+    # donor_snp_info rows survive SNP subsetting too, restricted to the kept SNPs
+    expect_true(all(get_donor_snp_info(subset_snps)$snp_id %in% get_snp_info(subset_snps)$snp_id))
+})
+
+test_that("assign_xci diagnostics drop a donor's donor_snp_info rows once its cells are gone", {
+    fixture <- make_xci_snpdata(n_donors = 2)
+    stored <- assign_xci(fixture$snpdata, n_inits = 3)
+
+    donor0_cells <- get_barcode_info(stored)$donor == "donor0"
+    subset_obj <- stored[, donor0_cells]
+
+    # Confirm donor1 no longer appears in donor_info
+    expect_false("donor1" %in% get_donor_info(subset_obj)$donor)
+    # Confirm donor1's donor_snp_info rows were dropped along with its cells
+    expect_false("donor1" %in% get_donor_snp_info(subset_obj)$donor)
 })
 
 test_that("accessors and heatmap work on a stored SNPData object", {
@@ -210,7 +294,7 @@ test_that("accessors and heatmap work on a stored SNPData object", {
 
     assignments <- xci_assignments(stored)
     # Verify stored-object assignments expose the annotation columns
-    expect_true(all(c("cell_id", "inactive_x", "xci_post_X1") %in% colnames(assignments)))
+    expect_true(all(c("cell_id", "active_x", "xci_post_X1_active") %in% colnames(assignments)))
 
     haplotypes <- xci_haplotypes(stored)
     # Verify stored-object haplotypes expose donor, phase and escape fraction
@@ -266,7 +350,7 @@ test_that("heatmap show_unassigned = FALSE drops unassigned columns", {
         donor = "donor0",
         show_unassigned = FALSE
     )
-    n_assigned <- sum(!is.na(get_barcode_info(stored)$inactive_x))
+    n_assigned <- sum(!is.na(get_barcode_info(stored)$active_x))
 
     # Check show_unassigned = FALSE drops unassigned columns
     expect_equal(ncol(assigned_only@ht_list[[1]]@matrix), n_assigned)
@@ -317,10 +401,10 @@ test_that("heatmap show_posterior toggles the posterior annotation row", {
     with_names <- names(with_post@ht_list[[1]]@top_annotation@anno_list)
     without_names <- names(without_post@ht_list[[1]]@top_annotation@anno_list)
 
-    # Confirm the posterior_X1 annotation is present by default
-    expect_true("posterior_X1" %in% with_names)
-    # Confirm the posterior_X1 annotation is dropped when show_posterior = FALSE
-    expect_false("posterior_X1" %in% without_names)
+    # Confirm the posterior_X1_active annotation is present by default
+    expect_true("posterior_X1_active" %in% with_names)
+    # Confirm the posterior_X1_active annotation is dropped when show_posterior = FALSE
+    expect_false("posterior_X1_active" %in% without_names)
     # Confirm the assignment annotation is retained either way
     expect_true("assignment" %in% without_names)
 })
@@ -357,11 +441,11 @@ test_that("heatmap distinguishes no-coverage units from low-confidence unassigne
     # Force one cell to look like it was never scored (NA posterior): the model
     # gives it no coverage, distinct from a low-confidence unassigned call.
     bi <- get_barcode_info(stored)
-    bi$inactive_x[1] <- NA
-    bi$xci_post_X1[1] <- NA_real_
+    bi$active_x[1] <- NA
+    bi$xci_post_X1_active[1] <- NA_real_
     stored <- add_barcode_metadata(
         stored,
-        dplyr::select(bi, cell_id, inactive_x, xci_post_X1),
+        dplyr::select(bi, cell_id, active_x, xci_post_X1_active),
         join_by = "cell_id",
         overwrite = TRUE
     )
@@ -468,8 +552,8 @@ test_that("assign_xci_by_clonotype recovers the clonal split and stores diagnost
     # Confirm the inferred groups recover the true clonal split up to a label
     # swap (labels are exchangeable in the model)
     truth <- barcode_info$true_group
-    called <- !is.na(assignments$inactive_x)
-    agree <- mean(assignments$inactive_x[called] == truth[called])
+    called <- !is.na(assignments$active_x)
+    agree <- mean(assignments$active_x[called] == truth[called])
     expect_true(max(agree, 1 - agree) > 0.9)
 })
 
@@ -479,15 +563,15 @@ test_that("confidence_threshold controls how many cells are hard-assigned", {
     strict <- assign_xci(fixture$snpdata, n_inits = 3, confidence_threshold = 0.999)
     lax <- assign_xci(fixture$snpdata, n_inits = 3, confidence_threshold = 0.6)
 
-    n_called_strict <- sum(!is.na(get_barcode_info(strict)$inactive_x))
-    n_called_lax <- sum(!is.na(get_barcode_info(lax)$inactive_x))
+    n_called_strict <- sum(!is.na(get_barcode_info(strict)$active_x))
+    n_called_lax <- sum(!is.na(get_barcode_info(lax)$active_x))
 
     # Verify a looser threshold assigns at least as many cells as a strict one
     expect_gte(n_called_lax, n_called_strict)
 
     # Confirm cells below the strict threshold receive NA rather than a call
-    post <- get_barcode_info(strict)$xci_post_X1
-    unassigned <- is.na(get_barcode_info(strict)$inactive_x)
+    post <- get_barcode_info(strict)$xci_post_X1_active
+    unassigned <- is.na(get_barcode_info(strict)$active_x)
     borderline <- post > 1 - 0.999 & post < 0.999
     # Every cell whose posterior sits inside the strict band must be unassigned
     expect_true(all(unassigned[borderline]))
@@ -503,21 +587,22 @@ test_that("refit_after_filter returns a valid fit and drops escapee genes", {
     # The clonal split must still be recovered after refitting
     assignments <- xci_assignments(stored)
     truth <- get_barcode_info(fixture$snpdata)$true_group
-    called <- !is.na(assignments$inactive_x)
-    agree <- mean(assignments$inactive_x[called] == truth[called])
+    called <- !is.na(assignments$active_x)
+    agree <- mean(assignments$active_x[called] == truth[called])
     # Confirm agreement with the true clonal split still exceeds 90% after refitting
     expect_true(max(agree, 1 - agree) > 0.9)
 
     # The escapee gene (last gene, balanced in every cell) carries no XCI signal
     # and must be filtered out of the informative set by the refit pass
     snp_info <- get_snp_info(stored)
+    donor_snp_info <- get_donor_snp_info(stored)
     escapee_snp <- snp_info$snp_id[snp_info$gene_name == paste0("gene", 20)]
-    escapee_informative <- snp_info$xci_informative[snp_info$snp_id == escapee_snp]
+    escapee_informative <- donor_snp_info$xci_informative[donor_snp_info$snp_id == escapee_snp]
     # Confirm the escapee gene is not marked informative
-    expect_false(isTRUE(escapee_informative))
+    expect_false(any(escapee_informative))
 
     # Confirm genuine XCI genes are still retained
-    expect_true(any(snp_info$xci_informative))
+    expect_true(any(donor_snp_info$xci_informative))
 })
 
 test_that("assign_xci fits each donor independently in a multi-donor object", {
@@ -531,8 +616,8 @@ test_that("assign_xci fits each donor independently in a multi-donor object", {
     # Confirm the clonal split is recovered within each donor (labels are
     # exchangeable per donor, so compare after resolving the swap per donor)
     agreement_rate <- function(donor) {
-        rows <- barcode_info$donor == donor & !is.na(barcode_info$inactive_x)
-        mean(barcode_info$inactive_x[rows] == barcode_info$true_group[rows])
+        rows <- barcode_info$donor == donor & !is.na(barcode_info$active_x)
+        mean(barcode_info$active_x[rows] == barcode_info$true_group[rows])
     }
     agree_donor0 <- agreement_rate("donor0")
     agree_donor1 <- agreement_rate("donor1")
@@ -541,45 +626,4 @@ test_that("assign_xci fits each donor independently in a multi-donor object", {
     expect_true(max(agree_donor0, 1 - agree_donor0) > 0.9)
     # Confirm the clonal split is recovered within donor1
     expect_true(max(agree_donor1, 1 - agree_donor1) > 0.9)
-})
-
-# ==============================================================================
-# Deprecated aliases
-# ==============================================================================
-
-test_that("deprecated aliases warn and forward to their xci replacements", {
-    fixture <- make_xci_snpdata()
-
-    # Verify assign_inactive_x() warns and returns the same result as assign_xci()
-    expect_warning(
-        old_result <- assign_inactive_x(fixture$snpdata, n_inits = 3),
-        "deprecated"
-    )
-    new_result <- assign_xci(fixture$snpdata, n_inits = 3)
-    # Confirm the alias forwards to the new implementation identically
-    expect_equal(
-        xci_assignments(old_result),
-        xci_assignments(new_result)
-    )
-
-    # Confirm assign_inactive_x_by_clonotype() is deprecated in favour of the xci
-    # name (the fixture already carries clonotype assignments)
-    expect_warning(
-        assign_inactive_x_by_clonotype(fixture$snpdata, n_inits = 3),
-        "deprecated"
-    )
-
-    # Verify the heatmap alias warns and still draws
-    stored <- assign_xci(fixture$snpdata, n_inits = 3)
-    # The alias draws a HeatmapList, so send it to a null device to keep the
-    # test headless and avoid leaving an Rplots.pdf behind.
-    grDevices::pdf(NULL)
-    on.exit(grDevices::dev.off(), add = TRUE)
-    # Confirm plot_inactive_x_assignment_heatmap() forwards to plot_xci_heatmap()
-    expect_warning(
-        hm <- plot_inactive_x_assignment_heatmap(stored, donor = "donor0"),
-        "deprecated"
-    )
-    # Ensure the forwarded call returns a drawn heatmap
-    expect_s4_class(hm, "HeatmapList")
 })

@@ -1,12 +1,22 @@
 #' Get donor-level SNP heterozygosity status
 #'
 #' Returns a long-format data frame with heterozygosity status per SNP and donor.
+#' A \code{(snp_id, donor)} pair with a zygosity call already stored in
+#' \code{donor_snp_info} (e.g. from Vireo genotypes read at import) is returned as-is
+#' rather than recomputed, so the same pair's zygosity doesn't silently flip depending
+#' on which chromosomes happen to be loaded alongside it. Pairs with no stored call fall
+#' back to the binomial test as before.
 #'
 #' @param x A SNPData object
 #' @param min_total_count Minimum total read depth (ref + alt) required per donor to test for heterozygosity (default: 10)
 #' @param p_value_threshold P-value threshold for binomial test (default: 0.05). P-values are multiple-testing corrected and SNPs with p < threshold reject monoallelic expression.
 #' @param minor_allele_prop Minor allele proportion used as the null threshold for monoallelic expression testing (default: 0.1).
-#' @return A tibble with columns: snp_id, gene_name, chrom, pos, strand (if available in snp_info), donor, ref_count, alt_count, total_count, ref_ratio, maf, minor_allele_count, p_val, adj_p_val, tested, zygosity
+#' @return A tibble with columns: snp_id, gene_name, chrom, pos, strand (if available in
+#'   snp_info), donor, ref_count, alt_count, total_count, ref_ratio, maf,
+#'   minor_allele_count, p_val, adj_p_val, tested, zygosity, zygosity_source. For a pair
+#'   with a stored call, \code{p_val}/\code{adj_p_val} are \code{NA} (no binomial test was
+#'   run) and \code{zygosity_source} names the origin (e.g. \code{"vireo_gt"}); for a
+#'   binomial-tested pair \code{zygosity_source} is \code{"binomial"}.
 #' @export
 #'
 #' @examples
@@ -44,11 +54,17 @@ donor_het_status_df_impl <- function(
     donor_counts <- donor_count_df(x, test_maf = FALSE) %>%
         dplyr::mutate(tested = total_count >= min_total_count)
 
-    tested_counts <- donor_counts %>%
+    stored_calls <- get_donor_snp_info(x) %>%
+        dplyr::filter(!is.na(zygosity)) %>%
+        dplyr::select(snp_id, donor, zygosity, zygosity_source)
+
+    # Only binomial-test (snp_id, donor) pairs with no stored call.
+    to_test <- donor_counts %>%
+        dplyr::anti_join(stored_calls, by = c("snp_id", "donor")) %>%
         dplyr::filter(tested)
 
-    if (nrow(tested_counts) > 0) {
-        tested_counts <- tested_counts %>%
+    if (nrow(to_test) > 0) {
+        tested_counts <- to_test %>%
             test_maf(p = minor_allele_prop) %>%
             dplyr::select(
                 snp_id,
@@ -58,7 +74,7 @@ donor_het_status_df_impl <- function(
                 adj_p_val
             )
     } else {
-        tested_counts <- donor_counts %>%
+        tested_counts <- to_test %>%
             dplyr::select(snp_id, donor) %>%
             dplyr::mutate(
                 minor_allele_count = NA_real_,
@@ -69,12 +85,20 @@ donor_het_status_df_impl <- function(
 
     donor_counts %>%
         dplyr::left_join(tested_counts, by = c("snp_id", "donor")) %>%
+        dplyr::left_join(stored_calls, by = c("snp_id", "donor")) %>%
         dplyr::mutate(
             zygosity = dplyr::case_when(
+                !is.na(zygosity) ~ zygosity,
                 tested & !is.na(adj_p_val) & adj_p_val < p_value_threshold ~ "het",
                 tested ~ "hom",
                 TRUE ~ "unknown"
-            )
+            ),
+            zygosity_source = dplyr::if_else(
+                is.na(zygosity_source) & zygosity %in% c("het", "hom"),
+                "binomial",
+                zygosity_source
+            ),
+            tested = tested | zygosity %in% c("het", "hom")
         )
 }
 
@@ -123,4 +147,3 @@ get_donor_het_snpdata <- function(snp_data, donor, ...) {
         filter_snps(donor_data, FALSE)
     }
 }
-
