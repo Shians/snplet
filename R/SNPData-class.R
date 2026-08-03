@@ -652,10 +652,14 @@ setMethod(
         if (methods::.hasSlot(object, "chr_style")) {
             cat("Chromosome style:", object@chr_style, "\n")
         }
-        cat("SNP info:", "\n")
+        cat("SNP info (get_snp_info()):", "\n")
         print(object@snp_info)
-        cat("Sample info:", "\n")
+        cat("Barcode info (get_barcode_info()):", "\n")
         print(object@barcode_info)
+        cat("Donor info (get_donor_info()):", "\n")
+        print(get_donor_info(object))
+        cat("Donor SNP info (get_donor_snp_info()):", "\n")
+        print(get_donor_snp_info(object))
     }
 )
 
