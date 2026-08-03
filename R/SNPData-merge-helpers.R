@@ -135,6 +135,92 @@
     tibble::as_tibble(merged)
 }
 
+.merge_donor_info <- function(x, y, donors_retained) {
+    auto_cols <- c("n_cells")
+    donor_info_x <- get_donor_info(x) %>% dplyr::select(-dplyr::any_of(auto_cols))
+    donor_info_y <- get_donor_info(y) %>% dplyr::select(-dplyr::any_of(auto_cols))
+
+    merged <- dplyr::full_join(
+        donor_info_x,
+        donor_info_y,
+        by = "donor",
+        suffix = c(".x", ".y")
+    )
+
+    x_conflicts <- grep("\\.x$", colnames(merged), value = TRUE)
+    for (x_col in x_conflicts) {
+        base_col <- sub("\\.x$", "", x_col)
+        y_col <- paste0(base_col, ".y")
+        merged[[base_col]] <- dplyr::coalesce(merged[[x_col]], merged[[y_col]])
+        merged[[x_col]] <- NULL
+        merged[[y_col]] <- NULL
+    }
+
+    merged <- merged[merged$donor %in% donors_retained, , drop = FALSE]
+    order_idx <- match(donors_retained, merged$donor)
+    if (any(is.na(order_idx))) {
+        stop("Some donors could not be matched during merge_donor_info()")
+    }
+    merged <- merged[order_idx, , drop = FALSE]
+
+    tibble::as_tibble(merged)
+}
+
+# Merging donor_snp_info is not a plain coalesce: the same (snp_id, donor)
+# call disagreeing between x and y on a "hazard" column (zygosity, its
+# source, the XCI phase, or informativeness) is a genuine reproducibility
+# problem and must stop the merge rather than silently pick a side. Numeric
+# estimate columns (p-values, GT posteriors, escape fractions) are exempt:
+# two independently fit/tested values can differ by floating point alone,
+# which is not a hazard, so those keep the x-priority coalesce used
+# elsewhere in this file.
+.merge_donor_snp_info <- function(x, y, snp_ids_retained, donors_retained) {
+    hazard_cols <- c("zygosity", "zygosity_source", "allele_on_x1", "xci_informative")
+
+    dsi_x <- get_donor_snp_info(x)
+    dsi_y <- get_donor_snp_info(y)
+    value_cols <- setdiff(colnames(dsi_x), c("snp_id", "donor"))
+
+    merged <- dplyr::full_join(
+        dsi_x,
+        dsi_y,
+        by = c("snp_id", "donor"),
+        suffix = c(".x", ".y")
+    )
+
+    for (col in value_cols) {
+        x_col <- paste0(col, ".x")
+        y_col <- paste0(col, ".y")
+        if (!all(c(x_col, y_col) %in% colnames(merged))) {
+            next
+        }
+
+        if (col %in% hazard_cols) {
+            conflict <- !is.na(merged[[x_col]]) & !is.na(merged[[y_col]]) & merged[[x_col]] != merged[[y_col]]
+            if (any(conflict)) {
+                conflict_labels <- paste0(merged$snp_id[conflict], "/", merged$donor[conflict])
+                conflict_msg <- paste(head(conflict_labels, 5), collapse = ", ")
+                if (length(conflict_labels) > 5) {
+                    conflict_msg <- paste0(conflict_msg, ", ... (", length(conflict_labels), " conflicts)")
+                }
+                stop(sprintf(
+                    "merge_snpdata(): conflicting '%s' values in donor_snp_info for snp_id/donor %s. %s",
+                    col,
+                    conflict_msg,
+                    "Resolve the disagreement before merging."
+                ))
+            }
+        }
+
+        merged[[col]] <- dplyr::coalesce(merged[[x_col]], merged[[y_col]])
+        merged[[x_col]] <- NULL
+        merged[[y_col]] <- NULL
+    }
+
+    merged <- merged[merged$snp_id %in% snp_ids_retained & merged$donor %in% donors_retained, , drop = FALSE]
+    tibble::as_tibble(merged)
+}
+
 .merge_barcode_info <- function(x, y, barcodes_retained, cell_join) {
     join_fun <- switch(
         cell_join,

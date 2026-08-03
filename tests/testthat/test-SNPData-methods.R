@@ -1908,6 +1908,55 @@ test_that("merge_snpdata intersect/right retains only overlapping SNPs but y cel
     expect_equal(dim(merged), c(1, 2))
 })
 
+test_that("merge_snpdata unions donor_info and donor_snp_info across non-overlapping donors", {
+    data <- create_merge_test_data()
+    x <- add_donor_snp_metadata(
+        data$x,
+        data.frame(snp_id = "snpA", donor = "d1", zygosity = "het", zygosity_source = "vireo_gt")
+    )
+    y <- add_donor_snp_metadata(
+        data$y,
+        data.frame(snp_id = "snpC", donor = "d3", zygosity = "hom", zygosity_source = "vireo_gt")
+    )
+
+    merged <- merge_snpdata(x, y, snp_join = "union", cell_join = "union")
+
+    # Verify both donors' stored calls survived the merge
+    donor_snp_info <- get_donor_snp_info(merged)
+    expect_setequal(donor_snp_info$snp_id, c("snpA", "snpC"))
+    expect_setequal(donor_snp_info$donor, c("d1", "d3"))
+})
+
+test_that("merge_snpdata errors when x and y disagree on a stored zygosity call", {
+    two_donor_barcode_info <- data.frame(
+        cell_id = c("cell1", "cell2"),
+        donor = c("d1", "d1"),
+        stringsAsFactors = FALSE
+    )
+    make_conflicting <- function(zygosity) {
+        SNPData(
+            alt_count = Matrix::Matrix(matrix(c(1, 1), nrow = 1), sparse = TRUE, dimnames = list("snpA", c("cell1", "cell2"))),
+            ref_count = Matrix::Matrix(matrix(c(1, 1), nrow = 1), sparse = TRUE, dimnames = list("snpA", c("cell1", "cell2"))),
+            snp_info = data.frame(snp_id = "snpA"),
+            barcode_info = two_donor_barcode_info,
+            donor_snp_info = data.frame(
+                snp_id = "snpA",
+                donor = "d1",
+                zygosity = zygosity,
+                zygosity_source = "vireo_gt"
+            )
+        )
+    }
+    x <- make_conflicting("het")
+    y <- make_conflicting("hom")
+
+    # Verify a genuine zygosity disagreement for the same (snp_id, donor) aborts the merge
+    expect_error(
+        merge_snpdata(x, y),
+        "conflicting"
+    )
+})
+
 # ==============================================================================
 # Test Suite: donor_het_status_df
 # Description: Tests for filtering heterozygous SNPs based on donor-level biallelic expression
