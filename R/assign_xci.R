@@ -33,6 +33,11 @@
 #' @param refit_after_filter Logical; if TRUE, re-run the EM algorithm after
 #'   filtering genes with inconsistent allelic patterns. Provides sharper
 #'   posteriors on the cleaned gene set. Default FALSE.
+#' @param zygosity_source Character vector of \code{donor_snp_info$zygosity_source} values
+#'   the het-SNP filtering step should trust, or \code{NULL} (default) to trust a stored
+#'   call from any source. See \code{\link{donor_het_status_df}}. Pass \code{character(0)}
+#'   to distrust every stored call and compare a purely binomial-inferred fit against a
+#'   Vireo-genotype-based one on the same object.
 #'
 #' @return SNPData object with an additional \code{active_x} column in
 #'   barcode metadata, with values "X1" or "X2" indicating the inferred
@@ -56,22 +61,35 @@
 #'
 #' # Diagnostics are stored, so plotting works directly
 #' plot_xci_heatmap(snp_data, donor = "donor1")
+#'
+#' # Compare a binomial-inferred fit against the Vireo-genotype-based one
+#' snp_data_binomial <- assign_xci(snp_data, zygosity_source = character(0))
 #' }
-setGeneric("assign_xci", function(x, n_inits = 10, confidence_threshold = 0.95, refit_after_filter = FALSE) {
-    standardGeneric("assign_xci")
-})
+setGeneric(
+    "assign_xci",
+    function(
+        x,
+        n_inits = 10,
+        confidence_threshold = 0.95,
+        refit_after_filter = FALSE,
+        zygosity_source = NULL
+    ) {
+        standardGeneric("assign_xci")
+    }
+)
 
 #' @rdname assign_xci
 #' @include SNPData-class.R
 setMethod(
     "assign_xci",
     signature(x = "SNPData"),
-    function(x, n_inits = 10, confidence_threshold = 0.95, refit_after_filter = FALSE) {
+    function(x, n_inits = 10, confidence_threshold = 0.95, refit_after_filter = FALSE, zygosity_source = NULL) {
         .fit_xci(
             x,
             n_inits = n_inits,
             confidence_threshold = confidence_threshold,
             refit_after_filter = refit_after_filter,
+            zygosity_source = zygosity_source,
             by = "cell"
         )
     }
@@ -116,6 +134,11 @@ setMethod(
 #' @param refit_after_filter Logical; if TRUE, re-run the EM algorithm after
 #'   filtering genes with inconsistent allelic patterns. Provides sharper
 #'   posteriors on the cleaned gene set. Default FALSE.
+#' @param zygosity_source Character vector of \code{donor_snp_info$zygosity_source} values
+#'   the het-SNP filtering step should trust, or \code{NULL} (default) to trust a stored
+#'   call from any source. See \code{\link{donor_het_status_df}}. Pass \code{character(0)}
+#'   to distrust every stored call and compare a purely binomial-inferred fit against a
+#'   Vireo-genotype-based one on the same object.
 #'
 #' @return SNPData object with an additional \code{active_x} column in
 #'   barcode metadata, with values "X1" or "X2" indicating the inferred
@@ -140,10 +163,19 @@ setMethod(
 #'
 #' # Diagnostics are stored, so plotting works directly
 #' plot_xci_heatmap(snp_data, donor = "donor1")
+#'
+#' # Compare a binomial-inferred fit against the Vireo-genotype-based one
+#' snp_data_binomial <- assign_xci_by_clonotype(snp_data, zygosity_source = character(0))
 #' }
 setGeneric(
     "assign_xci_by_clonotype",
-    function(x, n_inits = 10, confidence_threshold = 0.95, refit_after_filter = FALSE) {
+    function(
+        x,
+        n_inits = 10,
+        confidence_threshold = 0.95,
+        refit_after_filter = FALSE,
+        zygosity_source = NULL
+    ) {
         standardGeneric("assign_xci_by_clonotype")
     }
 )
@@ -153,12 +185,13 @@ setGeneric(
 setMethod(
     "assign_xci_by_clonotype",
     signature(x = "SNPData"),
-    function(x, n_inits = 10, confidence_threshold = 0.95, refit_after_filter = FALSE) {
+    function(x, n_inits = 10, confidence_threshold = 0.95, refit_after_filter = FALSE, zygosity_source = NULL) {
         .fit_xci(
             x,
             n_inits = n_inits,
             confidence_threshold = confidence_threshold,
             refit_after_filter = refit_after_filter,
+            zygosity_source = zygosity_source,
             by = "clonotype"
         )
     }
@@ -184,6 +217,9 @@ setMethod(
 #'   assignment.
 #' @param refit_after_filter Logical; if TRUE, re-run the EM algorithm after
 #'   filtering genes with inconsistent allelic patterns.
+#' @param zygosity_source Character vector of \code{donor_snp_info$zygosity_source} values
+#'   the het-SNP filtering step should trust, or \code{NULL} to trust a stored call from
+#'   any source. See \code{\link{donor_het_status_df}}.
 #' @param by Modelling unit, \code{"cell"} or \code{"clonotype"}.
 #'
 #' @return The input SNPData object with diagnostics written into its metadata
@@ -196,6 +232,7 @@ setMethod(
     n_inits = 10,
     confidence_threshold = 0.95,
     refit_after_filter = FALSE,
+    zygosity_source = NULL,
     by = c("cell", "clonotype")
 ) {
     by <- match.arg(by)
@@ -214,7 +251,14 @@ setMethod(
         unique_donors,
         function(dd, d) {
             tryCatch(
-                .fit_xci_donor(dd, n_inits, confidence_threshold, refit_after_filter, by = by),
+                .fit_xci_donor(
+                    dd,
+                    n_inits,
+                    confidence_threshold,
+                    refit_after_filter,
+                    zygosity_source = zygosity_source,
+                    by = by
+                ),
                 error = function(e) {
                     logger::log_warn("Failed to fit XCI for donor {d}: {conditionMessage(e)}")
                     NULL
@@ -768,6 +812,7 @@ setMethod(
     n_inits = 10,
     confidence_threshold = 0.95,
     refit_after_filter = FALSE,
+    zygosity_source = NULL,
     by = c("cell", "clonotype")
 ) {
     by <- match.arg(by)
@@ -779,7 +824,7 @@ setMethod(
         logger::log_info("[{donor}] Fitting XCI model")
     }
 
-    snp_data <- .filter_to_informative_het_snps(snp_data, donor)
+    snp_data <- .filter_to_informative_het_snps(snp_data, donor, zygosity_source = zygosity_source)
 
     # Build the count matrices at the requested modelling unit. For clonotypes,
     # drop cells with no clonotype and aggregate counts within each clonotype.
@@ -966,7 +1011,7 @@ setMethod(
 }
 
 #' @keywords internal
-.filter_to_informative_het_snps <- function(snp_data, donor = NULL) {
+.filter_to_informative_het_snps <- function(snp_data, donor = NULL, zygosity_source = NULL) {
     # Suppress the generic per-filter logs from filter_snps; we emit a single
     # consolidated, donor-labelled summary instead.
     old_threshold <- logger::log_threshold()
@@ -990,7 +1035,7 @@ setMethod(
     n_chrx <- nrow(get_snp_info(snp_data))
 
     het_snp_ids <- snp_data %>%
-        donor_het_status_df() %>%
+        donor_het_status_df(zygosity_source = zygosity_source) %>%
         dplyr::filter(zygosity == "het") %>%
         dplyr::pull(snp_id)
 

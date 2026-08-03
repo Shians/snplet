@@ -209,44 +209,44 @@ test_that("SNPData constructor drops duplicate SNP IDs", {
 
     # Verify correct number of SNPs after deduplication
     expect_equal(nrow(snp_dup), 2)
-    
+
     # Verify correct SNP IDs are retained
     expect_equal(
         get_snp_info(snp_dup)$snp_id,
         c("dup_snp", "unique_snp")
     )
-    
+
     # Verify row names are updated
     expect_equal(
         rownames(ref_count(snp_dup)),
         c("dup_snp", "unique_snp")
     )
-    
+
     # Verify which duplicate was kept (should be first occurrence with pos=100)
     expect_equal(get_snp_info(snp_dup)$pos, c(100, 200))
-    
+
     # Verify count matrices match the kept SNPs
     # First row should be from first dup_snp (values 1, 2 for alt)
     expect_equal(
-        as.vector(alt_count(snp_dup)[1,]),
+        as.vector(alt_count(snp_dup)[1, ]),
         c(1, 2)
     )
-    
+
     # First row should be from first dup_snp (values 5, 6 for ref)
     expect_equal(
-        as.vector(ref_count(snp_dup)[1,]),
+        as.vector(ref_count(snp_dup)[1, ]),
         c(5, 6)
     )
-    
+
     # Second row should be unique_snp (values 5, 6 for alt)
     expect_equal(
-        as.vector(alt_count(snp_dup)[2,]),
+        as.vector(alt_count(snp_dup)[2, ]),
         c(5, 6)
     )
-    
+
     # Second row should be unique_snp (values 9, 10 for ref)
     expect_equal(
-        as.vector(ref_count(snp_dup)[2,]),
+        as.vector(ref_count(snp_dup)[2, ]),
         c(9, 10)
     )
 })
@@ -1297,8 +1297,10 @@ create_merge_test_data <- function() {
     alt_x <- Matrix::Matrix(
         matrix(
             c(
-                1, 0, # snpA
-                0, 2  # snpB
+                1,
+                0, # snpA
+                0,
+                2 # snpB
             ),
             nrow = 2,
             ncol = 2,
@@ -1308,8 +1310,10 @@ create_merge_test_data <- function() {
     ref_x <- Matrix::Matrix(
         matrix(
             c(
-                3, 0, # snpA
-                1, 1  # snpB
+                3,
+                0, # snpA
+                1,
+                1 # snpB
             ),
             nrow = 2,
             ncol = 2,
@@ -1319,8 +1323,10 @@ create_merge_test_data <- function() {
     alt_y <- Matrix::Matrix(
         matrix(
             c(
-                1, 0, # snpB
-                2, 1  # snpC
+                1,
+                0, # snpB
+                2,
+                1 # snpC
             ),
             nrow = 2,
             ncol = 2,
@@ -1330,8 +1336,10 @@ create_merge_test_data <- function() {
     ref_y <- Matrix::Matrix(
         matrix(
             c(
-                0, 2, # snpB
-                1, 1  # snpC
+                0,
+                2, # snpB
+                1,
+                1 # snpC
             ),
             nrow = 2,
             ncol = 2,
@@ -1380,8 +1388,10 @@ create_barcode_merge_test_data <- function() {
     alt_x <- Matrix::Matrix(
         matrix(
             c(
-                1, 0, # snpA
-                0, 2  # snpB
+                1,
+                0, # snpA
+                0,
+                2 # snpB
             ),
             nrow = 2,
             ncol = 2,
@@ -1391,8 +1401,10 @@ create_barcode_merge_test_data <- function() {
     ref_x <- Matrix::Matrix(
         matrix(
             c(
-                3, 1, # snpA
-                1, 1  # snpB
+                3,
+                1, # snpA
+                1,
+                1 # snpB
             ),
             nrow = 2,
             ncol = 2,
@@ -1402,8 +1414,10 @@ create_barcode_merge_test_data <- function() {
     alt_y <- Matrix::Matrix(
         matrix(
             c(
-                1, 2, # snpA
-                1, 0  # snpB
+                1,
+                2, # snpA
+                1,
+                0 # snpB
             ),
             nrow = 2,
             ncol = 2,
@@ -1413,8 +1427,10 @@ create_barcode_merge_test_data <- function() {
     ref_y <- Matrix::Matrix(
         matrix(
             c(
-                0, 2, # snpA
-                0, 3  # snpB
+                0,
+                2, # snpA
+                0,
+                3 # snpB
             ),
             nrow = 2,
             ncol = 2,
@@ -1471,9 +1487,15 @@ test_that("merge_snpdata union/union retains all SNPs and cells", {
     expected_ref <- Matrix::Matrix(
         matrix(
             c(
-                3, 1, 0, # snpA: from x only
-                0, 1, 1, # snpB: cell1 from x, cell2 from x+y (1+0), cell3 from y
-                0, 2, 1  # snpC: from y only
+                3,
+                1,
+                0, # snpA: from x only
+                0,
+                1,
+                1, # snpB: cell1 from x, cell2 from x+y (1+0), cell3 from y
+                0,
+                2,
+                1 # snpC: from y only
             ),
             nrow = 3,
             ncol = 3,
@@ -1488,9 +1510,15 @@ test_that("merge_snpdata union/union retains all SNPs and cells", {
     expected_alt <- Matrix::Matrix(
         matrix(
             c(
-                1, 0, 0, # snpA: from x only
-                0, 3, 2, # snpB: cell1 from x, cell2 from x+y (2+1), cell3 from y
-                0, 0, 1  # snpC: from y only
+                1,
+                0,
+                0, # snpA: from x only
+                0,
+                3,
+                2, # snpB: cell1 from x, cell2 from x+y (2+1), cell3 from y
+                0,
+                0,
+                1 # snpC: from y only
             ),
             nrow = 3,
             ncol = 3,
@@ -1719,8 +1747,10 @@ test_that("merge_snpdata left/left retains all SNPs and cells from x only", {
     expected_ref <- Matrix::Matrix(
         matrix(
             c(
-                3, 1, # snpA: from x only
-                0, 1  # snpB: cell1 from x, cell2 from x+y (1+0)
+                3,
+                1, # snpA: from x only
+                0,
+                1 # snpB: cell1 from x, cell2 from x+y (1+0)
             ),
             nrow = 2,
             ncol = 2,
@@ -1731,8 +1761,10 @@ test_that("merge_snpdata left/left retains all SNPs and cells from x only", {
     expected_alt <- Matrix::Matrix(
         matrix(
             c(
-                1, 0, # snpA: from x only
-                0, 3  # snpB: cell1 from x, cell2 from x+y (2+1)
+                1,
+                0, # snpA: from x only
+                0,
+                3 # snpB: cell1 from x, cell2 from x+y (2+1)
             ),
             nrow = 2,
             ncol = 2,
@@ -1787,8 +1819,10 @@ test_that("merge_snpdata right/right retains all SNPs and cells from y only", {
     expected_ref <- Matrix::Matrix(
         matrix(
             c(
-                1, 1, # snpB: cell2 from x+y (1+0), cell3 from y
-                2, 1  # snpC: from y only
+                1,
+                1, # snpB: cell2 from x+y (1+0), cell3 from y
+                2,
+                1 # snpC: from y only
             ),
             nrow = 2,
             ncol = 2,
@@ -1799,8 +1833,10 @@ test_that("merge_snpdata right/right retains all SNPs and cells from y only", {
     expected_alt <- Matrix::Matrix(
         matrix(
             c(
-                3, 2, # snpB: cell2 from x+y (2+1), cell3 from y
-                0, 1  # snpC: from y only
+                3,
+                2, # snpB: cell2 from x+y (2+1), cell3 from y
+                0,
+                1 # snpC: from y only
             ),
             nrow = 2,
             ncol = 2,
@@ -1935,8 +1971,16 @@ test_that("merge_snpdata errors when x and y disagree on a stored zygosity call"
     )
     make_conflicting <- function(zygosity) {
         SNPData(
-            alt_count = Matrix::Matrix(matrix(c(1, 1), nrow = 1), sparse = TRUE, dimnames = list("snpA", c("cell1", "cell2"))),
-            ref_count = Matrix::Matrix(matrix(c(1, 1), nrow = 1), sparse = TRUE, dimnames = list("snpA", c("cell1", "cell2"))),
+            alt_count = Matrix::Matrix(
+                matrix(c(1, 1), nrow = 1),
+                sparse = TRUE,
+                dimnames = list("snpA", c("cell1", "cell2"))
+            ),
+            ref_count = Matrix::Matrix(
+                matrix(c(1, 1), nrow = 1),
+                sparse = TRUE,
+                dimnames = list("snpA", c("cell1", "cell2"))
+            ),
             snp_info = data.frame(snp_id = "snpA"),
             barcode_info = two_donor_barcode_info,
             donor_snp_info = data.frame(
@@ -1972,10 +2016,22 @@ create_heterozygous_test_data <- function() {
     alt_count <- Matrix::Matrix(
         matrix(
             c(
-                5, 1, 5, 1,  # cell1 (donor1): snp1, snp2, snp3, snp4
-                5, 1, 5, 2,  # cell2 (donor1)
-                5, 1, 5, 3,  # cell3 (donor2)
-                5, 1, 5, 4   # cell4 (donor2)
+                5,
+                1,
+                5,
+                1, # cell1 (donor1): snp1, snp2, snp3, snp4
+                5,
+                1,
+                5,
+                2, # cell2 (donor1)
+                5,
+                1,
+                5,
+                3, # cell3 (donor2)
+                5,
+                1,
+                5,
+                4 # cell4 (donor2)
             ),
             nrow = 4,
             ncol = 4,
@@ -1986,10 +2042,22 @@ create_heterozygous_test_data <- function() {
     ref_count <- Matrix::Matrix(
         matrix(
             c(
-                5, 9, 5, 0,  # cell1 (donor1)
-                5, 9, 5, 1,  # cell2 (donor1)
-                5, 9, 5, 2,  # cell3 (donor2)
-                5, 9, 5, 3   # cell4 (donor2)
+                5,
+                9,
+                5,
+                0, # cell1 (donor1)
+                5,
+                9,
+                5,
+                1, # cell2 (donor1)
+                5,
+                9,
+                5,
+                2, # cell3 (donor2)
+                5,
+                9,
+                5,
+                3 # cell4 (donor2)
             ),
             nrow = 4,
             ncol = 4,
@@ -2098,6 +2166,47 @@ test_that("donor_het_status_df returns a stored zygosity call as-is instead of r
     expect_true(is.na(snp2_d1$p_val))
     # Verify a pair with no stored call still falls back to the binomial test
     expect_equal(snp1_d1$zygosity_source, "binomial")
+})
+
+test_that("donor_het_status_df(zygosity_source = character(0)) ignores every stored call", {
+    snp_data <- create_heterozygous_test_data()
+    # Same contradicting stored call as above: snp2/donor1 would binomial-test
+    # as homozygous, but is stashed as a stored "het" call.
+    snp_data <- add_donor_snp_metadata(
+        snp_data,
+        data.frame(snp_id = "snp2", donor = "donor1", zygosity = "het", zygosity_source = "vireo_gt")
+    )
+
+    status_df <- donor_het_status_df(snp_data, min_total_count = 10, zygosity_source = character(0))
+    snp2_d1 <- status_df %>% dplyr::filter(snp_id == "snp2", donor == "donor1")
+
+    # Verify the stored call is ignored and the binomial test's "hom" result stands
+    expect_equal(snp2_d1$zygosity, "hom")
+    # Verify its source is reported as binomial, not the stored source
+    expect_equal(snp2_d1$zygosity_source, "binomial")
+    # Verify the binomial test was actually run for this pair
+    expect_false(is.na(snp2_d1$p_val))
+})
+
+test_that("donor_het_status_df(zygosity_source = ) trusts only the named source", {
+    snp_data <- create_heterozygous_test_data()
+    snp_data <- add_donor_snp_metadata(
+        snp_data,
+        data.frame(snp_id = "snp2", donor = "donor1", zygosity = "het", zygosity_source = "vireo_gt")
+    )
+
+    # Naming the actual stored source still trusts the call
+    trusted <- donor_het_status_df(snp_data, min_total_count = 10, zygosity_source = "vireo_gt")
+    snp2_d1_trusted <- trusted %>% dplyr::filter(snp_id == "snp2", donor == "donor1")
+    # Verify the stored call is used when its source is explicitly named
+    expect_equal(snp2_d1_trusted$zygosity, "het")
+
+    # Naming a source that isn't the one stored distrusts the call
+    distrusted <- donor_het_status_df(snp_data, min_total_count = 10, zygosity_source = "bulk_wgs")
+    snp2_d1_distrusted <- distrusted %>% dplyr::filter(snp_id == "snp2", donor == "donor1")
+    # Verify the stored call is ignored when its source doesn't match
+    expect_equal(snp2_d1_distrusted$zygosity, "hom")
+    expect_equal(snp2_d1_distrusted$zygosity_source, "binomial")
 })
 
 test_that("get_donor_het_snpdata returns heterozygous SNPs for a donor", {

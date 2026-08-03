@@ -627,3 +627,31 @@ test_that("assign_xci fits each donor independently in a multi-donor object", {
     # Confirm the clonal split is recovered within donor1
     expect_true(max(agree_donor1, 1 - agree_donor1) > 0.9)
 })
+
+test_that("zygosity_source controls whether the het-SNP filter trusts a stored zygosity call", {
+    fixture <- make_xci_snpdata(n_genes = 3, n_cells_per_group = 20, seed = 42)
+    snp_info <- get_snp_info(fixture$snpdata)
+    target_snp <- snp_info$snp_id[1]
+
+    # Stash a stored call claiming this genuinely-heterozygous SNP is homozygous
+    # in donor0, contradicting what the binomial test would find.
+    snp_data <- add_donor_snp_metadata(
+        fixture$snpdata,
+        data.frame(snp_id = target_snp, donor = "donor0", zygosity = "hom", zygosity_source = "vireo_gt")
+    )
+
+    trusting_stored <- assign_xci(snp_data, n_inits = 3)
+    informative_trusting <- get_donor_snp_info(trusting_stored) %>%
+        dplyr::filter(snp_id == target_snp, xci_informative) %>%
+        nrow()
+    # Verify the stored "hom" call excludes the SNP from the het-SNP filter by default
+    expect_equal(informative_trusting, 0)
+
+    ignoring_stored <- assign_xci(snp_data, n_inits = 3, zygosity_source = character(0))
+    informative_ignoring <- get_donor_snp_info(ignoring_stored) %>%
+        dplyr::filter(snp_id == target_snp, xci_informative) %>%
+        nrow()
+    # Verify zygosity_source = character(0) ignores every stored call, so the binomial
+    # test (correctly finding the SNP heterozygous) lets it back into the fit
+    expect_equal(informative_ignoring, 1)
+})

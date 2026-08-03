@@ -11,6 +11,12 @@
 #' @param min_total_count Minimum total read depth (ref + alt) required per donor to test for heterozygosity (default: 10)
 #' @param p_value_threshold P-value threshold for binomial test (default: 0.05). P-values are multiple-testing corrected and SNPs with p < threshold reject monoallelic expression.
 #' @param minor_allele_prop Minor allele proportion used as the null threshold for monoallelic expression testing (default: 0.1).
+#' @param zygosity_source Character vector of \code{donor_snp_info$zygosity_source} values
+#'   to trust, or \code{NULL} (default) to trust a stored call from any source. Pass
+#'   \code{character(0)} to distrust every stored call and force every pair through the
+#'   binomial test -- e.g. to compare a Vireo-genotype-based analysis against a
+#'   binomial-inferred one on the same object. Pass a specific source (e.g.
+#'   \code{"vireo_gt"}) to trust only that source once more than one is in use.
 #' @return A tibble with columns: snp_id, gene_name, chrom, pos, strand (if available in
 #'   snp_info), donor, ref_count, alt_count, total_count, ref_ratio, maf,
 #'   minor_allele_count, p_val, adj_p_val, tested, zygosity, zygosity_source. For a pair
@@ -23,6 +29,9 @@
 #' \dontrun{
 #' snp_data <- get_example_snpdata()
 #' donor_het_status_df(snp_data)
+#'
+#' # Compare a Vireo-genotype-based analysis against a binomial-inferred one
+#' donor_het_status_df(snp_data, zygosity_source = character(0))
 #' }
 #' @rdname donor_het_status_df
 setGeneric(
@@ -31,7 +40,8 @@ setGeneric(
         x,
         min_total_count = 10,
         p_value_threshold = 0.05,
-        minor_allele_prop = 0.1
+        minor_allele_prop = 0.1,
+        zygosity_source = NULL
     ) {
         standardGeneric("donor_het_status_df")
     }
@@ -41,7 +51,8 @@ donor_het_status_df_impl <- function(
     x,
     min_total_count = 10,
     p_value_threshold = 0.05,
-    minor_allele_prop = 0.1
+    minor_allele_prop = 0.1,
+    zygosity_source = NULL
 ) {
     old_threshold <- logger::log_threshold()
     logger::log_threshold(logger::WARN)
@@ -55,10 +66,13 @@ donor_het_status_df_impl <- function(
         dplyr::mutate(tested = total_count >= min_total_count)
 
     stored_calls <- get_donor_snp_info(x) %>%
-        dplyr::filter(!is.na(zygosity)) %>%
-        dplyr::select(snp_id, donor, zygosity, zygosity_source)
+        dplyr::select(snp_id, donor, zygosity, zygosity_source) %>%
+        dplyr::filter(!is.na(zygosity))
+    if (!is.null(zygosity_source)) {
+        stored_calls <- dplyr::filter(stored_calls, zygosity_source %in% !!zygosity_source)
+    }
 
-    # Only binomial-test (snp_id, donor) pairs with no stored call.
+    # Only binomial-test (snp_id, donor) pairs with no trusted stored call.
     to_test <- donor_counts %>%
         dplyr::anti_join(stored_calls, by = c("snp_id", "donor")) %>%
         dplyr::filter(tested)
