@@ -92,8 +92,10 @@ snp_data_binomial <- assign_xci_by_clonotype(snp_data, zygosity_source = charact
 }
 \seealso{
 Other X-chromosome inactivation functions:
+\code{\link[=add_molecule_phase]{add_molecule_phase()}},
 \code{\link[=assign_xci]{assign_xci()}},
 \code{\link[=haplotype_expression]{haplotype_expression()}},
+\code{\link[=haplotype_expression_by_molecule]{haplotype_expression_by_molecule()}},
 \code{\link[=plot_xci_heatmap]{plot_xci_heatmap()}},
 \code{\link[=xci_assignments]{xci_assignments()}},
 \code{\link[=xci_haplotypes]{xci_haplotypes()}}

@@ -194,3 +194,193 @@ setMethod(
         result
     }
 )
+
+#' Phased active/inactive haplotype expression per gene, pooling molecules across SNPs
+#'
+#' Counts each molecule once per gene regardless of how many of the gene's
+#' heterozygous SNPs it covers, unlike \code{\link{haplotype_expression}}
+#' (which reports one row per SNP): summing that function's per-SNP counts
+#' back up to a gene total would recreate the multi-SNP-per-molecule
+#' over-count read-backed phasing exists to remove, since a molecule
+#' spanning several of a gene's SNPs would cast one independent vote per row
+#' again. Pooling instead at the molecule level, within the gene's
+#' best-supported phase block, is what actually increases usable evidence
+#' per gene -- the motivation being genes like escapees with many SNPs
+#' (e.g. PRKX, 292 SNPs) that \code{assign_xci}'s EM reduces to a single
+#' representative SNP.
+#'
+#' @details
+#' A gene's heterozygous SNPs can fall into more than one read-backed phase
+#' block (\code{\link{phase_snps}}) when no single molecule spans all of
+#' them -- most commonly a spliced/unspliced boundary, since a mature mRNA
+#' and its unspliced precursor rarely share a molecule. For each
+#' (\code{gene_name}, \code{donor}), only the block backed by the most
+#' distinct molecules is pooled; molecules whose SNPs fall in any other
+#' block for the same gene are real evidence but cannot be pooled with the
+#' dominant block's haplotype labels (their phase has no established
+#' relationship to it), so they are reported as \code{n_stranded_molecules}
+#' rather than dropped silently.
+#'
+#' A molecule's haplotype is called by majority vote across the SNPs it
+#' covers within the dominant block only (a tie is base-calling noise, once
+#' phase is accounted for, and is dropped as \code{"ambiguous"}). Only genes
+#' with a stored, resolved \code{allele_on_x1} and \code{phase_block} (i.e.
+#' processed by \code{\link{add_molecule_phase}}) contribute. A gene whose
+#' only heterozygous SNP could not be linked to any other by
+#' \code{\link{phase_snps}} still contributes here if that SNP already has
+#' an EM-derived phase from \code{\link{assign_xci}}: \code{\link{add_molecule_phase}}
+#' gives it its own singleton block, so a single-SNP gene benefits from
+#' correct molecule-level (rather than read-level) counting too. Only a
+#' single-SNP gene with \emph{no} EM-derived phase at all (never selected by
+#' \code{assign_xci}'s per-gene SNP pick) has no way to be oriented and is
+#' left to \code{haplotype_expression}, which already handles a single SNP
+#' correctly.
+#'
+#' @param x A SNPData object that has had XCI diagnostics stored by
+#'   \code{\link{assign_xci}} (or \code{\link{assign_xci_by_clonotype}}) and
+#'   subsequently had read-backed phase added by
+#'   \code{\link{add_molecule_phase}}.
+#' @param molecule_calls A tibble with columns \code{donor}, \code{barcode},
+#'   \code{umi}, \code{snp_id}, \code{allele} -- the union, across every
+#'   donor, of \code{\link{molecule_snp_alleles}}'s output (bind rows and add
+#'   a \code{donor} column).
+#' @param snp_gene_map A tibble with columns \code{snp_id}, \code{gene_name},
+#'   as returned by \code{\link{assign_snp_genes}} -- SNPs overlapping more
+#'   than one gene are already excluded there, and are never double-counted
+#'   here.
+#' @param escape_threshold Inactive-haplotype fraction at or above which a
+#'   group is flagged as escaping. Default 0.1.
+#'
+#' @return A tibble with one row per (\code{gene_name}, \code{donor},
+#'   \code{active_x}) triple, with columns \code{donor}, \code{gene_name},
+#'   \code{active_x} (the expressed X, "X1" or "X2"), \code{active_count},
+#'   \code{inactive_count}, \code{coverage}, \code{escape_fraction}
+#'   (\code{inactive_count / coverage}), \code{escapes}
+#'   (\code{escape_fraction >= escape_threshold}), \code{phase_block_used}
+#'   (the phase block whose molecules were pooled), \code{dominant_molecules}
+#'   (molecules backing the pooled block), and \code{n_stranded_molecules}
+#'   (molecules of the same gene in a different, unpooled block).
+#'
+#' @family X-chromosome inactivation functions
+#' @export
+#'
+#' @examples
+#' \dontrun{
+#' snp_data <- assign_xci(snp_data)
+#' snp_data <- add_molecule_phase(snp_data, bam_files = c(donor0 = "donor0.bam"))
+#' hap <- haplotype_expression_by_molecule(snp_data, molecule_calls, snp_gene_map)
+#' }
+setGeneric(
+    "haplotype_expression_by_molecule",
+    function(x, molecule_calls, snp_gene_map, escape_threshold = 0.1) {
+        standardGeneric("haplotype_expression_by_molecule")
+    }
+)
+
+#' @rdname haplotype_expression_by_molecule
+#' @include SNPData-class.R
+setMethod(
+    "haplotype_expression_by_molecule",
+    signature(x = "SNPData"),
+    function(x, molecule_calls, snp_gene_map, escape_threshold = 0.1) {
+        barcode_info <- get_barcode_info(x)
+        donor_snp_info <- get_donor_snp_info(x)
+
+        if (!"active_x" %in% colnames(barcode_info) || !.has_xci_diagnostics(x)) {
+            stop("No stored XCI diagnostics found. Run assign_xci(x) first.")
+        }
+        if (!all(c("phase_block", "allele_on_x1") %in% colnames(donor_snp_info))) {
+            stop("No stored molecule phase found. Run add_molecule_phase(x) first.")
+        }
+        required_call_cols <- c("donor", "barcode", "umi", "snp_id", "allele")
+        missing_call_cols <- setdiff(required_call_cols, colnames(molecule_calls))
+        if (length(missing_call_cols) > 0) {
+            stop("molecule_calls is missing required column(s): ", paste(missing_call_cols, collapse = ", "))
+        }
+        required_gene_cols <- c("snp_id", "gene_name")
+        missing_gene_cols <- setdiff(required_gene_cols, colnames(snp_gene_map))
+        if (length(missing_gene_cols) > 0) {
+            stop("snp_gene_map is missing required column(s): ", paste(missing_gene_cols, collapse = ", "))
+        }
+
+        phase <- donor_snp_info %>%
+            dplyr::filter(!is.na(allele_on_x1), !is.na(phase_block)) %>%
+            dplyr::select(snp_id, donor, allele_on_x1, phase_block)
+
+        # is_x1: whether this molecule's allele at this SNP is the one the
+        # resolved phase names as sitting on X1 -- the gene-level analogue of
+        # haplotype_expression()'s per-SNP active/inactive split.
+        calls <- molecule_calls %>%
+            dplyr::inner_join(phase, by = c("snp_id", "donor")) %>%
+            dplyr::inner_join(snp_gene_map, by = "snp_id") %>%
+            dplyr::mutate(is_x1 = allele == allele_on_x1)
+
+        if (nrow(calls) == 0) {
+            stop("No molecule calls could be matched to a phased, singly-mapped-gene SNP.")
+        }
+
+        blocks <- calls %>%
+            dplyr::distinct(donor, gene_name, phase_block, barcode, umi) %>%
+            dplyr::count(donor, gene_name, phase_block, name = "molecules")
+        best_block <- blocks %>%
+            dplyr::slice_max(molecules, n = 1, by = c(donor, gene_name), with_ties = FALSE) %>%
+            dplyr::select(donor, gene_name, phase_block, dominant_molecules = molecules)
+        stranded <- blocks %>%
+            dplyr::anti_join(best_block, by = c("donor", "gene_name", "phase_block")) %>%
+            dplyr::summarise(n_stranded_molecules = sum(molecules), .by = c(donor, gene_name))
+
+        # A molecule votes across every SNP it covers within the dominant block
+        # only; majority wins, a tie is ambiguous (residual base-calling noise
+        # once phase is accounted for) and dropped rather than guessed.
+        molecules <- calls %>%
+            dplyr::semi_join(best_block, by = c("donor", "gene_name", "phase_block")) %>%
+            dplyr::summarise(n_x1 = sum(is_x1), n_x2 = sum(!is_x1), .by = c(donor, gene_name, barcode, umi)) %>%
+            dplyr::mutate(
+                haplotype = dplyr::case_when(n_x1 > n_x2 ~ "X1", n_x2 > n_x1 ~ "X2", TRUE ~ "ambiguous")
+            ) %>%
+            dplyr::filter(haplotype != "ambiguous")
+
+        cell_groups <- barcode_info %>%
+            dplyr::filter(active_x %in% c("X1", "X2")) %>%
+            dplyr::select(barcode, donor, active_x)
+
+        # Pool molecules per (donor, gene, active-X group): active_count is
+        # molecules landing on the haplotype the group's own active_x names,
+        # inactive_count the other -- the same convention as
+        # haplotype_expression()'s summarise_group().
+        counts <- molecules %>%
+            dplyr::inner_join(cell_groups, by = c("donor", "barcode")) %>%
+            dplyr::summarise(
+                n_x1 = sum(haplotype == "X1"),
+                n_x2 = sum(haplotype == "X2"),
+                .by = c(donor, gene_name, active_x)
+            ) %>%
+            dplyr::mutate(
+                active_count = dplyr::if_else(active_x == "X1", n_x1, n_x2),
+                inactive_count = dplyr::if_else(active_x == "X1", n_x2, n_x1),
+                coverage = active_count + inactive_count
+            ) %>%
+            dplyr::select(donor, gene_name, active_x, active_count, inactive_count, coverage)
+
+        # Every (donor, gene) gets both active_x groups reported, even one with
+        # zero molecules, so a completely silenced haplotype reads as coverage
+        # zero rather than being silently absent from the output.
+        tidyr::expand_grid(
+            dplyr::distinct(counts, donor, gene_name),
+            active_x = c("X1", "X2")
+        ) %>%
+            dplyr::left_join(counts, by = c("donor", "gene_name", "active_x")) %>%
+            dplyr::mutate(
+                active_count = dplyr::coalesce(active_count, 0L),
+                inactive_count = dplyr::coalesce(inactive_count, 0L),
+                coverage = dplyr::coalesce(coverage, 0L),
+                escape_fraction = dplyr::if_else(coverage > 0, inactive_count / coverage, NA_real_),
+                escapes = escape_fraction >= escape_threshold
+            ) %>%
+            dplyr::left_join(best_block, by = c("donor", "gene_name")) %>%
+            dplyr::left_join(stranded, by = c("donor", "gene_name")) %>%
+            dplyr::mutate(n_stranded_molecules = dplyr::coalesce(n_stranded_molecules, 0L)) %>%
+            dplyr::rename(phase_block_used = phase_block) %>%
+            dplyr::arrange(donor, gene_name, active_x)
+    }
+)

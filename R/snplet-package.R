@@ -10,7 +10,7 @@
 #' @importFrom glue glue
 #' @importFrom stringr str_remove str_to_title str_detect str_escape str_split_fixed
 #' @importFrom methods as is new setClass setGeneric setMethod show
-#' @importFrom BiocGenerics nrow ncol rownames colnames updateObject
+#' @importFrom BiocGenerics nrow ncol rownames colnames updateObject start end
 #' @importFrom magrittr %>%
 #' @importFrom ggplot2 ggplot aes geom_density scale_y_continuous scale_x_log10
 #' @importFrom ggplot2 geom_segment scale_x_continuous theme_void theme
@@ -28,7 +28,15 @@
 #' @importFrom grid unit
 #' @importFrom VGAM dbetabinom
 #' @importFrom stats median quantile p.adjust pbeta setNames cor as.dist hclust cutree dist mad na.omit
-#' @importFrom utils head
+#' @importFrom utils head combn write.table
 #' @importFrom DelayedArray colsum
 #' @importFrom mclust Mclust predict.Mclust
+#' @importFrom Rsamtools ScanBamParam scanBamFlag
+#' @importFrom GenomicAlignments readGAlignments cigar cigarRangesAlongReferenceSpace
+#' @importFrom GenomicAlignments cigarRangesAlongQuerySpace
+#' @importFrom GenomicRanges reduce
+#' @importFrom Seqinfo seqnames seqlevels "seqlevels<-"
+#' @importFrom IRanges IRanges findOverlaps PartitioningByWidth togroup
+#' @importFrom S4Vectors mcols queryHits subjectHits
+#' @importFrom Biostrings subseq
 NULL

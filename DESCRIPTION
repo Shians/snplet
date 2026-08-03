@@ -22,13 +22,17 @@ Depends:
     Matrix
 Imports:
     BiocGenerics,
+    Biostrings,
     DelayedArray,
     dplyr,
     fs,
+    GenomicAlignments,
+    GenomicRanges,
     ggplot2,
     ggrepel,
     glue,
     grid,
+    IRanges,
     logger,
     magrittr,
     mclust,
@@ -39,6 +43,9 @@ Imports:
     R.utils,
     readr,
     rlang,
+    Rsamtools,
+    S4Vectors,
+    Seqinfo,
     scales,
     stringr,
     tibble,
@@ -49,6 +56,8 @@ Imports:
 Suggests:
     testthat,
     withr
+SystemRequirements: samtools (optional; accelerates extract_snp_calls() when
+    on PATH, otherwise falls back to pure Rsamtools/GenomicAlignments)
 License: Apache License (>= 2)
 Encoding: UTF-8
 LazyData: false
@@ -70,6 +79,7 @@ Collate:
     'add_snp_gene_names.R'
     'assign_xci.R'
     'haplotype_expression.R'
+    'molecule_phasing.R'
     'plots.R'
     'plotting.R'
     'remove.R'
