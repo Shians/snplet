@@ -297,9 +297,12 @@ test_that("get_sample_info() returns same result as get_barcode_info()", {
 test_that("barcode_info<- replaces barcode_info with valid data", {
     snp_data <- create_test_snpdata()
 
+    # donor is left unchanged (donor_1, matching test_barcode_info): once
+    # donor_info carries data, barcode_info<- rejects changing 'donor' -- see
+    # the dedicated tests below for that restriction.
     new_barcode_info <- data.frame(
         cell_id = c("cell_1", "cell_2"),
-        donor = c("donor_2", "donor_2"),
+        donor = c("donor_1", "donor_1"),
         clonotype = c("clonotype_3", "clonotype_4"),
         stringsAsFactors = FALSE
     )
@@ -307,7 +310,7 @@ test_that("barcode_info<- replaces barcode_info with valid data", {
     barcode_info(snp_data) <- new_barcode_info
 
     # Verify barcode_info was updated
-    expect_equal(get_barcode_info(snp_data)$donor, c("donor_2", "donor_2"))
+    expect_equal(get_barcode_info(snp_data)$donor, c("donor_1", "donor_1"))
     # Verify clonotype was updated
     expect_equal(get_barcode_info(snp_data)$clonotype, c("clonotype_3", "clonotype_4"))
 })
@@ -418,4 +421,279 @@ test_that("snp_info<- throws error when snp_id doesn't match matrix row names", 
         snp_info(snp_data) <- mismatched_snp_id,
         "snp_info\\$snp_id must match row names of count matrices"
     )
+})
+
+test_that("get_donor_info() auto-derives one row per distinct donor in barcode_info", {
+    snp_data <- create_test_snpdata()
+
+    # Verify the single donor in test_barcode_info produces one donor_info row
+    expect_equal(get_donor_info(snp_data)$donor, "donor_1")
+})
+
+test_that("get_donor_snp_info() defaults to an empty tibble with the expected columns", {
+    snp_data <- create_test_snpdata()
+
+    donor_snp_info <- get_donor_snp_info(snp_data)
+    # Verify no rows are present before any donor-level data has been added
+    expect_equal(nrow(donor_snp_info), 0)
+    # Verify the schema is already in place for later writers to join against
+    expect_true(all(c("snp_id", "donor", "zygosity", "zygosity_source") %in% colnames(donor_snp_info)))
+})
+
+test_that("SNPData() throws error when donor_snp_info has duplicate (snp_id, donor) rows", {
+    duplicate_donor_snp_info <- data.frame(
+        snp_id = c("snp_1", "snp_1"),
+        donor = c("donor_1", "donor_1"),
+        zygosity = c("het", "hom")
+    )
+
+    # Verify validity rejects a duplicate key in donor_snp_info
+    expect_error(
+        SNPData(
+            ref_count = test_ref_count,
+            alt_count = test_alt_count,
+            snp_info = test_snp_info,
+            barcode_info = test_barcode_info,
+            donor_snp_info = duplicate_donor_snp_info
+        ),
+        "duplicate"
+    )
+})
+
+test_that("SNPData() throws error when donor_snp_info references an unknown snp_id", {
+    unknown_snp_donor_info <- data.frame(
+        snp_id = "snp_does_not_exist",
+        donor = "donor_1",
+        zygosity = "het"
+    )
+
+    # Verify validity rejects a snp_id absent from snp_info
+    expect_error(
+        SNPData(
+            ref_count = test_ref_count,
+            alt_count = test_alt_count,
+            snp_info = test_snp_info,
+            barcode_info = test_barcode_info,
+            donor_snp_info = unknown_snp_donor_info
+        ),
+        "not present in snp_info"
+    )
+})
+
+test_that("SNPData() throws error when donor_snp_info references an unknown donor", {
+    unknown_donor_snp_info <- data.frame(
+        snp_id = "snp_1",
+        donor = "donor_does_not_exist",
+        zygosity = "het"
+    )
+
+    # Verify validity rejects a donor absent from donor_info
+    expect_error(
+        SNPData(
+            ref_count = test_ref_count,
+            alt_count = test_alt_count,
+            snp_info = test_snp_info,
+            barcode_info = test_barcode_info,
+            donor_snp_info = unknown_donor_snp_info
+        ),
+        "not present in donor_info"
+    )
+})
+
+test_that("SNPData() throws error when a zygosity call has no zygosity_source", {
+    unsourced_zygosity <- data.frame(
+        snp_id = "snp_1",
+        donor = "donor_1",
+        zygosity = "het",
+        zygosity_source = NA_character_
+    )
+
+    # Verify validity requires zygosity_source whenever zygosity is called
+    expect_error(
+        SNPData(
+            ref_count = test_ref_count,
+            alt_count = test_alt_count,
+            snp_info = test_snp_info,
+            barcode_info = test_barcode_info,
+            donor_snp_info = unsourced_zygosity
+        ),
+        "zygosity call but no zygosity_source"
+    )
+})
+
+test_that("[() drops a donor's donor_info and donor_snp_info rows once its cells are subsetted out", {
+    two_donor_barcode_info <- data.frame(
+        cell_id = c("cell_1", "cell_2"),
+        donor = c("donor_1", "donor_2"),
+        stringsAsFactors = FALSE
+    )
+    donor_snp_info <- data.frame(
+        snp_id = c("snp_1", "snp_2"),
+        donor = c("donor_1", "donor_2"),
+        zygosity = c("het", "het"),
+        zygosity_source = c("vireo_gt", "vireo_gt")
+    )
+    snp_data <- SNPData(
+        ref_count = test_ref_count,
+        alt_count = test_alt_count,
+        snp_info = test_snp_info,
+        barcode_info = two_donor_barcode_info,
+        donor_snp_info = donor_snp_info
+    )
+
+    subset_data <- snp_data[, 1]
+
+    # Verify only the surviving cell's donor remains in donor_info
+    expect_equal(get_donor_info(subset_data)$donor, "donor_1")
+    # Verify the dropped donor's donor_snp_info row was removed too
+    expect_equal(get_donor_snp_info(subset_data)$donor, "donor_1")
+})
+
+test_that("updateObject() migrates a legacy object's packed *_by_donor snp_info columns", {
+    snp_data <- create_test_snpdata()
+    legacy_snp_info <- get_snp_info(snp_data)
+    legacy_snp_info$xci_informative <- c(TRUE, FALSE)
+    legacy_snp_info$xci_informative_donor <- c("donor_1", NA)
+    legacy_snp_info$xci_allele_on_x1_by_donor <- c("REF", NA)
+    legacy_snp_info$xci_escape_fraction_by_donor <- c("0.02", NA)
+    snp_data@snp_info <- legacy_snp_info
+
+    # Strip the slots this object predates, simulating a deserialized legacy object
+    legacy_attrs <- attributes(snp_data)
+    legacy_attrs$donor_info <- NULL
+    legacy_attrs$donor_snp_info <- NULL
+    legacy_attrs$chr_style <- NULL
+    attributes(snp_data) <- legacy_attrs
+
+    updated <- updateObject(snp_data)
+
+    # Verify the packed column was unpacked into donor_snp_info
+    expect_equal(get_donor_snp_info(updated)$snp_id, "snp_1")
+    # Verify the phase carried over correctly
+    expect_equal(get_donor_snp_info(updated)$allele_on_x1, "REF")
+    # Verify the packed columns were removed from snp_info
+    expect_false("xci_informative_donor" %in% colnames(get_snp_info(updated)))
+    # Verify xci_informative itself was migrated out of snp_info too, since it
+    # now belongs solely to donor_snp_info (informativeness is donor-specific)
+    expect_false("xci_informative" %in% colnames(get_snp_info(updated)))
+    # Verify the object passes validity after migration
+    expect_true(methods::validObject(updated))
+})
+
+test_that("SNPData() donor_map relabels barcode_info$donor at construction time", {
+    snp_data <- SNPData(
+        ref_count = test_ref_count,
+        alt_count = test_alt_count,
+        snp_info = test_snp_info,
+        barcode_info = test_barcode_info,
+        donor_map = c(PatientA = "donor_1")
+    )
+
+    # Verify the raw donor label was relabelled before donor_info was derived
+    expect_equal(unique(get_barcode_info(snp_data)$donor), "PatientA")
+    expect_equal(get_donor_info(snp_data)$donor, "PatientA")
+})
+
+test_that("SNPData() donor_map also relabels a caller-supplied donor_snp_info", {
+    donor_snp_info <- data.frame(
+        snp_id = "snp_1",
+        donor = "donor_1",
+        zygosity = "het",
+        zygosity_source = "vireo_gt"
+    )
+
+    snp_data <- SNPData(
+        ref_count = test_ref_count,
+        alt_count = test_alt_count,
+        snp_info = test_snp_info,
+        barcode_info = test_barcode_info,
+        donor_snp_info = donor_snp_info,
+        donor_map = c(PatientA = "donor_1")
+    )
+
+    # Verify donor_snp_info was relabelled to match barcode_info/donor_info
+    expect_equal(get_donor_snp_info(snp_data)$donor, "PatientA")
+})
+
+test_that("rename_donor() swaps two donor labels without corrupting either", {
+    barcode_info <- data.frame(cell_id = c("cell_1", "cell_2"), donor = c("A", "B"))
+    snp_data <- SNPData(
+        ref_count = test_ref_count,
+        alt_count = test_alt_count,
+        snp_info = test_snp_info,
+        barcode_info = barcode_info
+    )
+
+    # new = old for each entry: donor A's new label is B, donor B's new label is A
+    swapped <- rename_donor(snp_data, c(B = "A", A = "B"))
+
+    # Verify the swap applied simultaneously rather than cascading sequentially
+    # (a naive pair-by-pair substitution would collapse both cells onto "A")
+    expect_equal(get_barcode_info(swapped)$donor, c("B", "A"))
+})
+
+test_that("rename_donor() errors when donor_map references a donor that doesn't exist", {
+    snp_data <- create_test_snpdata()
+
+    # Verify the error names the unknown (old) donor
+    expect_error(
+        rename_donor(snp_data, c(X = "no_such_donor")),
+        "no_such_donor"
+    )
+})
+
+test_that("rename_donor() errors when donor_map would collide two donors onto one label", {
+    barcode_info <- data.frame(cell_id = c("cell_1", "cell_2"), donor = c("A", "B"))
+    snp_data <- SNPData(
+        ref_count = test_ref_count,
+        alt_count = test_alt_count,
+        snp_info = test_snp_info,
+        barcode_info = barcode_info
+    )
+
+    # Verify renaming A to the already-existing label B is rejected, not merged
+    expect_error(
+        rename_donor(snp_data, c(B = "A")),
+        "duplicate donor label"
+    )
+})
+
+test_that("barcode_info<- rejects a donor column change once donor_info carries data", {
+    snp_data <- create_test_snpdata()
+    new_barcode_info <- get_barcode_info(snp_data)
+    new_barcode_info$donor <- "donor_2"
+
+    # Verify the error points at rename_donor() instead
+    expect_error(
+        barcode_info(snp_data) <- new_barcode_info,
+        "rename_donor"
+    )
+})
+
+test_that("barcode_info<- still allows non-donor columns to change once donor_info carries data", {
+    snp_data <- create_test_snpdata()
+    new_barcode_info <- get_barcode_info(snp_data)
+    new_barcode_info$clonotype <- "clonotype_new"
+
+    barcode_info(snp_data) <- new_barcode_info
+
+    # Verify the unrelated column change went through
+    expect_equal(get_barcode_info(snp_data)$clonotype, c("clonotype_new", "clonotype_new"))
+})
+
+test_that("barcode_info<- allows a donor column to be set freely when donor_info is still empty", {
+    no_donor_barcode_info <- data.frame(cell_id = c("cell_1", "cell_2"))
+    snp_data <- SNPData(
+        ref_count = test_ref_count,
+        alt_count = test_alt_count,
+        snp_info = test_snp_info,
+        barcode_info = no_donor_barcode_info
+    )
+    new_barcode_info <- get_barcode_info(snp_data)
+    new_barcode_info$donor <- c("donor_a", "donor_b")
+
+    barcode_info(snp_data) <- new_barcode_info
+
+    # Verify the donor column was accepted since donor_info had no prior data
+    expect_equal(get_barcode_info(snp_data)$donor, c("donor_a", "donor_b"))
 })

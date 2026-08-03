@@ -10,7 +10,7 @@
 #' @importFrom glue glue
 #' @importFrom stringr str_remove str_to_title str_detect str_escape
 #' @importFrom methods as is new setClass setGeneric setMethod show
-#' @importFrom BiocGenerics nrow ncol rownames colnames
+#' @importFrom BiocGenerics nrow ncol rownames colnames updateObject
 #' @importFrom magrittr %>%
 #' @importFrom ggplot2 ggplot aes geom_density scale_y_continuous scale_x_log10
 #' @importFrom ggplot2 geom_segment scale_x_continuous theme_void theme

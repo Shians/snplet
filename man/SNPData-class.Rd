@@ -18,8 +18,13 @@
 \alias{get_barcode_info,SNPData-method}
 \alias{get_sample_info}
 \alias{get_sample_info,SNPData-method}
+\alias{get_donor_info}
+\alias{get_donor_info,SNPData-method}
+\alias{get_donor_snp_info}
+\alias{get_donor_snp_info,SNPData-method}
 \alias{chr_style}
 \alias{chr_style,SNPData-method}
+\alias{updateObject,SNPData-method}
 \alias{barcode_info<-}
 \alias{barcode_info<-,SNPData,data.frame-method}
 \alias{snp_info<-}
@@ -36,9 +41,27 @@
 \usage{
 \S4method{[}{SNPData,ANY,ANY,ANY}(x, i, j)
 
-SNPData(ref_count, alt_count, snp_info, barcode_info, oth_count = NULL)
+SNPData(
+  ref_count,
+  alt_count,
+  snp_info,
+  barcode_info,
+  oth_count = NULL,
+  donor_info = NULL,
+  donor_snp_info = NULL,
+  donor_map = NULL
+)
 
-\S4method{SNPData}{Matrix,Matrix,data.frame,data.frame}(ref_count, alt_count, snp_info, barcode_info, oth_count = NULL)
+\S4method{SNPData}{Matrix,Matrix,data.frame,data.frame}(
+  ref_count,
+  alt_count,
+  snp_info,
+  barcode_info,
+  oth_count = NULL,
+  donor_info = NULL,
+  donor_snp_info = NULL,
+  donor_map = NULL
+)
 
 ref_count(x)
 
@@ -64,9 +87,19 @@ get_sample_info(x)
 
 \S4method{get_sample_info}{SNPData}(x)
 
+get_donor_info(x)
+
+\S4method{get_donor_info}{SNPData}(x)
+
+get_donor_snp_info(x)
+
+\S4method{get_donor_snp_info}{SNPData}(x)
+
 chr_style(x)
 
 \S4method{chr_style}{SNPData}(x)
+
+\S4method{updateObject}{SNPData}(object, ..., verbose = FALSE)
 
 barcode_info(x) <- value
 
@@ -109,9 +142,32 @@ coverage(x)
 
 \item{oth_count}{A sparse Matrix containing other allele counts (SNPs x cells), optional}
 
-\item{value}{A data.frame for replacement methods (barcode_info<- or snp_info<-)}
+\item{donor_info}{A data.frame with one row per donor, optional. Defaults to one row per
+distinct value of \code{barcode_info$donor} (empty if \code{barcode_info} has no
+\code{donor} column). Must contain a \code{donor} column; \code{n_cells} is computed
+automatically.}
+
+\item{donor_snp_info}{A data.frame with one row per (\code{snp_id}, \code{donor}) pair,
+optional. Defaults to an empty table. Must contain \code{snp_id} and \code{donor}
+columns, both of which must already appear in \code{snp_info}/\code{donor_info}; a row
+with a non-\code{NA} \code{zygosity} must also carry a non-\code{NA}
+\code{zygosity_source}.}
+
+\item{donor_map}{A named character vector, \code{c(new_label = old_label, ...)} (the same
+\code{new = old} convention as \code{dplyr::rename()}), optional. Applied to
+\code{barcode_info$donor} and, if supplied, \code{donor_info$donor}/
+\code{donor_snp_info$donor} before the object is built -- useful since Vireo assigns
+arbitrary labels (\code{donor0}, \code{donor1}, ...) that this can relabel at import
+time rather than after the fact via \code{\link{rename_donor}}.}
 
 \item{object}{A SNPData object for show method}
+
+\item{...}{Additional arguments (unused; required by the \code{updateObject} generic)}
+
+\item{verbose}{Logical, whether \code{updateObject} logs which legacy slots it migrated
+(default \code{FALSE})}
+
+\item{value}{A data.frame for replacement methods (barcode_info<- or snp_info<-)}
 }
 \value{
 A subsetted SNPData object
@@ -137,6 +193,16 @@ cell/barcode metadata to support allele-specific expression analysis workflows.
 \item{\code{barcode_info}}{A data.frame containing cell/barcode metadata with automatically computed library_size and non_zero_snps columns}
 
 \item{\code{chr_style}}{Character string indicating the chromosome naming style. One of: "numeric", "ucsc", "refseq_mouse", "genbank_mouse", "refseq_human", "genbank_human", or "unknown"}
+
+\item{\code{donor_info}}{A tibble with one row per donor and an automatically computed
+\code{n_cells} column. Rows are dropped when a donor loses all of its cells, via
+subsetting or \code{merge_snpdata()}.}
+
+\item{\code{donor_snp_info}}{A tibble with one row per (\code{snp_id}, \code{donor}) pair,
+carrying zygosity calls (\code{zygosity}, \code{zygosity_source} and per-source
+confidence columns) and XCI fit diagnostics (\code{xci_informative},
+\code{allele_on_x1}, \code{xci_escape_fraction}) written by \code{\link{assign_xci}}.
+Rows are dropped along with their donor, same as \code{donor_info}.}
 }}
 
 \section{Accessors}{
@@ -148,6 +214,8 @@ cell/barcode metadata to support allele-specific expression analysis workflows.
   \item{\code{get_snp_info(x)}}{Get SNP metadata data.frame}
   \item{\code{get_barcode_info(x)}}{Get cell/barcode metadata data.frame}
   \item{\code{get_sample_info(x)}}{Alias for get_barcode_info()}
+  \item{\code{get_donor_info(x)}}{Get per-donor metadata tibble}
+  \item{\code{get_donor_snp_info(x)}}{Get per-(SNP, donor) metadata tibble}
   \item{\code{chr_style(x)}}{Get chromosome naming style}
   \item{\code{coverage(x)}}{Get total coverage matrix (ref + alt counts)}
 }
