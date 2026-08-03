@@ -1201,6 +1201,89 @@ test_that("add_snp_metadata overwrite replaces columns and preserves computed co
     expect_equal(updated_info$coverage, original_coverage)
 })
 
+test_that("add_donor_metadata enriches donor_info and preserves computed n_cells", {
+    snp_data <- SNPData(
+        alt_count = test_alt_count,
+        ref_count = test_ref_count,
+        snp_info = test_snp_info,
+        barcode_info = test_barcode_info
+    )
+    original_n_cells <- get_donor_info(snp_data)$n_cells
+
+    updated <- add_donor_metadata(snp_data, data.frame(donor = "donor_1", group = "control"))
+    updated_info <- get_donor_info(updated)
+
+    # Verify the new column was added
+    expect_equal(updated_info$group, "control")
+    # Verify n_cells is preserved from the original object
+    expect_equal(updated_info$n_cells, original_n_cells)
+})
+
+test_that("add_donor_snp_metadata errors for duplicate (snp_id, donor) values in metadata", {
+    snp_data <- SNPData(
+        alt_count = test_alt_count,
+        ref_count = test_ref_count,
+        snp_info = test_snp_info,
+        barcode_info = test_barcode_info
+    )
+    dup_metadata <- data.frame(
+        snp_id = c("snp_1", "snp_1"),
+        donor = c("donor_1", "donor_1"),
+        zygosity = c("het", "hom")
+    )
+
+    # Verify error for a duplicate composite key in metadata
+    expect_error(
+        add_donor_snp_metadata(snp_data, dup_metadata),
+        "Duplicate values found in join column"
+    )
+})
+
+test_that("add_donor_snp_metadata inserts new (snp_id, donor) rows rather than dropping them", {
+    snp_data <- SNPData(
+        alt_count = test_alt_count,
+        ref_count = test_ref_count,
+        snp_info = test_snp_info,
+        barcode_info = test_barcode_info
+    )
+
+    # donor_snp_info starts empty, so this metadata has no existing row to match
+    updated <- add_donor_snp_metadata(
+        snp_data,
+        data.frame(snp_id = "snp_1", donor = "donor_1", zygosity = "het", zygosity_source = "vireo_gt")
+    )
+
+    # Verify the row was inserted, not silently dropped by a plain enrich-join
+    expect_equal(nrow(get_donor_snp_info(updated)), 1)
+    expect_equal(get_donor_snp_info(updated)$zygosity, "het")
+})
+
+test_that("add_donor_snp_metadata overwrite enriches an existing row without touching its other columns", {
+    snp_data <- SNPData(
+        alt_count = test_alt_count,
+        ref_count = test_ref_count,
+        snp_info = test_snp_info,
+        barcode_info = test_barcode_info
+    )
+    snp_data <- add_donor_snp_metadata(
+        snp_data,
+        data.frame(snp_id = "snp_1", donor = "donor_1", zygosity = "het", zygosity_source = "vireo_gt")
+    )
+
+    updated <- add_donor_snp_metadata(
+        snp_data,
+        data.frame(snp_id = "snp_1", donor = "donor_1", xci_informative = TRUE, allele_on_x1 = "REF"),
+        overwrite = TRUE
+    )
+    row <- get_donor_snp_info(updated)
+
+    # Verify the new columns were written
+    expect_true(row$xci_informative)
+    expect_equal(row$allele_on_x1, "REF")
+    # Verify the earlier zygosity call on the same row was left untouched
+    expect_equal(row$zygosity, "het")
+})
+
 # ------------------------------------------------------------------------------
 # Test Data Setup - merge_snpdata
 # ------------------------------------------------------------------------------

@@ -4,30 +4,47 @@
 \alias{add_metadata}
 \alias{add_barcode_metadata}
 \alias{add_snp_metadata}
-\title{Add metadata to SNPData barcode_info or snp_info}
+\alias{add_donor_metadata}
+\alias{add_donor_snp_metadata}
+\title{Add metadata to a SNPData object's info tables}
 \usage{
 add_barcode_metadata(x, metadata, join_by = "cell_id", overwrite = FALSE)
 
 add_snp_metadata(x, metadata, join_by = "snp_id", overwrite = FALSE)
+
+add_donor_metadata(x, metadata, join_by = "donor", overwrite = FALSE)
+
+add_donor_snp_metadata(
+  x,
+  metadata,
+  join_by = c("snp_id", "donor"),
+  overwrite = TRUE
+)
 }
 \arguments{
 \item{x}{A SNPData object}
 
-\item{metadata}{A data.frame containing new columns to add to barcode_info or snp_info}
+\item{metadata}{A data.frame containing new columns (and, for \code{add_donor_snp_metadata},
+possibly new rows) to add}
 
-\item{join_by}{Character string specifying the column name to join by.
-For barcode_info: "cell_id" or "barcode"
-For snp_info: "snp_id"}
+\item{join_by}{Character vector specifying the column(s) to join by.
+For \code{barcode_info}: \code{"cell_id"} or \code{"barcode"}. For \code{snp_info}:
+\code{"snp_id"}. For \code{donor_info}: \code{"donor"}. For \code{donor_snp_info}:
+\code{c("snp_id", "donor")}.}
 
-\item{overwrite}{Logical, whether to overwrite existing columns (default FALSE).
-Set to TRUE to update existing columns in barcode_info or snp_info.}
+\item{overwrite}{Logical, whether to overwrite existing columns (default \code{FALSE},
+except for \code{add_donor_snp_metadata} where it defaults to \code{TRUE} since
+\code{donor_snp_info}'s columns are fixed by its schema from construction, so treating
+them as pre-existing and requiring \code{overwrite=FALSE} would reject on every call).
+Set to \code{TRUE} to update existing columns.}
 }
 \value{
-A SNPData object with updated barcode_info or snp_info
+A SNPData object with the updated table
 }
 \description{
-These functions provide a standardized interface for adding new columns
-to the barcode_info or snp_info data frames of a SNPData object. The functions
+These functions provide a standardized interface for adding new columns (and, for
+\code{add_donor_snp_metadata}, new rows) to the \code{barcode_info}, \code{snp_info},
+\code{donor_info}, or \code{donor_snp_info} tables of a SNPData object. The functions
 ensure data integrity by validating dimensions and preserving automatically
 computed summary statistics.
 }
