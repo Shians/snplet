@@ -6,15 +6,16 @@
 #' @param cellsnp_dir Directory containing cellSNP-lite output files
 #' @param gene_annotation Data frame with gene annotations (must contain chrom, start, end, gene_name)
 #' @param vdj_file Path to filtered_contig_annotations.csv from cellranger VDJ (optional, default: NULL)
-#' @param vireo_file Path to donors.tsv file from Vireo (optional, default: NULL)
-#' @param gt_file Path to a Vireo genotype VCF (\code{GT_donors.vireo.vcf.gz}, one sample
-#'   column per donor), used to populate per-(SNP, donor) zygosity calls at construction
-#'   time (optional, default: NULL)
+#' @param vireo_folder Path to a Vireo output directory, optional (default: NULL). Donor
+#'   assignments are read from \code{donor_ids.tsv} inside it. If it also contains a
+#'   genotype VCF (\code{GT_donors.vireo.vcf.gz}, one sample column per donor), that is
+#'   used to populate per-(SNP, donor) zygosity calls at construction time; if the
+#'   genotype VCF is absent, only donor assignments are read.
 #' @param donor_map A named character vector, \code{c(new_label = old_label, ...)} (the same
 #'   \code{new = old} convention as \code{dplyr::rename()}), optional.
 #'   Relabels donors at import time -- useful since Vireo assigns arbitrary labels
-#'   (\code{donor0}, \code{donor1}, ...) to both \code{vireo_file} and \code{gt_file}, so
-#'   applying the map here keeps every donor-keyed table consistent from the start (default: NULL)
+#'   (\code{donor0}, \code{donor1}, ...), so applying the map here keeps every
+#'   donor-keyed table consistent from the start (default: NULL)
 #' @param barcode_column Name of the column in vdj_file that contains cell barcodes (only used if vdj_file provided)
 #' @param clonotype_column Name of the column in vdj_file that contains clonotype information (only used if vdj_file provided)
 #'
@@ -29,7 +30,7 @@
 #'   cellsnp_dir = "path/to/cellsnp_output",
 #'   gene_annotation = gene_anno_df,
 #'   vdj_file = "path/to/filtered_contig_annotations.csv",
-#'   vireo_file = "path/to/donors.tsv"
+#'   vireo_folder = "path/to/vireo_output"
 #' )
 #'
 #' # Import without VDJ data (no clonotype information)
@@ -38,20 +39,19 @@
 #'   gene_annotation = gene_anno_df
 #' )
 #'
-#' # Import with Vireo genotype calls for per-donor zygosity
+#' # A Vireo output folder containing GT_donors.vireo.vcf.gz alongside
+#' # donor_ids.tsv also populates per-donor zygosity
 #' snp_data <- import_cellsnp(
 #'   cellsnp_dir = "path/to/cellsnp_output",
 #'   gene_annotation = gene_anno_df,
-#'   vireo_file = "path/to/donor_ids.tsv",
-#'   gt_file = "path/to/GT_donors.vireo.vcf.gz"
+#'   vireo_folder = "path/to/vireo_output"
 #' )
 #'
 #' # Relabel Vireo's arbitrary donor0/donor1 to real identities at import time
 #' snp_data <- import_cellsnp(
 #'   cellsnp_dir = "path/to/cellsnp_output",
 #'   gene_annotation = gene_anno_df,
-#'   vireo_file = "path/to/donor_ids.tsv",
-#'   gt_file = "path/to/GT_donors.vireo.vcf.gz",
+#'   vireo_folder = "path/to/vireo_output",
 #'   donor_map = c(PatientA = "donor0", PatientB = "donor1")
 #' )
 #' }
@@ -59,8 +59,7 @@ import_cellsnp <- function(
     cellsnp_dir,
     gene_annotation,
     vdj_file = NULL,
-    vireo_file = NULL,
-    gt_file = NULL,
+    vireo_folder = NULL,
     donor_map = NULL,
     barcode_column = "barcode",
     clonotype_column = "raw_clonotype_id"
@@ -91,11 +90,21 @@ import_cellsnp <- function(
     if (!is.null(vdj_file)) {
         check_file(vdj_file)
     }
-    if (!is.null(vireo_file)) {
+    # donor_ids.tsv is the point of pointing at a Vireo folder, so it must exist;
+    # the genotype VCF is a bonus feature of that same run and is silently skipped
+    # if the folder doesn't have one (e.g. an older or genotype-free Vireo run).
+    vireo_file <- NULL
+    gt_file <- NULL
+    if (!is.null(vireo_folder)) {
+        vireo_file <- fs::path(vireo_folder, "donor_ids.tsv")
         check_file(vireo_file)
-    }
-    if (!is.null(gt_file)) {
-        check_file(gt_file)
+        candidate_gt_file <- fs::path(vireo_folder, "GT_donors.vireo.vcf.gz")
+        if (fs::file_exists(candidate_gt_file)) {
+            check_file(candidate_gt_file)
+            gt_file <- candidate_gt_file
+        } else {
+            logger::log_warn("Vireo folder does not contain GT_donors.vireo.vcf.gz; skipping genotype import")
+        }
     }
 
     # Read cellSNP matrices
@@ -407,6 +416,6 @@ get_example_snpdata <- function() {
             show_col_types = FALSE
         ),
         vdj_file = system.file("extdata/example_snpdata/filtered_contig_annotations.csv", package = "snplet"),
-        vireo_file = system.file("extdata/example_snpdata/donor_ids.tsv", package = "snplet")
+        vireo_folder = system.file("extdata/example_snpdata", package = "snplet")
     )
 }

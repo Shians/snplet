@@ -65,7 +65,7 @@ setGeneric("barcode_count_df", function(x, test_maf = TRUE) standardGeneric("bar
 .prepare_grouped_metadata <- function(barcode_info, group_by) {
     if (!group_by %in% colnames(barcode_info)) {
         if (group_by == "donor") {
-            missing_message <- "Donor information not available. Add donor data using add_barcode_metadata() or import_cellsnp() with vireo_file parameter."
+            missing_message <- "Donor information not available. Add donor data using add_barcode_metadata() or import_cellsnp() with vireo_folder parameter."
         } else if (group_by == "clonotype") {
             missing_message <- "Clonotype information not available. Add clonotype data using add_barcode_metadata() or import_cellsnp() with vdj_file parameter."
         } else {
@@ -87,7 +87,7 @@ setGeneric("barcode_count_df", function(x, test_maf = TRUE) standardGeneric("bar
 
     if (length(groups) == 0) {
         if (group_by == "donor") {
-            all_na_message <- "All donor values are NA. Cannot perform donor-level aggregation. Add donor data using add_barcode_metadata() or import_cellsnp() with vireo_file parameter."
+            all_na_message <- "All donor values are NA. Cannot perform donor-level aggregation. Add donor data using add_barcode_metadata() or import_cellsnp() with vireo_folder parameter."
         } else if (group_by == "clonotype") {
             all_na_message <- "All clonotype values are NA. Cannot perform clonotype-level aggregation. Add clonotype data using add_barcode_metadata() or import_cellsnp() with vdj_file parameter."
         } else {

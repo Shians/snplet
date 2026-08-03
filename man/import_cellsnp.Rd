@@ -8,8 +8,7 @@ import_cellsnp(
   cellsnp_dir,
   gene_annotation,
   vdj_file = NULL,
-  vireo_file = NULL,
-  gt_file = NULL,
+  vireo_folder = NULL,
   donor_map = NULL,
   barcode_column = "barcode",
   clonotype_column = "raw_clonotype_id"
@@ -22,17 +21,17 @@ import_cellsnp(
 
 \item{vdj_file}{Path to filtered_contig_annotations.csv from cellranger VDJ (optional, default: NULL)}
 
-\item{vireo_file}{Path to donors.tsv file from Vireo (optional, default: NULL)}
-
-\item{gt_file}{Path to a Vireo genotype VCF (\code{GT_donors.vireo.vcf.gz}, one sample
-column per donor), used to populate per-(SNP, donor) zygosity calls at construction
-time (optional, default: NULL)}
+\item{vireo_folder}{Path to a Vireo output directory, optional (default: NULL). Donor
+assignments are read from \code{donor_ids.tsv} inside it. If it also contains a
+genotype VCF (\code{GT_donors.vireo.vcf.gz}, one sample column per donor), that is
+used to populate per-(SNP, donor) zygosity calls at construction time; if the
+genotype VCF is absent, only donor assignments are read.}
 
 \item{donor_map}{A named character vector, \code{c(new_label = old_label, ...)} (the same
 \code{new = old} convention as \code{dplyr::rename()}), optional.
 Relabels donors at import time -- useful since Vireo assigns arbitrary labels
-(\code{donor0}, \code{donor1}, ...) to both \code{vireo_file} and \code{gt_file}, so
-applying the map here keeps every donor-keyed table consistent from the start (default: NULL)}
+(\code{donor0}, \code{donor1}, ...), so applying the map here keeps every
+donor-keyed table consistent from the start (default: NULL)}
 
 \item{barcode_column}{Name of the column in vdj_file that contains cell barcodes (only used if vdj_file provided)}
 
@@ -52,7 +51,7 @@ snp_data <- import_cellsnp(
   cellsnp_dir = "path/to/cellsnp_output",
   gene_annotation = gene_anno_df,
   vdj_file = "path/to/filtered_contig_annotations.csv",
-  vireo_file = "path/to/donors.tsv"
+  vireo_folder = "path/to/vireo_output"
 )
 
 # Import without VDJ data (no clonotype information)
@@ -61,20 +60,19 @@ snp_data <- import_cellsnp(
   gene_annotation = gene_anno_df
 )
 
-# Import with Vireo genotype calls for per-donor zygosity
+# A Vireo output folder containing GT_donors.vireo.vcf.gz alongside
+# donor_ids.tsv also populates per-donor zygosity
 snp_data <- import_cellsnp(
   cellsnp_dir = "path/to/cellsnp_output",
   gene_annotation = gene_anno_df,
-  vireo_file = "path/to/donor_ids.tsv",
-  gt_file = "path/to/GT_donors.vireo.vcf.gz"
+  vireo_folder = "path/to/vireo_output"
 )
 
 # Relabel Vireo's arbitrary donor0/donor1 to real identities at import time
 snp_data <- import_cellsnp(
   cellsnp_dir = "path/to/cellsnp_output",
   gene_annotation = gene_anno_df,
-  vireo_file = "path/to/donor_ids.tsv",
-  gt_file = "path/to/GT_donors.vireo.vcf.gz",
+  vireo_folder = "path/to/vireo_output",
   donor_map = c(PatientA = "donor0", PatientB = "donor1")
 )
 }

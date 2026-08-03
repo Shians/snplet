@@ -90,7 +90,7 @@ setMethod("to_expr_matrix", signature(x = "SNPData"), function(x, level = c("bar
             )
         }
         stop(
-            "All donor values are NA. Cannot perform donor-level aggregation. Add donor data using add_barcode_metadata() or import_cellsnp() with vireo_file parameter."
+            "All donor values are NA. Cannot perform donor-level aggregation. Add donor data using add_barcode_metadata() or import_cellsnp() with vireo_folder parameter."
         )
     }
 
