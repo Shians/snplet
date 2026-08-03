@@ -47,11 +47,4 @@ df <- tibble::tibble(
 )
 test_maf(df)
 }
-\seealso{
-Other count aggregation functions:
-\code{\link[=aggregate_count_df]{aggregate_count_df()}},
-\code{\link[=barcode_count_df]{barcode_count_df()}},
-\code{\link[=clonotype_count_df]{clonotype_count_df()}},
-\code{\link[=donor_count_df]{donor_count_df()}}
-}
-\concept{count aggregation functions}
+\keyword{internal}

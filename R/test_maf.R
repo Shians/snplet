@@ -29,8 +29,7 @@
 #' as \code{ceiling(total_count)} so that fractional counts (e.g. from aggregation)
 #' yield a valid integer size, and the major allele count is floored at zero.
 #'
-#' @family count aggregation functions
-#' @export
+#' @keywords internal
 #' @examples
 #' df <- tibble::tibble(
 #'     ref_count = c(10, 5),

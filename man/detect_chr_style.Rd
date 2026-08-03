@@ -30,3 +30,4 @@ Other chromosome naming functions:
 \code{\link[=convert_chr_style]{convert_chr_style()}}
 }
 \concept{chromosome naming functions}
+\keyword{internal}

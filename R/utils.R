@@ -247,7 +247,7 @@ check_file <- function(path) {
 #' }
 #'
 #' @family chromosome naming functions
-#' @export
+#' @keywords internal
 detect_chr_style <- function(chr_names) {
     if (length(chr_names) == 0) {
         return("unknown")
@@ -376,7 +376,7 @@ normalise_chr_names <- function(chr_names, from_style = "auto") {
 #' }
 #'
 #' @family chromosome naming functions
-#' @export
+#' @keywords internal
 convert_chr_style <- function(chr_names, from_style = "auto", to_style = "ucsc") {
     # First normalise to canonical UCSC form
     canonical <- normalise_chr_names(chr_names, from_style)

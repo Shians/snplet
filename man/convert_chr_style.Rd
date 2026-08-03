@@ -37,3 +37,4 @@ Other chromosome naming functions:
 \code{\link[=detect_chr_style]{detect_chr_style()}}
 }
 \concept{chromosome naming functions}
+\keyword{internal}
