@@ -9,11 +9,10 @@
 \description{
 Promotes the fit diagnostics into the object's indexable metadata slots so
 they survive subsetting: barcode metadata gains \code{active_x} and
-\code{xci_post_X1_active}; \code{donor_snp_info} gains one row per
-informative SNP x donor with \code{xci_informative}, \code{allele_on_x1}
-and \code{xci_escape_fraction}; SNP metadata gains a per-SNP
-\code{xci_informative} flag (\code{TRUE} if any donor's model retained the
-SNP). For a clonotype-level fit the per-cell projection is used for
-barcode annotation.
+\code{xci_post_X1_active}; \code{donor_snp_info} gains one row per phased
+SNP x donor with \code{xci_informative} (whether the gene drove active-X
+calling), \code{allele_on_x1} and \code{xci_escape_fraction}. For a
+clonotype-level fit the per-cell projection is used for barcode
+annotation.
 }
 \keyword{internal}

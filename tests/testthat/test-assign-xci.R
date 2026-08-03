@@ -257,8 +257,14 @@ test_that("assign_xci promotes diagnostics into SNPData slots and survives subse
     expect_true(any(donor_snp_info$xci_informative))
     # Confirm the informative flag itself is never NA
     expect_false(any(is.na(donor_snp_info$xci_informative)))
-    # Confirm donor_snp_info has one row per informative (SNP, donor) pair
-    expect_equal(nrow(donor_snp_info), sum(donor_snp_info$xci_informative))
+    # donor_snp_info now carries one row per phased (SNP, donor) pair, not just
+    # the informative subset that drove active-X calling: confirm phase/escape
+    # fraction are never NA (every stored row was genuinely phased) and that at
+    # least one row is phased but not informative (haplotype_expression()'s
+    # broader default gene set).
+    expect_false(any(is.na(donor_snp_info$allele_on_x1)))
+    expect_false(any(is.na(donor_snp_info$xci_escape_fraction)))
+    expect_true(any(!donor_snp_info$xci_informative))
 
     # Diagnostics must survive cell subsetting because they live in barcode_info
     subset_cells <- stored[, 1:10]
@@ -577,7 +583,7 @@ test_that("confidence_threshold controls how many cells are hard-assigned", {
     expect_true(all(unassigned[borderline]))
 })
 
-test_that("assign_xci drops an escapee gene from the informative set", {
+test_that("assign_xci drops an escapee gene from the informative set but still phases it", {
     fixture <- make_xci_snpdata(escapee = TRUE)
     stored <- assign_xci(fixture$snpdata, n_inits = 3)
 
@@ -590,7 +596,7 @@ test_that("assign_xci drops an escapee gene from the informative set", {
     expect_true(max(agree, 1 - agree) > 0.9)
 
     # The escapee gene (last gene, balanced in every cell) carries no XCI signal
-    # and must be filtered out of the informative set
+    # and must be filtered out of the informative (active-X-calling) set
     snp_info <- get_snp_info(stored)
     donor_snp_info <- get_donor_snp_info(stored)
     escapee_snp <- snp_info$snp_id[snp_info$gene_name == paste0("gene", 20)]
@@ -600,6 +606,34 @@ test_that("assign_xci drops an escapee gene from the informative set", {
 
     # Confirm genuine XCI genes are still retained
     expect_true(any(donor_snp_info$xci_informative))
+
+    # Though excluded from calling, the escapee gene is still phased: its
+    # balanced-in-every-cell signal should read as escape fraction near the
+    # 0.499 ceiling, not be discarded as NA.
+    escapee_escape_fraction <- donor_snp_info$xci_escape_fraction[donor_snp_info$snp_id == escapee_snp]
+    # Confirm the escapee gene's escape fraction was estimated, not dropped
+    expect_false(any(is.na(escapee_escape_fraction)))
+    # Confirm it reads as strongly escaping (near-complete symmetry, not mild)
+    expect_true(all(escapee_escape_fraction > 0.4))
+})
+
+test_that("haplotype_expression() surfaces an escapee gene that assign_xci excluded from calling", {
+    fixture <- make_xci_snpdata(escapee = TRUE)
+    stored <- assign_xci(fixture$snpdata, n_inits = 3)
+
+    snp_info <- get_snp_info(stored)
+    escapee_snp <- snp_info$snp_id[snp_info$gene_name == paste0("gene", 20)]
+
+    # Verify the default (inclusive) call reports the escapee gene at all
+    hap_default <- haplotype_expression(stored)
+    expect_true(escapee_snp %in% hap_default$snp_id)
+    # Confirm the escapee's rows read as biologically impossible under clean XCI
+    escapee_rows <- dplyr::filter(hap_default, snp_id == escapee_snp)
+    expect_true(any(escapee_rows$same_allele_dominant))
+
+    # Verify xci_informative_only = TRUE restricts back to the calling-informative set
+    hap_informative_only <- haplotype_expression(stored, xci_informative_only = TRUE)
+    expect_false(escapee_snp %in% hap_informative_only$snp_id)
 })
 
 test_that("assign_xci fits each donor independently in a multi-donor object", {

@@ -157,9 +157,19 @@ test_that("detect_chr_style handles all NA values", {
 
 test_that("detect_chr_style handles data with many contigs", {
     # Realistic case: standard chromosomes plus many contigs/scaffolds
-    chr_names <- c("chr1", "chr2", "chr3", "chrX", "chrY",
-                   "contig_1", "contig_2", "scaffold_999",
-                   "chrUn_001", "chrUn_002", "chrUn_003")
+    chr_names <- c(
+        "chr1",
+        "chr2",
+        "chr3",
+        "chrX",
+        "chrY",
+        "contig_1",
+        "contig_2",
+        "scaffold_999",
+        "chrUn_001",
+        "chrUn_002",
+        "chrUn_003"
+    )
 
     # Verify UCSC style is still detected despite contigs
     expect_equal(detect_chr_style(chr_names), "ucsc")
@@ -175,8 +185,7 @@ test_that("detect_chr_style works with minimal standard chromosomes", {
 
 test_that("detect_chr_style detects style with any matches", {
     # With loosened criteria, any standard chromosome match identifies the style
-    chr_names <- c("chr1", "chr2", "contig1", "contig2", "contig3",
-                   "scaffold1", "scaffold2", "scaffold3")
+    chr_names <- c("chr1", "chr2", "contig1", "contig2", "contig3", "scaffold1", "scaffold2", "scaffold3")
 
     # Even with 2/8 = 25% matching, UCSC style is detected
     expect_equal(detect_chr_style(chr_names), "ucsc")

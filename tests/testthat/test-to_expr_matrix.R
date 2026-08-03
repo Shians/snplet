@@ -11,8 +11,7 @@ library(snplet)
 # Helper Functions
 # ==============================================================================
 
-create_test_snp_data <- function(include_clonotype = TRUE, include_donor = TRUE,
-                                 n_snp = 3, n_cell = 2) {
+create_test_snp_data <- function(include_clonotype = TRUE, include_donor = TRUE, n_snp = 3, n_cell = 2) {
     alt_count <- Matrix::Matrix(matrix(seq_len(n_snp * n_cell), nrow = n_snp, ncol = n_cell))
     ref_count <- Matrix::Matrix(matrix(seq_len(n_snp * n_cell) + 100, nrow = n_snp, ncol = n_cell))
     rownames(alt_count) <- paste0("snp_", seq_len(n_snp))

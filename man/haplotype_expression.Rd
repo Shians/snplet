@@ -5,9 +5,9 @@
 \alias{haplotype_expression,SNPData-method}
 \title{Phased active/inactive haplotype expression per SNP}
 \usage{
-haplotype_expression(x, escape_threshold = 0.1)
+haplotype_expression(x, escape_threshold = 0.1, xci_informative_only = FALSE)
 
-\S4method{haplotype_expression}{SNPData}(x, escape_threshold = 0.1)
+\S4method{haplotype_expression}{SNPData}(x, escape_threshold = 0.1, xci_informative_only = FALSE)
 }
 \arguments{
 \item{x}{A SNPData object that had XCI diagnostics stored by
@@ -16,9 +16,14 @@ haplotype_expression(x, escape_threshold = 0.1)
 
 \item{escape_threshold}{Inactive-haplotype fraction at or above which a
 group is flagged as escaping in \code{escapes}. Default 0.1.}
+
+\item{xci_informative_only}{Logical. If \code{TRUE}, restrict to SNPs that
+drove active-X calling in \code{assign_xci} (\code{donor_snp_info$xci_informative}),
+excluding escaping or otherwise uninformative SNPs. Default \code{FALSE},
+reporting every SNP with a stored phase.}
 }
 \value{
-A tibble with one row per donor, informative SNP, and active-X
+A tibble with one row per donor, phased SNP, and active-X
   group, with columns \code{donor} (when the object carries donor
   assignments), \code{snp_id}, \code{gene_name} (when the object carries gene
   annotation), \code{active_x} (the expressed X, "X1" or "X2"),
@@ -31,15 +36,18 @@ A tibble with one row per donor, informative SNP, and active-X
   favour the same physical allele).
 }
 \description{
-Splits each informative SNP's ALT/REF counts into active- and
-inactive-haplotype reads using the phase inferred by
-\code{\link{assign_xci}}, computed separately within the X1-active
-and X2-active cell groups. Unlike a per-group \code{pmin}/\code{pmax} on
-raw counts, the allele-to-haplotype assignment comes from the stored
-per-donor phase (\code{donor_snp_info$allele_on_x1}) and is applied
-consistently to both groups, so the same physical allele can never be
-silently relabelled as "active" in both — that contradiction is instead
-surfaced explicitly.
+Splits each phased SNP's ALT/REF counts into active- and
+inactive-haplotype reads using the phase \code{\link{assign_xci}} fit
+against its frozen cell-state calls, computed separately within the
+X1-active and X2-active cell groups. By default this spans every
+donor-genotyped het SNP with a stored phase, including SNPs
+\code{assign_xci} excluded from active-X calling as uninformative or
+escaping — exactly the SNPs worth inspecting for escape. Unlike a
+per-group \code{pmin}/\code{pmax} on raw counts, the allele-to-haplotype
+assignment comes from the stored per-donor phase
+(\code{donor_snp_info$allele_on_x1}) and is applied consistently to both
+groups, so the same physical allele can never be silently relabelled as
+"active" in both — that contradiction is instead surfaced explicitly.
 }
 \details{
 For each SNP and donor, the stored phase records which physical allele (REF
@@ -64,6 +72,9 @@ hap <- haplotype_expression(snp_data)
 
 # SNPs that escape inactivation surface directly
 dplyr::filter(hap, same_allele_dominant)
+
+# Restrict to the narrower set that drove active-X calling
+hap_informative <- haplotype_expression(snp_data, xci_informative_only = TRUE)
 }
 }
 \seealso{

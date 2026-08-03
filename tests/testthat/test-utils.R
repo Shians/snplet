@@ -215,14 +215,18 @@ test_that("binom_test matches binom.test for alternative = 'greater'", {
     n_vals <- c(1, 5, 10, 25, 100)
     p_null <- 0.3
 
-    cases <- do.call(rbind, lapply(n_vals, function(n) {
-        data.frame(x = 0:n, n = n)
-    }))
+    cases <- do.call(
+        rbind,
+        lapply(n_vals, function(n) {
+            data.frame(x = 0:n, n = n)
+        })
+    )
 
     # Reference p-values from stats::binom.test
     expected <- mapply(
         function(x, n) stats::binom.test(x, n, p = p_null, alternative = "greater")$p.value,
-        cases$x, cases$n
+        cases$x,
+        cases$n
     )
 
     # Vectorised wrapper
@@ -237,14 +241,18 @@ test_that("binom_test matches binom.test for alternative = 'less'", {
     n_vals <- c(1, 5, 10, 25, 100)
     p_null <- 0.7
 
-    cases <- do.call(rbind, lapply(n_vals, function(n) {
-        data.frame(x = 0:n, n = n)
-    }))
+    cases <- do.call(
+        rbind,
+        lapply(n_vals, function(n) {
+            data.frame(x = 0:n, n = n)
+        })
+    )
 
     # Reference p-values from stats::binom.test
     expected <- mapply(
         function(x, n) stats::binom.test(x, n, p = p_null, alternative = "less")$p.value,
-        cases$x, cases$n
+        cases$x,
+        cases$n
     )
 
     # Vectorised wrapper
@@ -279,7 +287,9 @@ test_that("binom_test recycles p across vectorised inputs", {
 
     expected <- mapply(
         function(x, n, p) stats::binom.test(x, n, p, alternative = "greater")$p.value,
-        x, n, p
+        x,
+        n,
+        p
     )
 
     actual <- binom_test(x, n, p, alternative = "greater")

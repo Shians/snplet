@@ -885,23 +885,34 @@ setMethod(
         dplyr::mutate(cell_id = unit_ids[cell], post_X2_inactive = 1 - post_X1_inactive) %>%
         dplyr::select(cell_id, post_X1_inactive, post_X2_inactive, assignment)
 
-    snp_info_filtered <- snp_info[xci_result$gene_keep, ]
+    # Phase and escape fraction for every gene, not just the informative subset that drove
+    # calling: an escapee carries no information about which X is active (correctly excluded
+    # from that job), but once active-X is called it can still be phased against it.
+    all_genes <- .rephase_all_genes(ref_mat, alt_mat, post = xci_result$post, rho = xci_result$rho)
     haplotypes <- tibble::tibble(
-        snp_id = snp_info_filtered$snp_id,
-        gene_name = snp_info_filtered$gene_name,
-        allele_on_x1 = ifelse(xci_result$h_g == 0, "REF", "ALT"),
-        escape_fraction = xci_result$pi_g
-    )
+        snp_id = snp_info$snp_id,
+        gene_name = snp_info$gene_name,
+        xci_informative = xci_result$gene_keep,
+        allele_on_x1 = dplyr::case_when(
+            all_genes$h_g == 0 ~ "REF",
+            all_genes$h_g == 1 ~ "ALT",
+            TRUE ~ NA_character_
+        ),
+        escape_fraction = all_genes$pi_g
+    ) %>%
+        dplyr::filter(!is.na(allele_on_x1))
 
     # The EM labels the inactive X; report the active X so the log agrees with
     # the stored active_x column rather than inverting it.
     active <- .active_from_inactive(assignments$assignment)
     counts <- table(factor(active, c("X1", "X2")))
     logger::log_info(
-        "[{donor}] XCI fit complete: {nrow(haplotypes)} genes retained, {nrow(assignments)} {unit_label} ",
-        "(active X1={counts[['X1']]}, active X2={counts[['X2']]}, unassigned={sum(is.na(active))})"
+        "[{donor}] XCI fit complete: {sum(xci_result$gene_keep)} informative / {nrow(haplotypes)} phased genes, ",
+        "{nrow(assignments)} {unit_label} (active X1={counts[['X1']]}, active X2={counts[['X2']]}, ",
+        "unassigned={sum(is.na(active))})"
     )
 
+    snp_info_filtered <- snp_info[xci_result$gene_keep, ]
     ref_mat_filtered <- ref_mat[xci_result$gene_keep, , drop = FALSE]
     alt_mat_filtered <- alt_mat[xci_result$gene_keep, , drop = FALSE]
     rownames(ref_mat_filtered) <- snp_info_filtered$snp_id
@@ -935,12 +946,11 @@ setMethod(
 #'
 #' Promotes the fit diagnostics into the object's indexable metadata slots so
 #' they survive subsetting: barcode metadata gains \code{active_x} and
-#' \code{xci_post_X1_active}; \code{donor_snp_info} gains one row per
-#' informative SNP x donor with \code{xci_informative}, \code{allele_on_x1}
-#' and \code{xci_escape_fraction}; SNP metadata gains a per-SNP
-#' \code{xci_informative} flag (\code{TRUE} if any donor's model retained the
-#' SNP). For a clonotype-level fit the per-cell projection is used for
-#' barcode annotation.
+#' \code{xci_post_X1_active}; \code{donor_snp_info} gains one row per phased
+#' SNP x donor with \code{xci_informative} (whether the gene drove active-X
+#' calling), \code{allele_on_x1} and \code{xci_escape_fraction}. For a
+#' clonotype-level fit the per-cell projection is used for barcode
+#' annotation.
 #'
 #' @keywords internal
 .store_xci_fit <- function(x, fit) {
@@ -965,7 +975,7 @@ setMethod(
             dplyr::transmute(
                 snp_id,
                 donor = f$donor,
-                xci_informative = TRUE,
+                xci_informative,
                 allele_on_x1,
                 xci_escape_fraction = escape_fraction
             )
@@ -1258,6 +1268,62 @@ setMethod(
     # Clamp to (0.001, 0.499) so pi_g stays interpretable as a minor fraction
     pi_g_new[pi_new$gene] <- pmax(pi_bounds[1], pmin(pi_bounds[2], pi_new$pi))
     pi_g_new
+}
+
+#' Re-estimate phase and escape fraction for every gene against a frozen cell assignment
+#'
+#' \code{.infer_xci} discards phase (\code{h_g}) and escape fraction (\code{pi_g}) for any gene
+#' that fails the outlier or escapee filters, because a gene uninformative for calling active-X
+#' state has no business influencing that call. But once the call is made, those same genes can
+#' still be phased against it: given the cells' active-X state as fixed, ground truth, fitting a
+#' gene's own phase and escape fraction is a well-posed one-gene problem, unlike the joint EM
+#' where a weakly-discriminative gene's own fit is nearly indifferent between phase orientations.
+#' Alternates the existing M-steps (\code{\link{.m_step_phase}}, \code{\link{.m_step_pi}}) with no
+#' E-step, since the point is to quantify escape without letting escapee data influence which cell
+#' is called X1- or X2-active (that would be circular).
+#'
+#' @param ref_mat,alt_mat Full per-donor gene x cell count matrices (one row per het SNP/gene),
+#'   unfiltered by the outlier or escapee filters.
+#' @param post Frozen per-cell posterior from the informative-gene fit (\code{xci_result$post}),
+#'   with \code{cell} and \code{post_X1_inactive} columns.
+#' @param rho Beta-binomial overdispersion from the informative-gene fit (\code{xci_result$rho}).
+#'
+#' @return List with \code{h_g} (integer phase, 0 = REF on X1) and \code{pi_g} (numeric escape
+#'   fraction), both length \code{nrow(ref_mat)}. Genes with no covered cell are \code{NA} in
+#'   both, since they cannot be phased at all.
+#'
+#' @keywords internal
+.rephase_all_genes <- function(ref_mat, alt_mat, post, rho, min_cov = 1, max_iter = 50, tol = 1e-4) {
+    n_genes <- nrow(ref_mat)
+    dat <- .pivot_counts_to_long(ref_mat, alt_mat, min_cov)
+    # Only cells the informative-gene fit actually scored carry a posterior; an unscored cell
+    # would default to 0 in .m_step_phase's post lookup, silently reading as "certainly
+    # X2-active" and corrupting phase for genes uniquely covered there.
+    dat <- dplyr::filter(dat, cell %in% post$cell)
+
+    h_g <- rep(0L, n_genes)
+    pi_g <- rep(0.05, n_genes)
+    if (nrow(dat) > 0) {
+        dedup <- .build_ll_dedup(dat)
+        for (iter in seq_len(max_iter)) {
+            ll <- .betabinom_ll_both(dedup, pi_g, rho)
+            h_g <- .m_step_phase(dat, post, h_g, ll)
+            pi_g_new <- .m_step_pi(dat, post, h_g)
+            converged <- max(abs(pi_g_new - pi_g)) < tol
+            pi_g <- pi_g_new
+            if (converged) {
+                break
+            }
+        }
+    }
+
+    # Genes absent from dat have no covered cell and cannot be phased at all, unlike the 0.05
+    # filler .m_step_pi otherwise supplies for bookkeeping.
+    covered <- seq_len(n_genes) %in% unique(dat$gene)
+    list(
+        h_g = ifelse(covered, h_g, NA_integer_),
+        pi_g = ifelse(covered, pi_g, NA_real_)
+    )
 }
 
 #' @keywords internal
