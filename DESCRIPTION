@@ -80,6 +80,7 @@ Collate:
     'assign_xci.R'
     'haplotype_expression.R'
     'molecule_phasing.R'
+    'plot_xci_heatmap.R'
     'plots.R'
     'plotting.R'
     'remove.R'
@@ -89,4 +90,6 @@ Collate:
     'to_expr_matrix.R'
     'utils.R'
     'vcf_utils.R'
+    'xci-diagnostics.R'
+    'xci-em.R'
 Config/roxygen2/version: 8.0.0
