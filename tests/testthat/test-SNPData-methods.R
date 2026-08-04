@@ -577,6 +577,36 @@ test_that("aggregate_count_df skips partial NA donors and clonotypes", {
     expect_equal(unique(clonotype_result$clonotype), "clonotype_2")
 })
 
+test_that("aggregate_count_df supports aggregating over multiple barcode_info columns", {
+    # Setup
+    snp_data <- SNPData(
+        alt_count = test_alt_count,
+        ref_count = test_ref_count,
+        snp_info = test_snp_info,
+        barcode_info = test_barcode_info
+    )
+
+    # Test aggregation by donor and cell_type combined
+    multi_agg_df <- aggregate_count_df(snp_data, c("donor", "cell_type"), test_maf = FALSE)
+    # Verify multi-column aggregation returns a tibble
+    expect_s3_class(multi_agg_df, "tbl_df")
+    # Check that both grouping columns are retained in the output
+    expect_true(all(c("donor", "cell_type") %in% colnames(multi_agg_df)))
+    # Check that result has one row per SNP per unique donor/cell_type combination
+    expect_equal(nrow(multi_agg_df), 4) # 2 SNPs x 2 unique (donor, cell_type) combinations
+    # Verify counts are aggregated per unique combination rather than merged across combinations
+    t_cell_snp1 <- dplyr::filter(multi_agg_df, snp_id == "snp_1", cell_type == "T_cell")
+    expect_equal(t_cell_snp1$ref_count, test_ref_count[1, 1])
+    expect_equal(t_cell_snp1$alt_count, test_alt_count[1, 1])
+
+    # Test aggregation over a non-existent combination of columns
+    # Verify error names all missing columns
+    expect_error(
+        aggregate_count_df(snp_data, c("donor", "nonexistent_column")),
+        "Column\\(s\\) 'nonexistent_column' not found in barcode_info"
+    )
+})
+
 test_that(".aggregate_grouped_counts rejects donor mode donor lookup", {
     # Setup
     snp_data <- SNPData(
