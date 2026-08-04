@@ -373,7 +373,7 @@ setMethod(
     fit$cell_assignments <- fit$assignments %>%
         dplyr::rename(clonotype = cell_id) %>%
         dplyr::inner_join(cell_to_clonotype, by = "clonotype") %>%
-        dplyr::select(cell_id, post_X1_inactive, post_X2_inactive, assignment)
+        dplyr::select(cell_id, post_X1_active, post_X2_active, assignment)
     fit
 }
 
@@ -391,8 +391,8 @@ setMethod(
     unit_label <- if (unit == "clonotype") "clonotypes" else "cells"
 
     assignments <- xci_result$post %>%
-        dplyr::mutate(cell_id = unit_ids[cell], post_X2_inactive = 1 - post_X1_inactive) %>%
-        dplyr::select(cell_id, post_X1_inactive, post_X2_inactive, assignment)
+        dplyr::mutate(cell_id = unit_ids[cell], post_X2_active = 1 - post_X1_active) %>%
+        dplyr::select(cell_id, post_X1_active, post_X2_active, assignment)
 
     # Phase and escape fraction for every gene, not just the informative subset that drove
     # calling: an escapee carries no information about which X is active (correctly excluded
@@ -411,9 +411,8 @@ setMethod(
     ) %>%
         dplyr::filter(!is.na(allele_on_x1))
 
-    # The EM labels the inactive X; report the active X so the log agrees with
-    # the stored active_x column rather than inverting it.
-    active <- .active_from_inactive(assignments$assignment)
+    # assignment already names the active X; "unassigned" carries no active call.
+    active <- dplyr::na_if(assignments$assignment, "unassigned")
     counts <- table(factor(active, c("X1", "X2")))
     logger::log_info(
         "[{donor}] XCI fit complete: {sum(xci_result$gene_keep)} informative / {nrow(haplotypes)} phased genes, ",
@@ -437,16 +436,4 @@ setMethod(
         ref_mat = ref_mat_filtered,
         alt_mat = alt_mat_filtered
     )
-}
-
-#' Flip an inactive-X label to the X that is active
-#'
-#' The EM works in inactive-X terms throughout; the stored metadata and every
-#' user-facing surface speak in active-X terms. This is the single definition of
-#' that flip, so the two framings cannot drift apart. Labels that name neither X
-#' (\code{"unassigned"}) carry no active call and map to \code{NA}.
-#'
-#' @keywords internal
-.active_from_inactive <- function(inactive) {
-    unname(c(X1 = "X2", X2 = "X1")[inactive])
 }

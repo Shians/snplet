@@ -10,6 +10,6 @@
 The EM's component naming is arbitrary (fixed only by the random phase
 initialisation), so the same biological haplotype could end up "X1" in one
 run and "X2" in the next. Relabels so X1 always denotes the active-X
-majority (assignment "X2" == X1 active, per \code{\link{.active_from_inactive}}).
+majority.
 }
 \keyword{internal}

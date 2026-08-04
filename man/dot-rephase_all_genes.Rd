@@ -19,7 +19,7 @@
 unfiltered by the outlier or escapee filters.}
 
 \item{post}{Frozen per-cell posterior from the informative-gene fit (\code{xci_result$post}),
-with \code{cell} and \code{post_X1_inactive} columns.}
+with \code{cell} and \code{post_X1_active} columns.}
 
 \item{rho}{Beta-binomial overdispersion from the informative-gene fit (\code{xci_result$rho}).}
 }
@@ -35,7 +35,7 @@ state has no business influencing that call. But once the call is made, those sa
 still be phased against it: given the cells' active-X state as fixed, ground truth, fitting a
 gene's own phase and escape fraction is a well-posed one-gene problem, unlike the joint EM
 where a weakly-discriminative gene's own fit is nearly indifferent between phase orientations.
-Alternates the existing M-steps (\code{\link{.m_step_phase}}, \code{\link{.m_step_pi}}) with no
+Alternates the existing M-steps (\code{.m_step_phase}, \code{.m_step_pi}) with no
 E-step, since the point is to quantify escape without letting escapee data influence which cell
 is called X1- or X2-active (that would be circular).
 }

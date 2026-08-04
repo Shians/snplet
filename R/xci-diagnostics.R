@@ -91,8 +91,9 @@ setMethod("xci_haplotypes", signature(x = "SNPData"), function(x) {
         assignments %>%
             dplyr::transmute(
                 cell_id,
-                active_x = .active_from_inactive(assignment),
-                xci_post_X1_active = 1 - post_X1_inactive,
+                # assignment already names the active X; "unassigned" means no call.
+                active_x = dplyr::na_if(assignment, "unassigned"),
+                xci_post_X1_active = post_X1_active,
                 # Record the unit the model was fit on so downstream plotting can
                 # aggregate cells back to clonotypes when appropriate.
                 xci_fit_unit = f$unit %||% "cell"

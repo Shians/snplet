@@ -83,11 +83,12 @@
     # swap and does not change which genes pass).
     passes_escapee_filter <- .filter_escapee_genes(dat, n_genes, best$h_g, best$pi_g, best$rho, best$post)
 
+    # assignment names the *active* X, matching the stored active_x column.
     best$post <- best$post %>%
         dplyr::mutate(
             assignment = dplyr::case_when(
-                post_X1_inactive >= confidence_threshold ~ "X1",
-                post_X1_inactive <= 1 - confidence_threshold ~ "X2",
+                post_X1_active >= confidence_threshold ~ "X1",
+                post_X1_active <= 1 - confidence_threshold ~ "X2",
                 TRUE ~ "unassigned"
             )
         )
@@ -107,14 +108,14 @@
 #' The EM's component naming is arbitrary (fixed only by the random phase
 #' initialisation), so the same biological haplotype could end up "X1" in one
 #' run and "X2" in the next. Relabels so X1 always denotes the active-X
-#' majority (assignment "X2" == X1 active, per \code{\link{.active_from_inactive}}).
+#' majority.
 #'
 #' @keywords internal
 .canonicalise_x1_label <- function(fit) {
-    if (sum(fit$post$assignment == "X1") > sum(fit$post$assignment == "X2")) {
+    if (sum(fit$post$assignment == "X2") > sum(fit$post$assignment == "X1")) {
         fit$post <- fit$post %>%
             dplyr::mutate(
-                post_X1_inactive = 1 - post_X1_inactive,
+                post_X1_active = 1 - post_X1_active,
                 assignment = dplyr::case_when(
                     assignment == "X1" ~ "X2",
                     assignment == "X2" ~ "X1",
@@ -128,17 +129,20 @@
 
 #' @keywords internal
 .compute_gene_llr <- function(dat, post, h_g, pi_g, rho) {
-    p_if_X1 <- ifelse(h_g[dat$gene] == 0, pi_g[dat$gene], 1 - pi_g[dat$gene])
-    p_if_X2 <- 1 - p_if_X1
+    # Escape (pi_g) is a property of the silenced allele, so this contrast is
+    # naturally expressed in inactive-X terms even though the posterior carried
+    # alongside it is active-oriented.
+    p_if_x1_inactive <- ifelse(h_g[dat$gene] == 0, pi_g[dat$gene], 1 - pi_g[dat$gene])
+    p_if_x2_inactive <- 1 - p_if_x1_inactive
 
-    ll_X1 <- .loglik_obs(dat$ref, dat$n, p_if_X1, rho)
-    ll_X2 <- .loglik_obs(dat$ref, dat$n, p_if_X2, rho)
+    ll_x1_inactive <- .loglik_obs(dat$ref, dat$n, p_if_x1_inactive, rho)
+    ll_x2_inactive <- .loglik_obs(dat$ref, dat$n, p_if_x2_inactive, rho)
 
     dat %>%
-        dplyr::left_join(post %>% dplyr::select(cell, post_X1_inactive), by = "cell") %>%
+        dplyr::left_join(post %>% dplyr::select(cell, post_X1_active), by = "cell") %>%
         # Expected LLR per observation: weighted by P(X1-inactive) for each cell.
         # Positive contribution means the observation is consistent with current assignments.
-        dplyr::mutate(llr = post_X1_inactive * (ll_X1 - ll_X2)) %>%
+        dplyr::mutate(llr = (1 - post_X1_active) * (ll_x1_inactive - ll_x2_inactive)) %>%
         dplyr::group_by(gene) %>%
         dplyr::summarise(llr = sum(llr), .groups = "drop")
 }
@@ -180,9 +184,10 @@
         post <- .e_step(dat, h_g, ll)
         h_g <- .m_step_phase(dat, post, h_g, ll)
         pi_g <- .m_step_pi(dat, post, h_g)
-        # log-likelihood: sum of log(sigmoid(lor)) for each cell
-        # Numerically stable: log(sigmoid(lor)) = pmin(0, lor) - log(1 + exp(-|lor|))
-        ll_current <- sum(pmin(0, post$lor) - log1p(exp(-abs(post$lor))))
+        # Observed-data mixture log-likelihood (see .e_step). `post` comes from
+        # the E-step above, i.e. before this iteration's M-steps, so this scores
+        # the parameters at the start of the iteration.
+        ll_current <- sum(post$ll_mix)
         if (abs(ll_current - ll_prev) < tol) {
             break
         }
@@ -194,22 +199,37 @@
 #' @keywords internal
 .e_step <- function(dat, h_g, ll, prior = 0.5) {
     # ll$L0 = loglik at pi_g[gene] (REF silenced), ll$L1 = loglik at 1 - pi_g[gene].
-    # p(REF | X1 inactive): if h=0 (X1 carries REF), REF is silenced → pi_g → L0
-    #                        if h=1 (X1 carries ALT), REF is active  → 1 - pi_g → L1
+    # p(REF | X1 active): if h=0 (X1 carries REF), REF is expressed → 1 - pi_g → L1
+    #                      if h=1 (X1 carries ALT), REF is silenced → pi_g     → L0
+    # X2-active is the complement orientation, so its two cases are swapped.
     h_row <- h_g[dat$gene] == 0
-    # Per-observation X1-vs-X2 log-likelihood contrast. X2 is the complement
-    # orientation, so the contrast is +(L0 - L1) when h=0 and -(L0 - L1) when h=1.
-    obs_lor <- ifelse(h_row, ll$L0 - ll$L1, ll$L1 - ll$L0)
+    obs_x1_active <- ifelse(h_row, ll$L1, ll$L0)
+    obs_x2_active <- ifelse(h_row, ll$L0, ll$L1)
+
+    # Σ_g loglik per cell under each hypothesis, via rowsum (faster than group_by).
+    cell_x1 <- rowsum(obs_x1_active, dat$cell)
+    cell_x2 <- rowsum(obs_x2_active, dat$cell)
 
     logit_prior <- log(prior / (1 - prior)) # log(1) = 0 for equal prior
-    # Σ_g [loglik(X1) - loglik(X2)] per cell, via rowsum (faster than group_by).
-    cell_lor <- rowsum(obs_lor, dat$cell)
-    lor <- as.numeric(cell_lor) + logit_prior
+    lor <- as.numeric(cell_x1 - cell_x2) + logit_prior
+
+    # Observed-data log-likelihood per cell, log(prior * P(obs | X1 active) +
+    # (1 - prior) * P(obs | X2 active)), via log-sum-exp for stability. Unlike
+    # the per-cell posterior, this is invariant to which mixture component is
+    # labelled X1, so comparing it across EM restarts ranks them on fit quality
+    # rather than on an arbitrary labelling. It is offset by a constant — the
+    # lchoose(n, ref) term .betabinom_ll_kernel drops — which is identical across
+    # restarts and labellings, so neither the argmax nor the convergence delta
+    # is affected.
+    a <- as.numeric(cell_x1) + log(prior)
+    b <- as.numeric(cell_x2) + log1p(-prior)
+    ll_mix <- pmax(a, b) + log1p(exp(-abs(a - b)))
 
     tibble::tibble(
-        cell = as.integer(rownames(cell_lor)),
-        post_X1_inactive = 1 / (1 + exp(-lor)), # sigmoid converts LOR to posterior
-        lor = lor
+        cell = as.integer(rownames(cell_x1)),
+        post_X1_active = 1 / (1 + exp(-lor)), # sigmoid converts LOR to posterior
+        lor = lor,
+        ll_mix = ll_mix
     )
 }
 
@@ -218,18 +238,18 @@
     # Expected log-likelihood under each phase: E_q[log p(ref | h, pi_g)], built
     # from the shared orientation pair. ll$L0 = loglik at pi_g (REF silenced),
     # ll$L1 = loglik at 1 - pi_g (REF active).
-    # h=0: X1-inactive cells (weight post_X1_inactive) see REF fraction pi_g → L0;
-    #       X2-inactive cells (weight 1-post_X1_inactive) see 1 - pi_g → L1.
+    # h=0: X1-active cells (weight post_X1_active) see REF fraction 1 - pi_g → L1;
+    #       X2-active cells (weight 1-post_X1_active) see pi_g → L0.
     # h=1: the two orientations swap.
     # Scatter cell posteriors into a lookup indexed by cell id. post$cell is a
     # sorted subset of cell ids (cells with no covered gene are absent), so a
     # positional index would misalign — index by id instead.
     post_lookup <- numeric(max(dat$cell))
-    post_lookup[post$cell] <- post$post_X1_inactive
-    post_X1_inactive <- post_lookup[dat$cell]
+    post_lookup[post$cell] <- post$post_X1_active
+    post_X1_active <- post_lookup[dat$cell]
 
-    obs_h0 <- post_X1_inactive * ll$L0 + (1 - post_X1_inactive) * ll$L1
-    obs_h1 <- post_X1_inactive * ll$L1 + (1 - post_X1_inactive) * ll$L0
+    obs_h0 <- (1 - post_X1_active) * ll$L0 + post_X1_active * ll$L1
+    obs_h1 <- (1 - post_X1_active) * ll$L1 + post_X1_active * ll$L0
 
     ll_h0 <- rowsum(obs_h0, dat$gene)
     ll_h1 <- rowsum(obs_h1, dat$gene)
@@ -243,15 +263,17 @@
 #' @keywords internal
 .m_step_pi <- function(dat, post, h_g, pi_bounds = c(0.001, 0.499)) {
     counts_with_posterior <- dat %>%
-        dplyr::left_join(post %>% dplyr::select(cell, post_X1_inactive), by = "cell") %>%
+        dplyr::left_join(post %>% dplyr::select(cell, post_X1_active), by = "cell") %>%
         dplyr::mutate(
-            # Soft-assigned inactive-allele read count:
-            # h=0 (X1 carries REF): X1-inactive cells contribute REF, X2-inactive contribute ALT
+            # Soft-assigned inactive-allele read count. pi_g stays the escape
+            # (inactive-allele) fraction regardless of how the cell posterior is
+            # oriented, so the silenced allele is the one on the *inactive* X:
+            # h=0 (X1 carries REF): X2-active cells contribute REF, X1-active contribute ALT
             # h=1 (X1 carries ALT): roles reversed
             xi_ref_count = ifelse(
                 h_g[gene] == 0,
-                post_X1_inactive * ref + (1 - post_X1_inactive) * alt,
-                post_X1_inactive * alt + (1 - post_X1_inactive) * ref
+                (1 - post_X1_active) * ref + post_X1_active * alt,
+                (1 - post_X1_active) * alt + post_X1_active * ref
             ),
             xi_total = n
         )
@@ -275,14 +297,14 @@
 #' still be phased against it: given the cells' active-X state as fixed, ground truth, fitting a
 #' gene's own phase and escape fraction is a well-posed one-gene problem, unlike the joint EM
 #' where a weakly-discriminative gene's own fit is nearly indifferent between phase orientations.
-#' Alternates the existing M-steps (\code{\link{.m_step_phase}}, \code{\link{.m_step_pi}}) with no
+#' Alternates the existing M-steps (\code{.m_step_phase}, \code{.m_step_pi}) with no
 #' E-step, since the point is to quantify escape without letting escapee data influence which cell
 #' is called X1- or X2-active (that would be circular).
 #'
 #' @param ref_mat,alt_mat Full per-donor gene x cell count matrices (one row per het SNP/gene),
 #'   unfiltered by the outlier or escapee filters.
 #' @param post Frozen per-cell posterior from the informative-gene fit (\code{xci_result$post}),
-#'   with \code{cell} and \code{post_X1_inactive} columns.
+#'   with \code{cell} and \code{post_X1_active} columns.
 #' @param rho Beta-binomial overdispersion from the informative-gene fit (\code{xci_result$rho}).
 #'
 #' @return List with \code{h_g} (integer phase, 0 = REF on X1) and \code{pi_g} (numeric escape
