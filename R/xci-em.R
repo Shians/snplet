@@ -233,6 +233,31 @@
     )
 }
 
+#' Assert that every observation carries a cell posterior
+#'
+#' Both M-steps weight each observation by its cell's posterior. A cell present
+#' in \code{dat} but absent from \code{post} has none, and no numeric stand-in is
+#' safe: any default asserts a \emph{confident} call (0 reads as "certainly
+#' X2-active"), silently biasing phase and escape for genes covered only in that
+#' cell — and flipping meaning if the posterior's orientation ever changes.
+#' Missing cells therefore surface as \code{NA} and are rejected here.
+#'
+#' Both current callers guarantee coverage: \code{.e_step} derives
+#' \code{post} from \code{dat}, and \code{.rephase_all_genes} filters \code{dat}
+#' to the scored cells (it runs over all genes, so cells covered only at
+#' outlier-dropped genes are genuinely unscored). Reaching this is a caller bug.
+#'
+#' @keywords internal
+.check_post_covers_dat <- function(post_by_obs) {
+    if (anyNA(post_by_obs)) {
+        stop(
+            "Observations reference cells absent from `post`. Filter `dat` to the ",
+            "cells the E-step scored before calling the M-steps."
+        )
+    }
+    invisible(TRUE)
+}
+
 #' @keywords internal
 .m_step_phase <- function(dat, post, h_g, ll) {
     # Expected log-likelihood under each phase: E_q[log p(ref | h, pi_g)], built
@@ -243,10 +268,13 @@
     # h=1: the two orientations swap.
     # Scatter cell posteriors into a lookup indexed by cell id. post$cell is a
     # sorted subset of cell ids (cells with no covered gene are absent), so a
-    # positional index would misalign — index by id instead.
-    post_lookup <- numeric(max(dat$cell))
+    # positional index would misalign — index by id instead. The fill is NA, not
+    # 0, so an uncovered cell is rejected rather than silently read as a
+    # confident call — see .check_post_covers_dat().
+    post_lookup <- rep(NA_real_, max(dat$cell))
     post_lookup[post$cell] <- post$post_X1_active
     post_X1_active <- post_lookup[dat$cell]
+    .check_post_covers_dat(post_X1_active)
 
     obs_h0 <- (1 - post_X1_active) * ll$L0 + post_X1_active * ll$L1
     obs_h1 <- (1 - post_X1_active) * ll$L1 + post_X1_active * ll$L0
@@ -262,8 +290,13 @@
 
 #' @keywords internal
 .m_step_pi <- function(dat, post, h_g, pi_bounds = c(0.001, 0.499)) {
-    counts_with_posterior <- dat %>%
-        dplyr::left_join(post %>% dplyr::select(cell, post_X1_active), by = "cell") %>%
+    # left_join leaves NA for any cell absent from post; reject rather than let
+    # it propagate into pi_g (see .check_post_covers_dat).
+    joined <- dat %>%
+        dplyr::left_join(post %>% dplyr::select(cell, post_X1_active), by = "cell")
+    .check_post_covers_dat(joined$post_X1_active)
+
+    counts_with_posterior <- joined %>%
         dplyr::mutate(
             # Soft-assigned inactive-allele read count. pi_g stays the escape
             # (inactive-allele) fraction regardless of how the cell posterior is

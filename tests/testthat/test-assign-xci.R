@@ -540,6 +540,65 @@ test_that("deduplicated kernel evaluation matches the direct per-row computation
     expect_identical(both$L1, direct_L1)
 })
 
+# A minimal (dat, post) pair where cell 3 appears in the observations but was
+# never scored, so it carries no posterior. Both M-steps must refuse it: any
+# numeric stand-in asserts a confident call and would bias phase and escape for
+# genes that cell alone covers.
+make_unscored_cell_case <- function() {
+    list(
+        dat = tibble::tibble(
+            gene = c(1L, 1L, 2L, 2L),
+            cell = c(1L, 2L, 2L, 3L),
+            ref = c(8L, 1L, 7L, 9L),
+            alt = c(1L, 8L, 2L, 1L),
+            n = c(9L, 9L, 9L, 10L)
+        ),
+        post = tibble::tibble(cell = c(1L, 2L), post_X1_active = c(0.99, 0.01)),
+        h_g = c(0L, 0L)
+    )
+}
+
+test_that(".m_step_phase() rejects an observation whose cell was never scored", {
+    case <- make_unscored_cell_case()
+    ll <- snplet:::.betabinom_ll_both(snplet:::.build_ll_dedup(case$dat), c(0.05, 0.05), 0.05)
+
+    # Verify the unscored cell is refused rather than silently defaulting to a
+    # confident posterior
+    expect_error(
+        snplet:::.m_step_phase(case$dat, case$post, case$h_g, ll),
+        "cells absent from `post`"
+    )
+})
+
+test_that(".m_step_pi() rejects an observation whose cell was never scored", {
+    case <- make_unscored_cell_case()
+
+    # Verify the same precondition holds in the escape-fraction M-step, whose
+    # join would otherwise leak NA into pi_g
+    expect_error(
+        snplet:::.m_step_pi(case$dat, case$post, case$h_g),
+        "cells absent from `post`"
+    )
+})
+
+test_that(".rephase_all_genes() phases against scored cells and leaves the rest NA", {
+    # Genes 1-2 are covered in the scored cells 1-3; gene 3 is covered only in
+    # cell 4, which the fit never scored, so it cannot be phased at all.
+    ref_mat <- matrix(c(8L, 1L, 7L, 0L, 7L, 2L, 6L, 0L, 0L, 0L, 0L, 9L), nrow = 3, byrow = TRUE)
+    alt_mat <- matrix(c(1L, 8L, 2L, 0L, 2L, 7L, 3L, 0L, 0L, 0L, 0L, 1L), nrow = 3, byrow = TRUE)
+    post <- tibble::tibble(cell = 1:3, post_X1_active = c(0.99, 0.01, 0.98))
+
+    rephased <- snplet:::.rephase_all_genes(ref_mat, alt_mat, post, rho = 0.05)
+
+    # Confirm the guard drops the unscored cell instead of tripping the M-step
+    # precondition, so genes backed by scored cells are still phased
+    expect_false(any(is.na(rephased$h_g[1:2])))
+    # Confirm a gene covered only in an unscored cell is reported unphaseable
+    expect_true(is.na(rephased$h_g[3]))
+    # Confirm its escape fraction is likewise NA rather than a bookkeeping filler
+    expect_true(is.na(rephased$pi_g[3]))
+})
+
 test_that("assign_xci_by_clonotype recovers the clonal split and stores diagnostics", {
     fixture <- make_xci_snpdata()
     stored <- assign_xci_by_clonotype(fixture$snpdata, n_inits = 3)
