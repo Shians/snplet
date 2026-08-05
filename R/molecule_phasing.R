@@ -796,7 +796,7 @@ assign_snp_genes <- function(snp_info, gene_anno) {
 #'   `assign_xci_by_clonotype()` (see `.has_xci_diagnostics()`), with a
 #'   `donor` column in `barcode_info`.
 #' @param bam_files A named character vector or list, `donor = path`, one
-#'   indexed BAM per donor. Names must match `get_barcode_info(x)$donor`. Any
+#'   indexed BAM per donor. Names must match `barcode_info(x)$donor`. Any
 #'   entry named `"doublet"` or `"unassigned"` is dropped with a warning --
 #'   neither is a real donor with its own genotype to phase against.
 #' @param target_chrom Canonical chromosome to restrict het-SNP selection to.
@@ -836,12 +836,12 @@ add_molecule_phase <- function(
     if (!.has_xci_diagnostics(x)) {
         stop("No stored XCI diagnostics found. Run assign_xci(x) first.")
     }
-    barcode_info <- get_barcode_info(x)
+    barcode_info <- barcode_info(x)
     if (!"donor" %in% colnames(barcode_info)) {
         stop("SNPData object has no donor assignments; add_molecule_phase() requires one BAM per donor.")
     }
     if (is.null(names(bam_files)) || any(!nzchar(names(bam_files)))) {
-        stop("bam_files must be named, donor = path, matching get_barcode_info(x)$donor.")
+        stop("bam_files must be named, donor = path, matching barcode_info(x)$donor.")
     }
     unknown_donors <- setdiff(names(bam_files), unique(barcode_info$donor))
     if (length(unknown_donors) > 0) {
@@ -864,7 +864,7 @@ add_molecule_phase <- function(
         return(x)
     }
 
-    snp_info <- get_snp_info(x)
+    snp_info <- snp_info(x)
     if (!"chrom_canonical" %in% colnames(snp_info)) {
         stop("No canonical chromosome names available; SNPData must be built with a 'chrom' column.")
     }
@@ -872,11 +872,11 @@ add_molecule_phase <- function(
     het_status <- donor_het_status_df(x_chrom) %>%
         dplyr::filter(zygosity == "het", donor %in% names(bam_files))
 
-    donor_snp_info <- get_donor_snp_info(x)
+    donor_snp_info <- donor_snp_info(x)
 
     per_donor_phase <- purrr::map(names(bam_files), function(d) {
         donor_snp_ids <- unique(het_status$snp_id[het_status$donor == d])
-        this_snp_info <- get_snp_info(x_chrom) %>%
+        this_snp_info <- snp_info(x_chrom) %>%
             dplyr::filter(snp_id %in% donor_snp_ids) %>%
             dplyr::select(snp_id, chrom, pos, ref, alt)
         if (nrow(this_snp_info) == 0) {
@@ -955,7 +955,7 @@ add_molecule_phase <- function(
     # (every row, not just the ones touched above) so the follow-up merge is a
     # row-complete 1:1 match and cannot null out an untouched row the way a
     # partial-coverage overwrite could.
-    resolved <- get_donor_snp_info(x) %>%
+    resolved <- donor_snp_info(x) %>%
         dplyr::mutate(
             allele_on_x1_em = allele_on_x1,
             allele_on_x1 = dplyr::case_when(

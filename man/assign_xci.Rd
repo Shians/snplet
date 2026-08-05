@@ -75,7 +75,7 @@ the \code{active_x} column.
 snp_data <- assign_xci(snp_data)
 
 # View results
-get_barcode_info(snp_data) \%>\%
+barcode_info(snp_data) \%>\%
   count(donor, active_x)
 
 # Diagnostics are stored, so plotting works directly

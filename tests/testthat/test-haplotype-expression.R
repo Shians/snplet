@@ -62,8 +62,8 @@ make_hap_fixture <- function() {
         barcode_info = barcode_info
     )
 
-    snp_ids <- get_snp_info(obj)$snp_id
-    cell_ids <- get_barcode_info(obj)$cell_id
+    snp_ids <- snp_info(obj)$snp_id
+    cell_ids <- barcode_info(obj)$cell_id
 
     # One row per informative (snp_id, donor) pair: snp1 and snp2 are
     # informative in donor0 only; snp3 is informative in both donors, with

@@ -12,16 +12,20 @@
 \alias{alt_count,SNPData-method}
 \alias{oth_count}
 \alias{oth_count,SNPData-method}
+\alias{snp_info}
+\alias{snp_info,SNPData-method}
 \alias{get_snp_info}
-\alias{get_snp_info,SNPData-method}
+\alias{barcode_info}
+\alias{barcode_info,SNPData-method}
 \alias{get_barcode_info}
-\alias{get_barcode_info,SNPData-method}
 \alias{get_sample_info}
 \alias{get_sample_info,SNPData-method}
+\alias{donor_info}
+\alias{donor_info,SNPData-method}
 \alias{get_donor_info}
-\alias{get_donor_info,SNPData-method}
+\alias{donor_snp_info}
+\alias{donor_snp_info,SNPData-method}
 \alias{get_donor_snp_info}
-\alias{get_donor_snp_info,SNPData-method}
 \alias{chr_style}
 \alias{chr_style,SNPData-method}
 \alias{updateObject,SNPData-method}
@@ -75,25 +79,33 @@ oth_count(x)
 
 \S4method{oth_count}{SNPData}(x)
 
+snp_info(x)
+
+\S4method{snp_info}{SNPData}(x)
+
 get_snp_info(x)
 
-\S4method{get_snp_info}{SNPData}(x)
+barcode_info(x)
+
+\S4method{barcode_info}{SNPData}(x)
 
 get_barcode_info(x)
-
-\S4method{get_barcode_info}{SNPData}(x)
 
 get_sample_info(x)
 
 \S4method{get_sample_info}{SNPData}(x)
 
+donor_info(x)
+
+\S4method{donor_info}{SNPData}(x)
+
 get_donor_info(x)
 
-\S4method{get_donor_info}{SNPData}(x)
+donor_snp_info(x)
+
+\S4method{donor_snp_info}{SNPData}(x)
 
 get_donor_snp_info(x)
-
-\S4method{get_donor_snp_info}{SNPData}(x)
 
 chr_style(x)
 
@@ -211,11 +223,11 @@ Rows are dropped along with their donor, same as \code{donor_info}.}
   \item{\code{ref_count(x)}}{Get reference allele count matrix}
   \item{\code{alt_count(x)}}{Get alternate allele count matrix}
   \item{\code{oth_count(x)}}{Get other allele count matrix}
-  \item{\code{get_snp_info(x)}}{Get SNP metadata data.frame}
-  \item{\code{get_barcode_info(x)}}{Get cell/barcode metadata data.frame}
-  \item{\code{get_sample_info(x)}}{Alias for get_barcode_info()}
-  \item{\code{get_donor_info(x)}}{Get per-donor metadata tibble}
-  \item{\code{get_donor_snp_info(x)}}{Get per-(SNP, donor) metadata tibble}
+  \item{\code{snp_info(x)}}{Get SNP metadata data.frame (alias: \code{get_snp_info()})}
+  \item{\code{barcode_info(x)}}{Get cell/barcode metadata data.frame (alias: \code{get_barcode_info()})}
+  \item{\code{get_sample_info(x)}}{Alias for barcode_info()}
+  \item{\code{donor_info(x)}}{Get per-donor metadata tibble (alias: \code{get_donor_info()})}
+  \item{\code{donor_snp_info(x)}}{Get per-(SNP, donor) metadata tibble (alias: \code{get_donor_snp_info()})}
   \item{\code{chr_style(x)}}{Get chromosome naming style}
   \item{\code{coverage(x)}}{Get total coverage matrix (ref + alt counts)}
 }
@@ -255,8 +267,8 @@ ref_counts <- ref_count(snp_data)
 alt_counts <- alt_count(snp_data)
 
 # Access metadata
-snp_metadata <- get_snp_info(snp_data)
-cell_metadata <- get_barcode_info(snp_data)
+snp_metadata <- snp_info(snp_data)
+cell_metadata <- barcode_info(snp_data)
 
 # Calculate derived metrics
 total_coverage <- coverage(snp_data)

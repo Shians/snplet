@@ -53,11 +53,11 @@
 #'   \item{\code{ref_count(x)}}{Get reference allele count matrix}
 #'   \item{\code{alt_count(x)}}{Get alternate allele count matrix}
 #'   \item{\code{oth_count(x)}}{Get other allele count matrix}
-#'   \item{\code{get_snp_info(x)}}{Get SNP metadata data.frame}
-#'   \item{\code{get_barcode_info(x)}}{Get cell/barcode metadata data.frame}
-#'   \item{\code{get_sample_info(x)}}{Alias for get_barcode_info()}
-#'   \item{\code{get_donor_info(x)}}{Get per-donor metadata tibble}
-#'   \item{\code{get_donor_snp_info(x)}}{Get per-(SNP, donor) metadata tibble}
+#'   \item{\code{snp_info(x)}}{Get SNP metadata data.frame (alias: \code{get_snp_info()})}
+#'   \item{\code{barcode_info(x)}}{Get cell/barcode metadata data.frame (alias: \code{get_barcode_info()})}
+#'   \item{\code{get_sample_info(x)}}{Alias for barcode_info()}
+#'   \item{\code{donor_info(x)}}{Get per-donor metadata tibble (alias: \code{get_donor_info()})}
+#'   \item{\code{donor_snp_info(x)}}{Get per-(SNP, donor) metadata tibble (alias: \code{get_donor_snp_info()})}
 #'   \item{\code{chr_style(x)}}{Get chromosome naming style}
 #'   \item{\code{coverage(x)}}{Get total coverage matrix (ref + alt counts)}
 #' }
@@ -92,8 +92,8 @@
 #' alt_counts <- alt_count(snp_data)
 #'
 #' # Access metadata
-#' snp_metadata <- get_snp_info(snp_data)
-#' cell_metadata <- get_barcode_info(snp_data)
+#' snp_metadata <- snp_info(snp_data)
+#' cell_metadata <- barcode_info(snp_data)
 #'
 #' # Calculate derived metrics
 #' total_coverage <- coverage(snp_data)
@@ -340,21 +340,29 @@ setGeneric("oth_count", function(x) standardGeneric("oth_count"))
 #' @rdname SNPData-class
 setMethod("oth_count", signature(x = "SNPData"), function(x) x@oth_count)
 
-#' @exportMethod get_snp_info
+#' @exportMethod snp_info
 #' @rdname SNPData-class
-setGeneric("get_snp_info", function(x) standardGeneric("get_snp_info"))
-#' @exportMethod get_snp_info
+setGeneric("snp_info", function(x) standardGeneric("snp_info"))
+#' @exportMethod snp_info
 #' @rdname SNPData-class
-setMethod("get_snp_info", signature(x = "SNPData"), function(x) x@snp_info)
+setMethod("snp_info", signature(x = "SNPData"), function(x) x@snp_info)
 
-#' @exportMethod get_barcode_info
+#' @export
 #' @rdname SNPData-class
-setGeneric("get_barcode_info", function(x) standardGeneric("get_barcode_info"))
-#' @exportMethod get_barcode_info
+get_snp_info <- function(x) snp_info(x)
+
+#' @exportMethod barcode_info
 #' @rdname SNPData-class
-setMethod("get_barcode_info", signature(x = "SNPData"), function(x) {
+setGeneric("barcode_info", function(x) standardGeneric("barcode_info"))
+#' @exportMethod barcode_info
+#' @rdname SNPData-class
+setMethod("barcode_info", signature(x = "SNPData"), function(x) {
     x@barcode_info
 })
+
+#' @export
+#' @rdname SNPData-class
+get_barcode_info <- function(x) barcode_info(x)
 
 #' @exportMethod get_sample_info
 #' @rdname SNPData-class
@@ -362,15 +370,15 @@ setGeneric("get_sample_info", function(x) standardGeneric("get_sample_info"))
 #' @exportMethod get_sample_info
 #' @rdname SNPData-class
 setMethod("get_sample_info", signature(x = "SNPData"), function(x) {
-    get_barcode_info(x)
+    barcode_info(x)
 })
 
-#' @exportMethod get_donor_info
+#' @exportMethod donor_info
 #' @rdname SNPData-class
-setGeneric("get_donor_info", function(x) standardGeneric("get_donor_info"))
-#' @exportMethod get_donor_info
+setGeneric("donor_info", function(x) standardGeneric("donor_info"))
+#' @exportMethod donor_info
 #' @rdname SNPData-class
-setMethod("get_donor_info", signature(x = "SNPData"), function(x) {
+setMethod("donor_info", signature(x = "SNPData"), function(x) {
     # Handle backwards compatibility with older SNPData objects
     if (!methods::.hasSlot(x, "donor_info")) {
         return(.default_donor_info(x@barcode_info))
@@ -378,18 +386,26 @@ setMethod("get_donor_info", signature(x = "SNPData"), function(x) {
     x@donor_info
 })
 
-#' @exportMethod get_donor_snp_info
+#' @export
 #' @rdname SNPData-class
-setGeneric("get_donor_snp_info", function(x) standardGeneric("get_donor_snp_info"))
-#' @exportMethod get_donor_snp_info
+get_donor_info <- function(x) donor_info(x)
+
+#' @exportMethod donor_snp_info
 #' @rdname SNPData-class
-setMethod("get_donor_snp_info", signature(x = "SNPData"), function(x) {
+setGeneric("donor_snp_info", function(x) standardGeneric("donor_snp_info"))
+#' @exportMethod donor_snp_info
+#' @rdname SNPData-class
+setMethod("donor_snp_info", signature(x = "SNPData"), function(x) {
     # Handle backwards compatibility with older SNPData objects
     if (!methods::.hasSlot(x, "donor_snp_info")) {
         return(.empty_donor_snp_info())
     }
     x@donor_snp_info
 })
+
+#' @export
+#' @rdname SNPData-class
+get_donor_snp_info <- function(x) donor_snp_info(x)
 
 #' @exportMethod chr_style
 #' @rdname SNPData-class
@@ -550,7 +566,7 @@ setReplaceMethod("snp_info", signature(x = "SNPData", value = "data.frame"), fun
 #' @param x A SNPData object
 #' @param donor_map A named character vector, \code{c(new_label = old_label, ...)},
 #'   following the same \code{new = old} convention as \code{dplyr::rename()}. Every value
-#'   must be an existing donor (see \code{get_donor_info(x)}); donors not mentioned keep
+#'   must be an existing donor (see \code{donor_info(x)}); donors not mentioned keep
 #'   their current label. The resulting donor labels (renamed and unrenamed together) must
 #'   stay unique -- \code{rename_donor()} relabels, it does not merge donors.
 #'
@@ -567,7 +583,7 @@ rename_donor <- function(x, donor_map) {
         stop("Input must be a SNPData object")
     }
 
-    donor_info <- get_donor_info(x)
+    donor_info <- donor_info(x)
     unknown_old <- setdiff(donor_map, donor_info$donor)
     if (length(unknown_old) > 0) {
         stop(paste0(
@@ -584,12 +600,12 @@ rename_donor <- function(x, donor_map) {
         ))
     }
 
-    barcode_info <- get_barcode_info(x)
+    barcode_info <- barcode_info(x)
     if ("donor" %in% colnames(barcode_info)) {
         barcode_info$donor <- .apply_donor_map(barcode_info$donor, donor_map)
     }
     donor_info$donor <- new_labels
-    donor_snp_info <- get_donor_snp_info(x)
+    donor_snp_info <- donor_snp_info(x)
     donor_snp_info$donor <- .apply_donor_map(donor_snp_info$donor, donor_map)
 
     new(
@@ -652,14 +668,16 @@ setMethod(
         if (methods::.hasSlot(object, "chr_style")) {
             cat("Chromosome style:", object@chr_style, "\n")
         }
-        cat("SNP info (get_snp_info()):", "\n")
+        if (methods::.hasSlot(object, "")) {
+            cat("SNP info (snp_info()):", "\n")
+        }
         print(object@snp_info)
-        cat("Barcode info (get_barcode_info()):", "\n")
+        cat("Barcode info (barcode_info()):", "\n")
         print(object@barcode_info)
-        cat("Donor info (get_donor_info()):", "\n")
-        print(get_donor_info(object))
-        cat("Donor SNP info (get_donor_snp_info()):", "\n")
-        print(get_donor_snp_info(object))
+        cat("Donor info (donor_info()):", "\n")
+        print(donor_info(object))
+        cat("Donor SNP info (donor_snp_info()):", "\n")
+        print(donor_snp_info(object))
     }
 )
 

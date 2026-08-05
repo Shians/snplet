@@ -885,7 +885,7 @@ make_phase_fixture <- function() {
         snp_info = snp_info,
         barcode_info = barcode_info
     )
-    snp_ids <- get_snp_info(obj)$snp_id
+    snp_ids <- snp_info(obj)$snp_id
 
     donor_snp_diag <- data.frame(
         snp_id = snp_ids[1],
@@ -906,7 +906,7 @@ make_phase_fixture <- function() {
     )
     obj <- add_barcode_metadata(
         obj,
-        data.frame(cell_id = get_barcode_info(obj)$cell_id, active_x = c("X2", "X2", "X1", "X1")),
+        data.frame(cell_id = barcode_info(obj)$cell_id, active_x = c("X2", "X2", "X1", "X1")),
         join_by = "cell_id",
         overwrite = TRUE
     )
@@ -952,7 +952,7 @@ test_that("add_molecule_phase() ignores 'doublet' and 'unassigned' entries in ba
         snp_info = snp_info,
         barcode_info = barcode_info
     )
-    snp_id <- get_snp_info(obj)$snp_id
+    snp_id <- snp_info(obj)$snp_id
     obj <- add_donor_snp_metadata(
         obj,
         data.frame(
@@ -969,7 +969,7 @@ test_that("add_molecule_phase() ignores 'doublet' and 'unassigned' entries in ba
     )
     obj <- add_barcode_metadata(
         obj,
-        data.frame(cell_id = get_barcode_info(obj)$cell_id, active_x = c("X2", "X2", "X1", "X1", NA, NA)),
+        data.frame(cell_id = barcode_info(obj)$cell_id, active_x = c("X2", "X2", "X1", "X1", NA, NA)),
         join_by = "cell_id",
         overwrite = TRUE
     )
@@ -1033,7 +1033,7 @@ test_that("add_molecule_phase() returns x unchanged when only doublet/unassigned
         snp_info = snp_info,
         barcode_info = barcode_info
     )
-    snp_id <- get_snp_info(obj)$snp_id
+    snp_id <- snp_info(obj)$snp_id
     # xci_informative needs at least one TRUE for .has_xci_diagnostics() to pass,
     # even though it is stored against a donor that will never be processed here.
     obj <- add_donor_snp_metadata(
@@ -1051,7 +1051,7 @@ test_that("add_molecule_phase() returns x unchanged when only doublet/unassigned
 
     # Verify no error, and the object is returned unchanged when nothing real is left to process
     result <- add_molecule_phase(obj, bam_files = c(doublet = "fake.bam", unassigned = "fake.bam"))
-    expect_identical(get_donor_snp_info(result), get_donor_snp_info(obj))
+    expect_identical(donor_snp_info(result), donor_snp_info(obj))
 })
 
 test_that("add_molecule_phase() never overwrites an existing EM-derived allele_on_x1", {
@@ -1130,7 +1130,7 @@ test_that("add_molecule_phase() never overwrites an existing EM-derived allele_o
     )
 
     result <- add_molecule_phase(fixture$obj, bam_files = c(donor0 = "fake.bam"))
-    donor_snp_info <- get_donor_snp_info(result)
+    donor_snp_info <- donor_snp_info(result)
 
     # Verify the pre-existing EM-derived phase for the anchor SNP is unchanged
     expect_equal(

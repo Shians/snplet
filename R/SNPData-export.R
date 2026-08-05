@@ -50,7 +50,7 @@ export_cellsnp <- function(snpdata, out_dir) {
     logger::log_info("Gzipped VCF file written to: {vcf_file}.gz")
 
     # Write donor info as donors.tsv (if available)
-    barcode_info <- get_barcode_info(snpdata)
+    barcode_info <- barcode_info(snpdata)
     donor_file <- file.path(out_dir, "donor_ids.tsv")
     donor_df <- barcode_info %>%
         dplyr::select(barcode, donor) %>%
@@ -74,7 +74,7 @@ export_cellsnp <- function(snpdata, out_dir) {
 
     # Write barcodes into cellSNP.samples.tsv
     samples_file <- file.path(out_dir, "cellSNP.samples.tsv")
-    cells <- get_barcode_info(snpdata)
+    cells <- barcode_info(snpdata)
     readr::write_tsv(
         dplyr::select(cells, barcode),
         samples_file,

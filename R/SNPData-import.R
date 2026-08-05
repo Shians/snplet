@@ -214,8 +214,8 @@ import_cellsnp <- function(
 #' @keywords internal
 .read_vireo_gt <- function(gt_file, snp_info) {
     vcf <- read_vcf(gt_file)
-    variants <- get_variants(vcf)
-    donors <- get_samples(vcf)
+    variants <- variants(vcf)
+    donors <- samples(vcf)
 
     variants$snp_id <- make_snp_id(variants$CHROM, variants$POS, variants$REF, variants$ALT)
 

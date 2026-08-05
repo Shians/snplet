@@ -6,13 +6,13 @@
     logger::log_threshold(logger::WARN)
     on.exit(logger::log_threshold(old_threshold), add = TRUE)
 
-    n_start <- nrow(get_snp_info(snp_data))
+    n_start <- nrow(snp_info(snp_data))
 
     # Restrict to X-chromosome SNPs. XCI is an X-chromosome phenomenon, so SNPs
     # on other chromosomes carry no signal and would only add noise. Use the
     # canonical (UCSC) chromosome name set at construction so the match is robust
     # to the input naming style.
-    snp_info <- get_snp_info(snp_data)
+    snp_info <- snp_info(snp_data)
     if (!"chrom_canonical" %in% colnames(snp_info)) {
         stop(
             "No canonical chromosome names available. Ensure the SNPData object was built with a 'chrom' column so chrX SNPs can be selected."
@@ -20,7 +20,7 @@
     }
     snp_data <- snp_data %>%
         filter_snps(chrom_canonical == "chrX")
-    n_chrx <- nrow(get_snp_info(snp_data))
+    n_chrx <- nrow(snp_info(snp_data))
 
     het_snp_ids <- snp_data %>%
         donor_het_status_df(zygosity_source = zygosity_source) %>%
@@ -29,15 +29,15 @@
 
     snp_data <- snp_data %>%
         filter_snps(snp_id %in% het_snp_ids)
-    n_het <- nrow(get_snp_info(snp_data))
+    n_het <- nrow(snp_info(snp_data))
 
-    top_snp_per_gene <- get_snp_info(snp_data) %>%
+    top_snp_per_gene <- snp_info(snp_data) %>%
         dplyr::arrange(dplyr::desc(coverage)) %>%
         dplyr::slice_head(n = 1, by = "gene_name")
 
     snp_data <- snp_data %>%
         filter_snps(snp_id %in% top_snp_per_gene$snp_id)
-    n_genes <- nrow(get_snp_info(snp_data))
+    n_genes <- nrow(snp_info(snp_data))
 
     logger::log_info(
         "[{donor}] het-SNP filter: {n_start} SNPs -> {n_chrx} chrX -> {n_het} het -> {n_genes} genes (top SNP per gene)"

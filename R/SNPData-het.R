@@ -65,7 +65,7 @@ donor_het_status_df_impl <- function(
     donor_counts <- donor_count_df(x, test_maf = FALSE) %>%
         dplyr::mutate(tested = total_count >= min_total_count)
 
-    stored_calls <- get_donor_snp_info(x) %>%
+    stored_calls <- donor_snp_info(x) %>%
         dplyr::select(snp_id, donor, zygosity, zygosity_source) %>%
         dplyr::filter(!is.na(zygosity))
     if (!is.null(zygosity_source)) {

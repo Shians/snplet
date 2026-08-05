@@ -137,8 +137,8 @@
 
 .merge_donor_info <- function(x, y, donors_retained) {
     auto_cols <- c("n_cells")
-    donor_info_x <- get_donor_info(x) %>% dplyr::select(-dplyr::any_of(auto_cols))
-    donor_info_y <- get_donor_info(y) %>% dplyr::select(-dplyr::any_of(auto_cols))
+    donor_info_x <- donor_info(x) %>% dplyr::select(-dplyr::any_of(auto_cols))
+    donor_info_y <- donor_info(y) %>% dplyr::select(-dplyr::any_of(auto_cols))
 
     merged <- dplyr::full_join(
         donor_info_x,
@@ -177,8 +177,8 @@
 .merge_donor_snp_info <- function(x, y, snp_ids_retained, donors_retained) {
     hazard_cols <- c("zygosity", "zygosity_source", "allele_on_x1", "xci_informative")
 
-    dsi_x <- get_donor_snp_info(x)
-    dsi_y <- get_donor_snp_info(y)
+    dsi_x <- donor_snp_info(x)
+    dsi_y <- donor_snp_info(y)
     value_cols <- setdiff(colnames(dsi_x), c("snp_id", "donor"))
 
     merged <- dplyr::full_join(

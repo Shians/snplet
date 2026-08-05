@@ -21,7 +21,7 @@ add_molecule_phase(
 `donor` column in `barcode_info`.}
 
 \item{bam_files}{A named character vector or list, `donor = path`, one
-indexed BAM per donor. Names must match `get_barcode_info(x)$donor`. Any
+indexed BAM per donor. Names must match `barcode_info(x)$donor`. Any
 entry named `"doublet"` or `"unassigned"` is dropped with a warning --
 neither is a real donor with its own genotype to phase against.}
 

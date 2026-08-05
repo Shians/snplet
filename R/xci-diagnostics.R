@@ -22,7 +22,7 @@ setGeneric("xci_assignments", function(x) standardGeneric("xci_assignments"))
 #' @rdname xci_assignments
 #' @include SNPData-class.R
 setMethod("xci_assignments", signature(x = "SNPData"), function(x) {
-    barcode_info <- get_barcode_info(x)
+    barcode_info <- barcode_info(x)
     if (!"active_x" %in% colnames(barcode_info)) {
         stop("No stored XCI diagnostics found. Run assign_xci(x) first.")
     }
@@ -59,8 +59,8 @@ setMethod("xci_haplotypes", signature(x = "SNPData"), function(x) {
     if (!.has_xci_diagnostics(x)) {
         stop("No stored XCI diagnostics found. Run assign_xci(x) first.")
     }
-    snp_info <- get_snp_info(x)
-    get_donor_snp_info(x) %>%
+    snp_info <- snp_info(x)
+    donor_snp_info(x) %>%
         dplyr::filter(xci_informative) %>%
         dplyr::left_join(dplyr::select(snp_info, snp_id, dplyr::any_of("gene_name")), by = "snp_id") %>%
         dplyr::select(
@@ -131,6 +131,6 @@ setMethod("xci_haplotypes", signature(x = "SNPData"), function(x) {
 #'
 #' @keywords internal
 .has_xci_diagnostics <- function(x) {
-    donor_snp_info <- get_donor_snp_info(x)
+    donor_snp_info <- donor_snp_info(x)
     "xci_informative" %in% colnames(donor_snp_info) && any(donor_snp_info$xci_informative, na.rm = TRUE)
 }

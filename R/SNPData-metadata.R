@@ -155,7 +155,7 @@ add_barcode_metadata <- function(x, metadata, join_by = "cell_id", overwrite = F
         stop(paste0(.column_word(join_by), " '", paste(join_by, collapse = ", "), "' not found in metadata data.frame"))
     }
 
-    current_barcode_info <- get_barcode_info(x)
+    current_barcode_info <- barcode_info(x)
     updated_barcode_info <- .update_metadata_info(
         current_info = current_barcode_info,
         metadata = metadata,
@@ -173,8 +173,8 @@ add_barcode_metadata <- function(x, metadata, join_by = "cell_id", overwrite = F
         oth_count = x@oth_count,
         snp_info = x@snp_info,
         barcode_info = updated_barcode_info,
-        donor_info = get_donor_info(x),
-        donor_snp_info = get_donor_snp_info(x)
+        donor_info = donor_info(x),
+        donor_snp_info = donor_snp_info(x)
     )
 }
 
@@ -194,7 +194,7 @@ add_snp_metadata <- function(x, metadata, join_by = "snp_id", overwrite = FALSE)
         stop(paste0(.column_word(join_by), " '", paste(join_by, collapse = ", "), "' not found in metadata data.frame"))
     }
 
-    current_snp_info <- get_snp_info(x)
+    current_snp_info <- snp_info(x)
     updated_snp_info <- .update_metadata_info(
         current_info = current_snp_info,
         metadata = metadata,
@@ -212,8 +212,8 @@ add_snp_metadata <- function(x, metadata, join_by = "snp_id", overwrite = FALSE)
         oth_count = x@oth_count,
         snp_info = updated_snp_info,
         barcode_info = x@barcode_info,
-        donor_info = get_donor_info(x),
-        donor_snp_info = get_donor_snp_info(x)
+        donor_info = donor_info(x),
+        donor_snp_info = donor_snp_info(x)
     )
 }
 
@@ -233,7 +233,7 @@ add_donor_metadata <- function(x, metadata, join_by = "donor", overwrite = FALSE
         stop(paste0(.column_word(join_by), " '", paste(join_by, collapse = ", "), "' not found in metadata data.frame"))
     }
 
-    current_donor_info <- get_donor_info(x)
+    current_donor_info <- donor_info(x)
     updated_donor_info <- .update_metadata_info(
         current_info = current_donor_info,
         metadata = metadata,
@@ -252,7 +252,7 @@ add_donor_metadata <- function(x, metadata, join_by = "donor", overwrite = FALSE
         snp_info = x@snp_info,
         barcode_info = x@barcode_info,
         donor_info = updated_donor_info,
-        donor_snp_info = get_donor_snp_info(x)
+        donor_snp_info = donor_snp_info(x)
     )
 }
 
@@ -272,7 +272,7 @@ add_donor_snp_metadata <- function(x, metadata, join_by = c("snp_id", "donor"), 
         stop(paste0(.column_word(join_by), " '", paste(join_by, collapse = ", "), "' not found in metadata data.frame"))
     }
 
-    current_donor_snp_info <- get_donor_snp_info(x)
+    current_donor_snp_info <- donor_snp_info(x)
     updated_donor_snp_info <- .update_metadata_info(
         current_info = current_donor_snp_info,
         metadata = metadata,
@@ -291,7 +291,7 @@ add_donor_snp_metadata <- function(x, metadata, join_by = c("snp_id", "donor"), 
         oth_count = x@oth_count,
         snp_info = x@snp_info,
         barcode_info = x@barcode_info,
-        donor_info = get_donor_info(x),
+        donor_info = donor_info(x),
         donor_snp_info = updated_donor_snp_info
     )
 }

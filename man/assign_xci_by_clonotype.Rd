@@ -80,7 +80,7 @@ The algorithm works as follows:
 snp_data <- assign_xci_by_clonotype(snp_data)
 
 # View results
-get_barcode_info(snp_data) \%>\%
+barcode_info(snp_data) \%>\%
   count(donor, clonotype, active_x)
 
 # Diagnostics are stored, so plotting works directly

@@ -116,7 +116,7 @@ setGeneric("barcode_count_df", function(x, test_maf = TRUE) standardGeneric("bar
         stop("add_most_likely_donor is only supported when group_by is 'clonotype'.")
     }
 
-    barcode_info <- get_barcode_info(x)
+    barcode_info <- barcode_info(x)
     metadata <- .prepare_grouped_metadata(barcode_info = barcode_info, group_by = group_by)
 
     logger::log_info("Extracting reference counts")
@@ -132,7 +132,7 @@ setGeneric("barcode_count_df", function(x, test_maf = TRUE) standardGeneric("bar
     )
 
     logger::log_info("Processing reference and alternate counts")
-    out <- .build_long_count_df(ref_count_grouped, alt_count_grouped, "group_key", get_snp_info(x))
+    out <- .build_long_count_df(ref_count_grouped, alt_count_grouped, "group_key", snp_info(x))
     out <- out %>%
         dplyr::left_join(metadata$group_key_lookup, by = "group_key") %>%
         dplyr::select(-group_key) %>%
@@ -163,7 +163,7 @@ setGeneric("barcode_count_df", function(x, test_maf = TRUE) standardGeneric("bar
 barcode_count_df_impl <- function(x, test_maf = TRUE) {
     logger::log_info("Calculating barcode/cell level counts")
 
-    out <- .build_long_count_df(ref_count(x), alt_count(x), "cell_id", get_snp_info(x))
+    out <- .build_long_count_df(ref_count(x), alt_count(x), "cell_id", snp_info(x))
     if (isTRUE(test_maf)) {
         out <- test_maf(out)
     }

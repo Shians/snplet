@@ -332,9 +332,9 @@ test_that("SNPData converts chrom_canonical to UCSC for numeric chromosomes", {
     snp_data <- make_snpdata_with_chr_style("numeric")
 
     # Check chrom_canonical column is added
-    expect_true("chrom_canonical" %in% colnames(get_snp_info(snp_data)))
+    expect_true("chrom_canonical" %in% colnames(snp_info(snp_data)))
     # Verify chrom_canonical is converted to UCSC
-    expect_equal(get_snp_info(snp_data)$chrom_canonical, c("chr1", "chr2", "chr3", "chrX", "chrY", "chrM"))
+    expect_equal(snp_info(snp_data)$chrom_canonical, c("chr1", "chr2", "chr3", "chrX", "chrY", "chrM"))
 })
 
 test_that("SNPData detects chr_style as UCSC", {
@@ -349,7 +349,7 @@ test_that("SNPData preserves chrom_canonical already in UCSC style", {
 
     # Check chrom_canonical is preserved (already UCSC)
     expect_equal(
-        get_snp_info(snp_data)$chrom_canonical,
+        snp_info(snp_data)$chrom_canonical,
         c("chr1", "chr2", "chr3", "chrX", "chrY", "chrM")
     )
 })
@@ -370,7 +370,7 @@ test_that("SNPData records chr_style as unknown and preserves original chrom nam
     # Check chrom_canonical preserves original names
     expected_chrom <- CHR_STYLES[["unknown"]]
     expect_equal(
-        get_snp_info(snp_data)$chrom_canonical,
+        snp_info(snp_data)$chrom_canonical,
         expected_chrom
     )
 })

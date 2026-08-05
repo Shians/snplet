@@ -65,7 +65,7 @@ test_that("VCFData() converts non-numeric POS to numeric", {
     vcf_data <- VCFData(header = test_header, samples = test_samples, variants = variants_char_pos)
 
     # Verify POS was coerced to numeric
-    expect_true(is.numeric(get_variants(vcf_data)$POS))
+    expect_true(is.numeric(variants(vcf_data)$POS))
 })
 
 test_that("VCFData() errors when variants is missing required VCF columns", {
@@ -78,25 +78,25 @@ test_that("VCFData() errors when variants is missing required VCF columns", {
     )
 })
 
-test_that("get_header() returns the header lines", {
+test_that("header() returns the header lines", {
     vcf_data <- create_test_vcfdata()
 
-    # Verify get_header returns the original header vector
-    expect_equal(get_header(vcf_data), test_header)
+    # Verify header() returns the original header vector
+    expect_equal(header(vcf_data), test_header)
 })
 
-test_that("get_samples() returns the sample names", {
+test_that("samples() returns the sample names", {
     vcf_data <- create_test_vcfdata()
 
-    # Verify get_samples returns the original sample vector
-    expect_equal(get_samples(vcf_data), test_samples)
+    # Verify samples() returns the original sample vector
+    expect_equal(samples(vcf_data), test_samples)
 })
 
-test_that("get_variants() returns the variants data frame", {
+test_that("variants() returns the variants data frame", {
     vcf_data <- create_test_vcfdata()
 
-    # Verify get_variants returns a data frame with expected columns
-    expect_equal(colnames(get_variants(vcf_data)), colnames(test_variants))
+    # Verify variants() returns a data frame with expected columns
+    expect_equal(colnames(variants(vcf_data)), colnames(test_variants))
 })
 
 test_that("nrow(), ncol(), and dim() report variant table dimensions", {
@@ -136,9 +136,9 @@ test_that("[ subsets variants by row and preserves header and samples", {
     # Verify only the selected row is retained
     expect_equal(nrow(subset_data), 1)
     # Verify header is preserved after subsetting
-    expect_equal(get_header(subset_data), test_header)
+    expect_equal(header(subset_data), test_header)
     # Verify samples are preserved after subsetting
-    expect_equal(get_samples(subset_data), test_samples)
+    expect_equal(samples(subset_data), test_samples)
 })
 
 test_that("[ with missing row index keeps all rows", {
@@ -168,9 +168,9 @@ test_that("read_vcf() parses header, samples, and variants from a plain VCF file
     # Verify a VCFData object is returned
     expect_s4_class(vcf_data, "VCFData")
     # Verify only the "##" header lines are kept
-    expect_equal(get_header(vcf_data), c("##fileformat=VCFv4.2", "##source=snplet-test"))
+    expect_equal(header(vcf_data), c("##fileformat=VCFv4.2", "##source=snplet-test"))
     # Verify sample names are extracted from columns after FORMAT
-    expect_equal(get_samples(vcf_data), c("sample1", "sample2"))
+    expect_equal(samples(vcf_data), c("sample1", "sample2"))
     # Verify variant rows are parsed
     expect_equal(nrow(vcf_data), 2)
 })
@@ -192,7 +192,7 @@ test_that("read_vcf() returns no sample names when there is no FORMAT column", {
     vcf_data <- read_vcf(vcf_file)
 
     # Verify no samples are detected without a FORMAT column
-    expect_equal(get_samples(vcf_data), character(0))
+    expect_equal(samples(vcf_data), character(0))
 })
 
 test_that("read_vcf() reads gzipped VCF files", {
@@ -214,5 +214,5 @@ test_that("read_vcf() reads gzipped VCF files", {
     # Verify variants are parsed correctly from a gzipped file
     expect_equal(nrow(vcf_data), 2)
     # Verify samples are still detected in a gzipped file
-    expect_equal(get_samples(vcf_data), c("sample1", "sample2"))
+    expect_equal(samples(vcf_data), c("sample1", "sample2"))
 })

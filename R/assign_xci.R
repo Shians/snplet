@@ -53,7 +53,7 @@
 #' snp_data <- assign_xci(snp_data)
 #'
 #' # View results
-#' get_barcode_info(snp_data) %>%
+#' barcode_info(snp_data) %>%
 #'   count(donor, active_x)
 #'
 #' # Diagnostics are stored, so plotting works directly
@@ -144,7 +144,7 @@ setMethod(
 #' snp_data <- assign_xci_by_clonotype(snp_data)
 #'
 #' # View results
-#' get_barcode_info(snp_data) %>%
+#' barcode_info(snp_data) %>%
 #'   count(donor, clonotype, active_x)
 #'
 #' # Diagnostics are stored, so plotting works directly
@@ -221,7 +221,7 @@ setMethod(
         .check_clonotype_available(x)
     }
 
-    unique_donors <- get_barcode_info(x)$donor %>%
+    unique_donors <- barcode_info(x)$donor %>%
         unique() %>%
         setdiff(c("doublet", "unassigned")) %>%
         sort()
@@ -258,7 +258,7 @@ setMethod(
 
 #' @keywords internal
 .check_clonotype_available <- function(x) {
-    barcode_info <- get_barcode_info(x)
+    barcode_info <- barcode_info(x)
     if (!"clonotype" %in% colnames(barcode_info)) {
         stop(
             "Clonotype information not available. Add clonotype data using add_barcode_metadata() or import_cellsnp() with vdj_file parameter."
@@ -288,7 +288,7 @@ setMethod(
     by = c("cell", "clonotype")
 ) {
     by <- match.arg(by)
-    donor <- unique(get_barcode_info(snp_data)$donor)
+    donor <- unique(barcode_info(snp_data)$donor)
 
     if (by == "clonotype") {
         logger::log_info("[{donor}] Fitting XCI model at clonotype level")
@@ -302,7 +302,7 @@ setMethod(
     ref_mat <- unit_data$ref_mat
     alt_mat <- unit_data$alt_mat
     unit_ids <- colnames(ref_mat)
-    snp_info <- get_snp_info(snp_data)
+    snp_info <- snp_info(snp_data)
 
     if (nrow(ref_mat) == 0 || ncol(ref_mat) == 0) {
         logger::log_warn("Insufficient data for donor {donor}")
@@ -343,13 +343,13 @@ setMethod(
         return(list(ref_mat = ref_count(snp_data), alt_mat = alt_count(snp_data), cell_to_clonotype = NULL))
     }
 
-    has_clonotype <- !is.na(get_barcode_info(snp_data)$clonotype)
+    has_clonotype <- !is.na(barcode_info(snp_data)$clonotype)
     if (!any(has_clonotype)) {
         stop(glue::glue("No cells with non-NA clonotype values for donor {donor}"))
     }
     snp_data <- snp_data[, has_clonotype]
 
-    cell_to_clonotype <- get_barcode_info(snp_data) %>%
+    cell_to_clonotype <- barcode_info(snp_data) %>%
         dplyr::select(cell_id, clonotype)
     list(
         ref_mat = groupedRowSums(ref_count(snp_data), cell_to_clonotype$clonotype),

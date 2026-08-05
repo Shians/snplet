@@ -39,7 +39,7 @@ make_molecule_hap_fixture <- function() {
         snp_info = snp_info,
         barcode_info = barcode_info
     )
-    snp_ids <- get_snp_info(obj)$snp_id
+    snp_ids <- snp_info(obj)$snp_id
     names(snp_ids) <- c("snpA", "snpB", "snpC")
 
     donor_snp_diag <- data.frame(
@@ -59,7 +59,7 @@ make_molecule_hap_fixture <- function() {
     obj <- add_barcode_metadata(
         obj,
         data.frame(
-            cell_id = get_barcode_info(obj)$cell_id,
+            cell_id = barcode_info(obj)$cell_id,
             active_x = c("X1", "X1", "X2", "X2"),
             stringsAsFactors = FALSE
         ),
@@ -104,7 +104,7 @@ test_that("haplotype_expression_by_molecule() errors when molecule phase has not
     # Strip the phase_block/allele_on_x1_molecule columns to simulate a SNPData
     # that only ever had assign_xci() run, not add_molecule_phase()
     obj <- fixture$obj
-    donor_snp_info <- get_donor_snp_info(obj)
+    donor_snp_info <- donor_snp_info(obj)
     donor_snp_info$phase_block <- NULL
     obj@donor_snp_info <- donor_snp_info
 
@@ -332,7 +332,7 @@ make_ambiguous_gene_fixture <- function() {
         snp_info = snp_info,
         barcode_info = barcode_info
     )
-    snp_id <- get_snp_info(obj)$snp_id
+    snp_id <- snp_info(obj)$snp_id
 
     donor_snp_diag <- data.frame(
         snp_id = snp_id,
@@ -350,7 +350,7 @@ make_ambiguous_gene_fixture <- function() {
     obj <- add_donor_snp_metadata(obj, donor_snp_diag, join_by = c("snp_id", "donor"), overwrite = TRUE)
     obj <- add_barcode_metadata(
         obj,
-        data.frame(cell_id = get_barcode_info(obj)$cell_id, active_x = "X1", stringsAsFactors = FALSE),
+        data.frame(cell_id = barcode_info(obj)$cell_id, active_x = "X1", stringsAsFactors = FALSE),
         join_by = "cell_id",
         overwrite = TRUE
     )

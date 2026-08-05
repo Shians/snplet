@@ -114,7 +114,7 @@ test_that("assign_xci recovers the true clonal split at cell level", {
     # Confirm the two inferred groups recover the true clonal split (up to a
     # label swap, since X1/X2 labels are exchangeable in the model). Compare
     # only cells that met the confidence threshold.
-    truth <- get_barcode_info(fixture$snpdata)$true_group
+    truth <- barcode_info(fixture$snpdata)$true_group
     called <- !is.na(assignments$active_x)
     agree <- mean(assignments$active_x[called] == truth[called])
     # Confirm agreement with the true clonal split exceeds 90% either way
@@ -129,7 +129,7 @@ test_that("assign_xci always labels the majority active-X group X1", {
     # it is always relabelled X1 regardless.
     for (seed in 1:3) {
         fixture <- make_xci_snpdata(seed = seed)
-        bi <- get_barcode_info(fixture$snpdata)
+        bi <- barcode_info(fixture$snpdata)
         minority_cells <- bi$barcode[bi$true_group == "X1"][1:10]
         imbalanced <- filter_barcodes(fixture$snpdata, true_group == "X2" | barcode %in% minority_cells)
 
@@ -153,7 +153,7 @@ test_that("assign_xci labels active_x by the allele the cell expresses", {
     # is the property the heatmap relies on, and it fails if the inactive-to-
     # active flip in .store_xci_fit is dropped or inverted.
     haplotypes <- xci_haplotypes(stored)
-    snp_rows <- match(haplotypes$snp_id, get_snp_info(stored)$snp_id)
+    snp_rows <- match(haplotypes$snp_id, snp_info(stored)$snp_id)
     ref <- as.matrix(ref_count(stored))[snp_rows, , drop = FALSE]
     alt <- as.matrix(alt_count(stored))[snp_rows, , drop = FALSE]
 
@@ -220,13 +220,13 @@ test_that("clonotype fit projects assignments back to cells consistently", {
     expect_true(!is.null(fit$cell_assignments))
 
     # The EM ran per clonotype, one assignment row each
-    n_clonotypes <- dplyr::n_distinct(get_barcode_info(fixture$snpdata)$clonotype)
+    n_clonotypes <- dplyr::n_distinct(barcode_info(fixture$snpdata)$clonotype)
     # Confirm one assignment row exists per distinct clonotype
     expect_equal(nrow(fit$assignments), n_clonotypes)
 
     # Cells within a clonotype must share an assignment (clonal consistency)
     cell_assign <- fit$cell_assignments
-    clono_map <- dplyr::select(get_barcode_info(fixture$snpdata), cell_id, clonotype)
+    clono_map <- dplyr::select(barcode_info(fixture$snpdata), cell_id, clonotype)
     joined <- dplyr::inner_join(cell_assign, clono_map, by = "cell_id")
     per_clono <- tapply(joined$assignment, joined$clonotype, function(a) length(unique(a)))
     # Confirm every clonotype's cells were all projected to the same assignment
@@ -240,9 +240,9 @@ test_that("assign_xci promotes diagnostics into SNPData slots and survives subse
     # Verify a SNPData object is returned
     expect_s4_class(stored, "SNPData")
 
-    barcode_info <- get_barcode_info(stored)
-    snp_info <- get_snp_info(stored)
-    donor_snp_info <- get_donor_snp_info(stored)
+    barcode_info <- barcode_info(stored)
+    snp_info <- snp_info(stored)
+    donor_snp_info <- donor_snp_info(stored)
     # Check barcode diagnostics were written
     expect_true(all(c("active_x", "xci_post_X1_active") %in% colnames(barcode_info)))
     # Check the per-SNP informative flag was NOT duplicated into snp_info; it
@@ -269,29 +269,29 @@ test_that("assign_xci promotes diagnostics into SNPData slots and survives subse
     # Diagnostics must survive cell subsetting because they live in barcode_info
     subset_cells <- stored[, 1:10]
     # Verify the active_x column is retained after subsetting cells
-    expect_true("active_x" %in% colnames(get_barcode_info(subset_cells)))
+    expect_true("active_x" %in% colnames(barcode_info(subset_cells)))
     # Verify barcode_info row count matches the subset size
-    expect_equal(nrow(get_barcode_info(subset_cells)), 10)
+    expect_equal(nrow(barcode_info(subset_cells)), 10)
 
     # And survive SNP subsetting because donor_snp_info rows are restricted
     # to the kept SNPs
     informative_snp_ids <- donor_snp_info$snp_id[donor_snp_info$xci_informative]
     subset_snps <- filter_snps(stored, snp_id %in% informative_snp_ids)
     # donor_snp_info rows survive SNP subsetting too, restricted to the kept SNPs
-    expect_true(all(get_donor_snp_info(subset_snps)$snp_id %in% get_snp_info(subset_snps)$snp_id))
+    expect_true(all(donor_snp_info(subset_snps)$snp_id %in% snp_info(subset_snps)$snp_id))
 })
 
 test_that("assign_xci diagnostics drop a donor's donor_snp_info rows once its cells are gone", {
     fixture <- make_xci_snpdata(n_donors = 2)
     stored <- assign_xci(fixture$snpdata, n_inits = 3)
 
-    donor0_cells <- get_barcode_info(stored)$donor == "donor0"
+    donor0_cells <- barcode_info(stored)$donor == "donor0"
     subset_obj <- stored[, donor0_cells]
 
     # Confirm donor1 no longer appears in donor_info
-    expect_false("donor1" %in% get_donor_info(subset_obj)$donor)
+    expect_false("donor1" %in% donor_info(subset_obj)$donor)
     # Confirm donor1's donor_snp_info rows were dropped along with its cells
-    expect_false("donor1" %in% get_donor_snp_info(subset_obj)$donor)
+    expect_false("donor1" %in% donor_snp_info(subset_obj)$donor)
 })
 
 test_that("accessors and heatmap work on a stored SNPData object", {
@@ -356,7 +356,7 @@ test_that("heatmap show_unassigned = FALSE drops unassigned columns", {
         donor = "donor0",
         show_unassigned = FALSE
     )
-    n_assigned <- sum(!is.na(get_barcode_info(stored)$active_x))
+    n_assigned <- sum(!is.na(barcode_info(stored)$active_x))
 
     # Check show_unassigned = FALSE drops unassigned columns
     expect_equal(ncol(assigned_only@ht_list[[1]]@matrix), n_assigned)
@@ -446,7 +446,7 @@ test_that("heatmap distinguishes no-coverage units from low-confidence unassigne
 
     # Force one cell to look like it was never scored (NA posterior): the model
     # gives it no coverage, distinct from a low-confidence unassigned call.
-    bi <- get_barcode_info(stored)
+    bi <- barcode_info(stored)
     bi$active_x[1] <- NA
     bi$xci_post_X1_active[1] <- NA_real_
     stored <- add_barcode_metadata(
@@ -476,7 +476,7 @@ test_that("heatmap distinguishes no-coverage units from low-confidence unassigne
     # By default (show_no_coverage = FALSE) the no-coverage cell is dropped, so
     # the plotted matrix loses exactly that one column
     default_hm <- plot_xci_heatmap(stored, donor = "donor0")
-    n_donor0 <- sum(get_barcode_info(stored)$donor == "donor0")
+    n_donor0 <- sum(barcode_info(stored)$donor == "donor0")
     expect_equal(ncol(default_hm@ht_list[[1]]@matrix), n_donor0 - 1)
 })
 
@@ -486,7 +486,7 @@ test_that("clonotype fit requires clonotype information", {
     no_clono <- add_barcode_metadata(
         fixture$snpdata,
         data.frame(
-            cell_id = get_barcode_info(fixture$snpdata)$cell_id,
+            cell_id = barcode_info(fixture$snpdata)$cell_id,
             clonotype = NA_character_
         ),
         overwrite = TRUE
@@ -606,7 +606,7 @@ test_that("assign_xci_by_clonotype recovers the clonal split and stores diagnost
     # Verify a stored SNPData object is returned
     expect_s4_class(stored, "SNPData")
 
-    barcode_info <- get_barcode_info(stored)
+    barcode_info <- barcode_info(stored)
     # Check the fit recorded that it ran on clonotype units
     expect_true(all(barcode_info$xci_fit_unit == "clonotype"))
 
@@ -628,15 +628,15 @@ test_that("confidence_threshold controls how many cells are hard-assigned", {
     strict <- assign_xci(fixture$snpdata, n_inits = 3, confidence_threshold = 0.999)
     lax <- assign_xci(fixture$snpdata, n_inits = 3, confidence_threshold = 0.6)
 
-    n_called_strict <- sum(!is.na(get_barcode_info(strict)$active_x))
-    n_called_lax <- sum(!is.na(get_barcode_info(lax)$active_x))
+    n_called_strict <- sum(!is.na(barcode_info(strict)$active_x))
+    n_called_lax <- sum(!is.na(barcode_info(lax)$active_x))
 
     # Verify a looser threshold assigns at least as many cells as a strict one
     expect_gte(n_called_lax, n_called_strict)
 
     # Confirm cells below the strict threshold receive NA rather than a call
-    post <- get_barcode_info(strict)$xci_post_X1_active
-    unassigned <- is.na(get_barcode_info(strict)$active_x)
+    post <- barcode_info(strict)$xci_post_X1_active
+    unassigned <- is.na(barcode_info(strict)$active_x)
     borderline <- post > 1 - 0.999 & post < 0.999
     # Every cell whose posterior sits inside the strict band must be unassigned
     expect_true(all(unassigned[borderline]))
@@ -648,7 +648,7 @@ test_that("assign_xci drops an escapee gene from the informative set but still p
 
     # The clonal split must still be recovered
     assignments <- xci_assignments(stored)
-    truth <- get_barcode_info(fixture$snpdata)$true_group
+    truth <- barcode_info(fixture$snpdata)$true_group
     called <- !is.na(assignments$active_x)
     agree <- mean(assignments$active_x[called] == truth[called])
     # Confirm agreement with the true clonal split exceeds 90%
@@ -656,8 +656,8 @@ test_that("assign_xci drops an escapee gene from the informative set but still p
 
     # The escapee gene (last gene, balanced in every cell) carries no XCI signal
     # and must be filtered out of the informative (active-X-calling) set
-    snp_info <- get_snp_info(stored)
-    donor_snp_info <- get_donor_snp_info(stored)
+    snp_info <- snp_info(stored)
+    donor_snp_info <- donor_snp_info(stored)
     escapee_snp <- snp_info$snp_id[snp_info$gene_name == paste0("gene", 20)]
     escapee_informative <- donor_snp_info$xci_informative[donor_snp_info$snp_id == escapee_snp]
     # Confirm the escapee gene is not marked informative
@@ -680,7 +680,7 @@ test_that("haplotype_expression() surfaces an escapee gene that assign_xci exclu
     fixture <- make_xci_snpdata(escapee = TRUE)
     stored <- assign_xci(fixture$snpdata, n_inits = 3)
 
-    snp_info <- get_snp_info(stored)
+    snp_info <- snp_info(stored)
     escapee_snp <- snp_info$snp_id[snp_info$gene_name == paste0("gene", 20)]
 
     # Verify the default (inclusive) call reports the escapee gene at all
@@ -699,7 +699,7 @@ test_that("assign_xci fits each donor independently in a multi-donor object", {
     fixture <- make_xci_snpdata(n_donors = 2)
     stored <- assign_xci(fixture$snpdata, n_inits = 3)
 
-    barcode_info <- get_barcode_info(stored)
+    barcode_info <- barcode_info(stored)
     # Verify both donors received assignments
     expect_setequal(unique(barcode_info$donor), c("donor0", "donor1"))
 
@@ -720,7 +720,7 @@ test_that("assign_xci fits each donor independently in a multi-donor object", {
 
 test_that("zygosity_source controls whether the het-SNP filter trusts a stored zygosity call", {
     fixture <- make_xci_snpdata(n_genes = 3, n_cells_per_group = 20, seed = 42)
-    snp_info <- get_snp_info(fixture$snpdata)
+    snp_info <- snp_info(fixture$snpdata)
     target_snp <- snp_info$snp_id[1]
 
     # Stash a stored call claiming this genuinely-heterozygous SNP is homozygous
@@ -731,14 +731,14 @@ test_that("zygosity_source controls whether the het-SNP filter trusts a stored z
     )
 
     trusting_stored <- assign_xci(snp_data, n_inits = 3)
-    informative_trusting <- get_donor_snp_info(trusting_stored) %>%
+    informative_trusting <- donor_snp_info(trusting_stored) %>%
         dplyr::filter(snp_id == target_snp, xci_informative) %>%
         nrow()
     # Verify the stored "hom" call excludes the SNP from the het-SNP filter by default
     expect_equal(informative_trusting, 0)
 
     ignoring_stored <- assign_xci(snp_data, n_inits = 3, zygosity_source = character(0))
-    informative_ignoring <- get_donor_snp_info(ignoring_stored) %>%
+    informative_ignoring <- donor_snp_info(ignoring_stored) %>%
         dplyr::filter(snp_id == target_snp, xci_informative) %>%
         nrow()
     # Verify zygosity_source = character(0) ignores every stored call, so the binomial

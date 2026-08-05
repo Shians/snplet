@@ -14,7 +14,7 @@
 #' plot_lib_size_distribution(snp_data)
 #' }
 plot_lib_size_distribution <- function(snp_data) {
-    get_barcode_info(snp_data) %>%
+    barcode_info(snp_data) %>%
         ggplot2::ggplot(ggplot2::aes(x = library_size)) +
         ggplot2::geom_density() +
         ggplot2::scale_y_continuous(expand = ggplot2::expansion(0, 0)) +
@@ -42,7 +42,7 @@ plot_lib_size_distribution <- function(snp_data) {
 #' plot_snp_cov_distribution(snp_data)
 #' }
 plot_snp_cov_distribution <- function(snp_data) {
-    get_snp_info(snp_data) %>%
+    snp_info(snp_data) %>%
         ggplot2::ggplot(ggplot2::aes(x = coverage)) +
         ggplot2::geom_density() +
         ggplot2::scale_y_continuous(expand = ggplot2::expansion(0, 0)) +

@@ -11,7 +11,7 @@ rename_donor(x, donor_map)
 
 \item{donor_map}{A named character vector, \code{c(new_label = old_label, ...)},
 following the same \code{new = old} convention as \code{dplyr::rename()}. Every value
-must be an existing donor (see \code{get_donor_info(x)}); donors not mentioned keep
+must be an existing donor (see \code{donor_info(x)}); donors not mentioned keep
 their current label. The resulting donor labels (renamed and unrenamed together) must
 stay unique -- \code{rename_donor()} relabels, it does not merge donors.}
 }

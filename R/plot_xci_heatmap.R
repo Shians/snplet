@@ -107,7 +107,7 @@ setMethod(
         posterior_palette = c("#8c510a", "#f7f7f7", "#e08214"),
         na_fill = "grey90"
     ) {
-        barcode_info <- get_barcode_info(x)
+        barcode_info <- barcode_info(x)
         if (!"active_x" %in% colnames(barcode_info) || !.has_xci_diagnostics(x)) {
             stop("No stored XCI diagnostics found. Run assign_xci(x) first.")
         }
@@ -115,13 +115,13 @@ setMethod(
         donor_data <- filter_samples(x, donor == !!donor)
         # Restrict to the genes this donor's model actually retained, not the union
         # of informative genes across all donors.
-        donor_informative_snps <- get_donor_snp_info(x) %>%
+        donor_informative_snps <- donor_snp_info(x) %>%
             dplyr::filter(donor == !!donor, xci_informative) %>%
             dplyr::pull(snp_id)
         donor_data <- filter_snps(donor_data, snp_id %in% donor_informative_snps)
 
-        filtered_snp_info <- get_snp_info(donor_data)
-        donor_barcode_info <- get_barcode_info(donor_data)
+        filtered_snp_info <- snp_info(donor_data)
+        donor_barcode_info <- barcode_info(donor_data)
 
         # Cells this donor's model actually assigned (drop NA active_x)
         assigned <- donor_barcode_info %>%

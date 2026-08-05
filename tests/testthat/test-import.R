@@ -22,7 +22,7 @@ test_that("get_example_snpdata returns a valid SNPData object with data", {
 test_that("get_example_snpdata includes essential SNP info columns", {
     snp_data <- get_example_snpdata()
 
-    snp_info <- get_snp_info(snp_data)
+    snp_info <- snp_info(snp_data)
     expected_snp_cols <- c("snp_id", "chrom", "pos")
 
     # Verify essential SNP info columns are present
@@ -32,7 +32,7 @@ test_that("get_example_snpdata includes essential SNP info columns", {
 test_that("get_example_snpdata includes cell_id in sample info", {
     snp_data <- get_example_snpdata()
 
-    barcode_info <- get_barcode_info(snp_data)
+    barcode_info <- barcode_info(snp_data)
 
     # Verify cell_id column is present in sample info
     expect_true("cell_id" %in% colnames(barcode_info))
@@ -279,8 +279,8 @@ test_that("import_cellsnp returns matrices with consistent dimensions", {
 test_that("import_cellsnp metadata row counts match matrix dimensions", {
     snp_data <- import_example_snpdata()
 
-    snp_info <- get_snp_info(snp_data)
-    barcode_info <- get_barcode_info(snp_data)
+    snp_info <- snp_info(snp_data)
+    barcode_info <- barcode_info(snp_data)
 
     # Verify SNP info rows match matrix rows
     expect_equal(nrow(snp_info), nrow(snp_data))
@@ -291,8 +291,8 @@ test_that("import_cellsnp metadata row counts match matrix dimensions", {
 test_that("import_cellsnp metadata includes all expected columns", {
     snp_data <- import_example_snpdata()
 
-    snp_info <- get_snp_info(snp_data)
-    barcode_info <- get_barcode_info(snp_data)
+    snp_info <- snp_info(snp_data)
+    barcode_info <- barcode_info(snp_data)
     expected_snp_cols <- c("snp_id", "chrom", "pos", "ref", "alt")
     expected_sample_cols <- c("cell_id", "donor", "clonotype")
 
@@ -393,7 +393,7 @@ test_that("import_cellsnp without vdj_file completes without error and returns a
 test_that("import_cellsnp without vdj_file leaves clonotype as NA", {
     snp_data <- import_snpdata_without_vdj()
 
-    barcode_info <- get_barcode_info(snp_data)
+    barcode_info <- barcode_info(snp_data)
 
     # Verify clonotype column exists
     expect_true("clonotype" %in% colnames(barcode_info))
@@ -404,7 +404,7 @@ test_that("import_cellsnp without vdj_file leaves clonotype as NA", {
 test_that("import_cellsnp without vdj_file includes expected sample columns", {
     snp_data <- import_snpdata_without_vdj()
 
-    barcode_info <- get_barcode_info(snp_data)
+    barcode_info <- barcode_info(snp_data)
     expected_sample_cols <- c("cell_id", "donor")
 
     # Verify expected sample info columns are present
@@ -442,7 +442,7 @@ test_that("import_cellsnp without vdj_file or vireo_folder completes without err
 test_that("import_cellsnp without vdj_file or vireo_folder defaults clonotype and donor columns", {
     snp_data <- import_snpdata_without_vdj_or_vireo()
 
-    barcode_info <- get_barcode_info(snp_data)
+    barcode_info <- barcode_info(snp_data)
 
     # Verify clonotype column exists even without VDJ
     expect_true("clonotype" %in% colnames(barcode_info))
@@ -472,9 +472,9 @@ test_that("import_cellsnp(vireo_folder=) reads donor assignments when the folder
     )
 
     # Verify donor assignments were still read from donor_ids.tsv
-    expect_true("donor" %in% colnames(get_barcode_info(snp_data)))
+    expect_true("donor" %in% colnames(barcode_info(snp_data)))
     # Verify donor_snp_info stays empty since there was no genotype VCF to parse
-    expect_equal(nrow(get_donor_snp_info(snp_data)), 0)
+    expect_equal(nrow(donor_snp_info(snp_data)), 0)
 })
 
 test_that("export_cellsnp creates output files", {
@@ -569,7 +569,7 @@ test_that("complete workflow: import without VDJ then add clonotype data", {
     )
 
     # Verify initial state - clonotype exists but all NA
-    barcode_info <- get_barcode_info(snp_data)
+    barcode_info <- barcode_info(snp_data)
     # Verify clonotype column exists
     expect_true("clonotype" %in% colnames(barcode_info))
     # Verify all clonotype values are initially NA
@@ -598,7 +598,7 @@ test_that("complete workflow: import without VDJ then add clonotype data", {
     )
 
     # Verify clonotype data was added
-    barcode_info_updated <- get_barcode_info(snp_data_with_clonotype)
+    barcode_info_updated <- barcode_info(snp_data_with_clonotype)
     # Verify clonotype column still exists
     expect_true("clonotype" %in% colnames(barcode_info_updated))
     # Verify not all clonotypes are NA anymore
@@ -654,7 +654,7 @@ test_that("import with VDJ then export and re-import preserves clonotype", {
     )
 
     # Verify clonotype data present
-    barcode_info_original <- get_barcode_info(snp_data_original)
+    barcode_info_original <- barcode_info(snp_data_original)
     # Verify clonotype column exists in imported data
     expect_true("clonotype" %in% colnames(barcode_info_original))
     clonotypes_with_data <- sum(!is.na(barcode_info_original$clonotype))
@@ -680,7 +680,7 @@ test_that("import with VDJ then export and re-import preserves clonotype", {
     )
 
     # Verify clonotype data preserved
-    barcode_info_reimported <- get_barcode_info(snp_data_reimported)
+    barcode_info_reimported <- barcode_info(snp_data_reimported)
     # Verify clonotype column exists after re-import
     expect_true("clonotype" %in% colnames(barcode_info_reimported))
 
@@ -707,7 +707,7 @@ test_that("import without VDJ, export, re-import maintains no clonotype state", 
     )
 
     # Verify all clonotypes are NA
-    barcode_info_original <- get_barcode_info(snp_data_original)
+    barcode_info_original <- barcode_info(snp_data_original)
     # Verify all clonotype values are NA when no VDJ imported
     expect_true(all(is.na(barcode_info_original$clonotype)))
 
@@ -729,7 +729,7 @@ test_that("import without VDJ, export, re-import maintains no clonotype state", 
     )
 
     # Verify all clonotypes still NA
-    barcode_info_reimported <- get_barcode_info(snp_data_reimported)
+    barcode_info_reimported <- barcode_info(snp_data_reimported)
     # Verify clonotype column exists after re-import
     expect_true("clonotype" %in% colnames(barcode_info_reimported))
     # Verify all clonotype values remain NA after roundtrip
@@ -953,11 +953,11 @@ test_that("import_cellsnp(vireo_folder=) populates donor_snp_info from real Vire
         vireo_folder = vireo_folder
     )
 
-    donor_snp_info <- get_donor_snp_info(snp_data)
+    donor_snp_info <- donor_snp_info(snp_data)
     # Verify zygosity calls were populated from the real GT VCF
     expect_true(nrow(donor_snp_info) > 0)
     # Verify every call is sourced from Vireo genotypes
     expect_true(all(donor_snp_info$zygosity_source == "vireo_gt"))
     # Verify every call's snp_id matches a SNP actually present in the object
-    expect_true(all(donor_snp_info$snp_id %in% get_snp_info(snp_data)$snp_id))
+    expect_true(all(donor_snp_info$snp_id %in% snp_info(snp_data)$snp_id))
 })

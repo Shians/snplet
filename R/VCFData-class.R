@@ -18,9 +18,9 @@
 #'
 #' @section Accessors:
 #' \describe{
-#'   \item{\code{get_header(x)}}{Get VCF header lines}
-#'   \item{\code{get_samples(x)}}{Get sample names}
-#'   \item{\code{get_variants(x)}}{Get variant data.frame}
+#'   \item{\code{header(x)}}{Get VCF header lines (alias: \code{get_header()})}
+#'   \item{\code{samples(x)}}{Get sample names (alias: \code{get_samples()})}
+#'   \item{\code{variants(x)}}{Get variant data.frame (alias: \code{get_variants()})}
 #' }
 #'
 #' @section Dimensions:
@@ -39,9 +39,9 @@
 #' )
 #'
 #' # Access components
-#' header <- get_header(vcf_data)
-#' samples <- get_samples(vcf_data)
-#' variants <- get_variants(vcf_data)
+#' header <- header(vcf_data)
+#' samples <- samples(vcf_data)
+#' variants <- variants(vcf_data)
 #' }
 #'
 #' @exportClass VCFData
@@ -96,26 +96,38 @@ setMethod(
 )
 
 # Accessors
-#' @exportMethod get_header
+#' @exportMethod header
 #' @rdname VCFData-class
-setGeneric("get_header", function(x) standardGeneric("get_header"))
-#' @exportMethod get_header
+setGeneric("header", function(x) standardGeneric("header"))
+#' @exportMethod header
 #' @rdname VCFData-class
-setMethod("get_header", signature(x = "VCFData"), function(x) x@header)
+setMethod("header", signature(x = "VCFData"), function(x) x@header)
 
-#' @exportMethod get_samples
+#' @export
 #' @rdname VCFData-class
-setGeneric("get_samples", function(x) standardGeneric("get_samples"))
-#' @exportMethod get_samples
-#' @rdname VCFData-class
-setMethod("get_samples", signature(x = "VCFData"), function(x) x@samples)
+get_header <- function(x) header(x)
 
-#' @exportMethod get_variants
+#' @exportMethod samples
 #' @rdname VCFData-class
-setGeneric("get_variants", function(x) standardGeneric("get_variants"))
-#' @exportMethod get_variants
+setGeneric("samples", function(x) standardGeneric("samples"))
+#' @exportMethod samples
 #' @rdname VCFData-class
-setMethod("get_variants", signature(x = "VCFData"), function(x) x@variants)
+setMethod("samples", signature(x = "VCFData"), function(x) x@samples)
+
+#' @export
+#' @rdname VCFData-class
+get_samples <- function(x) samples(x)
+
+#' @exportMethod variants
+#' @rdname VCFData-class
+setGeneric("variants", function(x) standardGeneric("variants"))
+#' @exportMethod variants
+#' @rdname VCFData-class
+setMethod("variants", signature(x = "VCFData"), function(x) x@variants)
+
+#' @export
+#' @rdname VCFData-class
+get_variants <- function(x) variants(x)
 
 # Dimensions
 #' @exportMethod nrow

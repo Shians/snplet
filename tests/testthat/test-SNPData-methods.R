@@ -212,7 +212,7 @@ test_that("SNPData constructor drops duplicate SNP IDs", {
 
     # Verify correct SNP IDs are retained
     expect_equal(
-        get_snp_info(snp_dup)$snp_id,
+        snp_info(snp_dup)$snp_id,
         c("dup_snp", "unique_snp")
     )
 
@@ -223,7 +223,7 @@ test_that("SNPData constructor drops duplicate SNP IDs", {
     )
 
     # Verify which duplicate was kept (should be first occurrence with pos=100)
-    expect_equal(get_snp_info(snp_dup)$pos, c(100, 200))
+    expect_equal(snp_info(snp_dup)$pos, c(100, 200))
 
     # Verify count matrices match the kept SNPs
     # First row should be from first dup_snp (values 1, 2 for alt)
@@ -953,7 +953,7 @@ test_that("clonotype functions work after adding clonotype via add_barcode_metad
         join_by = "cell_id"
     )
 
-    barcode_info <- get_barcode_info(snp_data_with_clonotype)
+    barcode_info <- barcode_info(snp_data_with_clonotype)
     # Verify clonotype column now exists
     expect_true("clonotype" %in% colnames(barcode_info))
     # Verify clonotype values match the added metadata
@@ -1008,7 +1008,7 @@ test_that("clonotype functions work after updating clonotype with overwrite=TRUE
         overwrite = TRUE
     )
 
-    barcode_info <- get_barcode_info(snp_data_updated)
+    barcode_info <- barcode_info(snp_data_updated)
     # Verify clonotype values are updated
     expect_equal(barcode_info$clonotype, c("clonotype_1", "clonotype_2"))
     # Verify no NA clonotype values remain
@@ -1114,7 +1114,7 @@ test_that("add_barcode_metadata overwrite replaces columns and preserves compute
         snp_info = test_snp_info,
         barcode_info = test_barcode_info
     )
-    original_library_size <- get_barcode_info(snp_data)$library_size
+    original_library_size <- barcode_info(snp_data)$library_size
     conflict_metadata <- data.frame(
         cell_id = c("cell_1", "cell_2"),
         donor = c("d1_new", "d2_new"),
@@ -1122,7 +1122,7 @@ test_that("add_barcode_metadata overwrite replaces columns and preserves compute
     )
 
     updated <- add_barcode_metadata(snp_data, conflict_metadata, overwrite = TRUE)
-    updated_info <- get_barcode_info(updated)
+    updated_info <- barcode_info(updated)
 
     # Verify donor values are overwritten by new metadata
     expect_equal(updated_info$donor, c("d1_new", "d2_new"))
@@ -1215,7 +1215,7 @@ test_that("add_snp_metadata overwrite replaces columns and preserves computed co
         snp_info = test_snp_info,
         barcode_info = test_barcode_info
     )
-    original_coverage <- get_snp_info(snp_data)$coverage
+    original_coverage <- snp_info(snp_data)$coverage
     conflict_metadata <- data.frame(
         snp_id = c("snp_1", "snp_2"),
         pos = c(101, 202),
@@ -1223,7 +1223,7 @@ test_that("add_snp_metadata overwrite replaces columns and preserves computed co
     )
 
     updated <- add_snp_metadata(snp_data, conflict_metadata, overwrite = TRUE)
-    updated_info <- get_snp_info(updated)
+    updated_info <- snp_info(updated)
 
     # Verify SNP positions are overwritten by new metadata
     expect_equal(updated_info$pos, c(101, 202))
@@ -1238,10 +1238,10 @@ test_that("add_donor_metadata enriches donor_info and preserves computed n_cells
         snp_info = test_snp_info,
         barcode_info = test_barcode_info
     )
-    original_n_cells <- get_donor_info(snp_data)$n_cells
+    original_n_cells <- donor_info(snp_data)$n_cells
 
     updated <- add_donor_metadata(snp_data, data.frame(donor = "donor_1", group = "control"))
-    updated_info <- get_donor_info(updated)
+    updated_info <- donor_info(updated)
 
     # Verify the new column was added
     expect_equal(updated_info$group, "control")
@@ -1284,8 +1284,8 @@ test_that("add_donor_snp_metadata inserts new (snp_id, donor) rows rather than d
     )
 
     # Verify the row was inserted, not silently dropped by a plain enrich-join
-    expect_equal(nrow(get_donor_snp_info(updated)), 1)
-    expect_equal(get_donor_snp_info(updated)$zygosity, "het")
+    expect_equal(nrow(donor_snp_info(updated)), 1)
+    expect_equal(donor_snp_info(updated)$zygosity, "het")
 })
 
 test_that("add_donor_snp_metadata overwrite enriches an existing row without touching its other columns", {
@@ -1305,7 +1305,7 @@ test_that("add_donor_snp_metadata overwrite enriches an existing row without tou
         data.frame(snp_id = "snp_1", donor = "donor_1", xci_informative = TRUE, allele_on_x1 = "REF"),
         overwrite = TRUE
     )
-    row <- get_donor_snp_info(updated)
+    row <- donor_snp_info(updated)
 
     # Verify the new columns were written
     expect_true(row$xci_informative)
@@ -1568,7 +1568,7 @@ test_that("merge_snpdata merges by barcode when barcode column exists", {
     y <- data$y
 
     merged <- merge_snpdata(x, y, snp_join = "union", cell_join = "union")
-    merged_barcode_info <- get_barcode_info(merged)
+    merged_barcode_info <- barcode_info(merged)
 
     # Verify barcode-based merge retains union of barcodes in order
     expect_equal(merged_barcode_info$barcode, c("bc1", "bc2", "bc3"))
@@ -1624,19 +1624,19 @@ test_that("merge_snpdata handles barcode merge with no overlapping barcodes", {
     y <- data$y
 
     # Replace y barcodes so there is no overlap with x
-    barcode_info_y <- get_barcode_info(y)
+    barcode_info_y <- barcode_info(y)
     barcode_info_y$barcode <- c("bc3", "bc4")
     y <- SNPData(
         alt_count = alt_count(y),
         ref_count = ref_count(y),
-        snp_info = get_snp_info(y),
+        snp_info = snp_info(y),
         barcode_info = barcode_info_y
     )
 
     merged <- merge_snpdata(x, y, snp_join = "union", cell_join = "right")
 
     # Verify merged object keeps only y barcodes
-    merged_barcode_info <- get_barcode_info(merged)
+    merged_barcode_info <- barcode_info(merged)
     expect_equal(merged_barcode_info$barcode, c("bc3", "bc4"))
     # Verify counts match y when x has no matching barcodes
     expect_equal(unname(as.matrix(ref_count(merged))), unname(as.matrix(ref_count(y))))
@@ -1657,7 +1657,7 @@ test_that("merge_snpdata errors when no SNPs or cells are retained", {
             snp_id = c("snpC", "snpD"),
             stringsAsFactors = FALSE
         ),
-        barcode_info = get_barcode_info(y)
+        barcode_info = barcode_info(y)
     )
     # Verify error when intersect retains no SNPs
     expect_error(
@@ -1669,7 +1669,7 @@ test_that("merge_snpdata errors when no SNPs or cells are retained", {
     y_no_cells <- SNPData(
         alt_count = alt_count(y),
         ref_count = ref_count(y),
-        snp_info = get_snp_info(y),
+        snp_info = snp_info(y),
         barcode_info = data.frame(
             cell_id = c("cell4", "cell5"),
             donor = c("d4", "d5"),
@@ -1690,8 +1690,8 @@ test_that("merge_snpdata union/union merges metadata correctly", {
 
     merged <- merge_snpdata(x, y, snp_join = "union", cell_join = "union")
 
-    merged_snp_info <- get_snp_info(merged)
-    merged_barcode_info <- get_barcode_info(merged)
+    merged_snp_info <- snp_info(merged)
+    merged_barcode_info <- barcode_info(merged)
 
     # Verify SNP metadata is merged with x taking priority for conflicts
     expect_equal(merged_snp_info$gene, c("geneA", "geneB_x", "geneC"))
@@ -1740,8 +1740,8 @@ test_that("merge_snpdata intersect/intersect merges metadata correctly", {
 
     merged <- merge_snpdata(x, y, snp_join = "intersect", cell_join = "intersect")
 
-    merged_snp_info <- get_snp_info(merged)
-    merged_barcode_info <- get_barcode_info(merged)
+    merged_snp_info <- snp_info(merged)
+    merged_barcode_info <- barcode_info(merged)
 
     # Verify SNP metadata for snpB uses x value for conflict
     expect_equal(merged_snp_info$gene, "geneB_x")
@@ -1815,8 +1815,8 @@ test_that("merge_snpdata left/left merges metadata correctly", {
 
     merged <- merge_snpdata(x, y, snp_join = "left", cell_join = "left")
 
-    merged_snp_info <- get_snp_info(merged)
-    merged_barcode_info <- get_barcode_info(merged)
+    merged_snp_info <- snp_info(merged)
+    merged_barcode_info <- barcode_info(merged)
 
     # Verify SNP metadata contains only x SNPs
     expect_equal(merged_snp_info$snp_id, c("snpA", "snpB"))
@@ -1887,8 +1887,8 @@ test_that("merge_snpdata right/right merges metadata correctly", {
 
     merged <- merge_snpdata(x, y, snp_join = "right", cell_join = "right")
 
-    merged_snp_info <- get_snp_info(merged)
-    merged_barcode_info <- get_barcode_info(merged)
+    merged_snp_info <- snp_info(merged)
+    merged_barcode_info <- barcode_info(merged)
 
     # Verify SNP metadata contains only y SNPs
     expect_equal(merged_snp_info$snp_id, c("snpB", "snpC"))
@@ -1988,7 +1988,7 @@ test_that("merge_snpdata unions donor_info and donor_snp_info across non-overlap
     merged <- merge_snpdata(x, y, snp_join = "union", cell_join = "union")
 
     # Verify both donors' stored calls survived the merge
-    donor_snp_info <- get_donor_snp_info(merged)
+    donor_snp_info <- donor_snp_info(merged)
     expect_setequal(donor_snp_info$snp_id, c("snpA", "snpC"))
     expect_setequal(donor_snp_info$donor, c("d1", "d3"))
 })

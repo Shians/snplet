@@ -75,14 +75,14 @@ setMethod(
     "haplotype_expression",
     signature(x = "SNPData"),
     function(x, escape_threshold = 0.1, xci_informative_only = FALSE) {
-        barcode_info <- get_barcode_info(x)
-        snp_info <- get_snp_info(x)
+        barcode_info <- barcode_info(x)
+        snp_info <- snp_info(x)
 
         if (!"active_x" %in% colnames(barcode_info) || !.has_xci_diagnostics(x)) {
             stop("No stored XCI diagnostics found. Run assign_xci(x) first.")
         }
 
-        donor_snp_info <- get_donor_snp_info(x)
+        donor_snp_info <- donor_snp_info(x)
         if (xci_informative_only) {
             donor_snp_info <- dplyr::filter(donor_snp_info, xci_informative)
         }
@@ -291,8 +291,8 @@ setMethod(
     "haplotype_expression_by_molecule",
     signature(x = "SNPData"),
     function(x, molecule_calls, snp_gene_map, escape_threshold = 0.1) {
-        barcode_info <- get_barcode_info(x)
-        donor_snp_info <- get_donor_snp_info(x)
+        barcode_info <- barcode_info(x)
+        donor_snp_info <- donor_snp_info(x)
 
         if (!"active_x" %in% colnames(barcode_info) || !.has_xci_diagnostics(x)) {
             stop("No stored XCI diagnostics found. Run assign_xci(x) first.")

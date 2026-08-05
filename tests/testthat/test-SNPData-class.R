@@ -95,10 +95,10 @@ test_that("alt_count() returns alternate count matrix with correct values and na
     expect_equal(colnames(alt_count_matrix), c("cell_1", "cell_2"))
 })
 
-test_that("get_snp_info() returns SNP metadata with computed coverage metrics", {
+test_that("snp_info() returns SNP metadata with computed coverage metrics", {
     snp_data <- create_test_snpdata()
 
-    snp_info <- get_snp_info(snp_data)
+    snp_info <- snp_info(snp_data)
 
     # Verify SNP IDs are preserved from input
     expect_equal(snp_info$snp_id, test_snp_info$snp_id)
@@ -114,10 +114,10 @@ test_that("get_snp_info() returns SNP metadata with computed coverage metrics", 
     expect_equal(as.numeric(snp_info$non_zero_samples), c(2, 2))
 })
 
-test_that("get_barcode_info() returns barcode metadata with computed library size metrics", {
+test_that("barcode_info() returns barcode metadata with computed library size metrics", {
     snp_data <- create_test_snpdata()
 
-    barcode_info <- get_barcode_info(snp_data)
+    barcode_info <- barcode_info(snp_data)
 
     # Verify cell IDs are preserved from input
     expect_equal(barcode_info$cell_id, test_barcode_info$cell_id)
@@ -217,9 +217,9 @@ test_that("SNPData() auto-generates snp_id column when missing from snp_info", {
     )
 
     # Verify snp_id column was auto-generated when missing
-    expect_true("snp_id" %in% colnames(get_snp_info(snp_data)))
+    expect_true("snp_id" %in% colnames(snp_info(snp_data)))
     # Check that auto-generated SNP IDs follow expected pattern
-    expect_equal(get_snp_info(snp_data)$snp_id, c("snp_1", "snp_2"))
+    expect_equal(snp_info(snp_data)$snp_id, c("snp_1", "snp_2"))
 })
 
 test_that("SNPData() auto-generates cell_id column when missing from barcode_info", {
@@ -237,9 +237,9 @@ test_that("SNPData() auto-generates cell_id column when missing from barcode_inf
     )
 
     # Verify cell_id column was auto-generated when missing
-    expect_true("cell_id" %in% colnames(get_barcode_info(snp_data)))
+    expect_true("cell_id" %in% colnames(barcode_info(snp_data)))
     # Check that auto-generated cell IDs follow expected pattern
-    expect_equal(get_barcode_info(snp_data)$cell_id, c("cell_1", "cell_2"))
+    expect_equal(barcode_info(snp_data)$cell_id, c("cell_1", "cell_2"))
 })
 
 test_that("SNPData() throws error when alt_count and ref_count have mismatched row dimensions", {
@@ -287,11 +287,11 @@ test_that("SNPData() throws error when barcode_info rows don't match matrix colu
     )
 })
 
-test_that("get_sample_info() returns same result as get_barcode_info()", {
+test_that("get_sample_info() returns same result as barcode_info()", {
     snp_data <- create_test_snpdata()
 
-    # Verify get_sample_info is an alias for get_barcode_info
-    expect_equal(get_sample_info(snp_data), get_barcode_info(snp_data))
+    # Verify get_sample_info is an alias for barcode_info
+    expect_equal(get_sample_info(snp_data), barcode_info(snp_data))
 })
 
 test_that("barcode_info<- replaces barcode_info with valid data", {
@@ -310,9 +310,9 @@ test_that("barcode_info<- replaces barcode_info with valid data", {
     barcode_info(snp_data) <- new_barcode_info
 
     # Verify barcode_info was updated
-    expect_equal(get_barcode_info(snp_data)$donor, c("donor_1", "donor_1"))
+    expect_equal(barcode_info(snp_data)$donor, c("donor_1", "donor_1"))
     # Verify clonotype was updated
-    expect_equal(get_barcode_info(snp_data)$clonotype, c("clonotype_3", "clonotype_4"))
+    expect_equal(barcode_info(snp_data)$clonotype, c("clonotype_3", "clonotype_4"))
 })
 
 test_that("barcode_info<- throws error when dimensions don't match", {
@@ -373,9 +373,9 @@ test_that("snp_info<- replaces snp_info with valid data", {
     snp_info(snp_data) <- new_snp_info
 
     # Verify snp_info was updated
-    expect_equal(get_snp_info(snp_data)$pos, c(150, 250))
+    expect_equal(snp_info(snp_data)$pos, c(150, 250))
     # Verify chr column was added
-    expect_equal(get_snp_info(snp_data)$chr, c("chr1", "chr2"))
+    expect_equal(snp_info(snp_data)$chr, c("chr1", "chr2"))
 })
 
 test_that("snp_info<- throws error when dimensions don't match", {
@@ -423,17 +423,17 @@ test_that("snp_info<- throws error when snp_id doesn't match matrix row names", 
     )
 })
 
-test_that("get_donor_info() auto-derives one row per distinct donor in barcode_info", {
+test_that("donor_info() auto-derives one row per distinct donor in barcode_info", {
     snp_data <- create_test_snpdata()
 
     # Verify the single donor in test_barcode_info produces one donor_info row
-    expect_equal(get_donor_info(snp_data)$donor, "donor_1")
+    expect_equal(donor_info(snp_data)$donor, "donor_1")
 })
 
-test_that("get_donor_snp_info() defaults to an empty tibble with the expected columns", {
+test_that("donor_snp_info() defaults to an empty tibble with the expected columns", {
     snp_data <- create_test_snpdata()
 
-    donor_snp_info <- get_donor_snp_info(snp_data)
+    donor_snp_info <- donor_snp_info(snp_data)
     # Verify no rows are present before any donor-level data has been added
     expect_equal(nrow(donor_snp_info), 0)
     # Verify the schema is already in place for later writers to join against
@@ -544,14 +544,14 @@ test_that("[() drops a donor's donor_info and donor_snp_info rows once its cells
     subset_data <- snp_data[, 1]
 
     # Verify only the surviving cell's donor remains in donor_info
-    expect_equal(get_donor_info(subset_data)$donor, "donor_1")
+    expect_equal(donor_info(subset_data)$donor, "donor_1")
     # Verify the dropped donor's donor_snp_info row was removed too
-    expect_equal(get_donor_snp_info(subset_data)$donor, "donor_1")
+    expect_equal(donor_snp_info(subset_data)$donor, "donor_1")
 })
 
 test_that("updateObject() migrates a legacy object's packed *_by_donor snp_info columns", {
     snp_data <- create_test_snpdata()
-    legacy_snp_info <- get_snp_info(snp_data)
+    legacy_snp_info <- snp_info(snp_data)
     legacy_snp_info$xci_informative <- c(TRUE, FALSE)
     legacy_snp_info$xci_informative_donor <- c("donor_1", NA)
     legacy_snp_info$xci_allele_on_x1_by_donor <- c("REF", NA)
@@ -568,14 +568,14 @@ test_that("updateObject() migrates a legacy object's packed *_by_donor snp_info 
     updated <- updateObject(snp_data)
 
     # Verify the packed column was unpacked into donor_snp_info
-    expect_equal(get_donor_snp_info(updated)$snp_id, "snp_1")
+    expect_equal(donor_snp_info(updated)$snp_id, "snp_1")
     # Verify the phase carried over correctly
-    expect_equal(get_donor_snp_info(updated)$allele_on_x1, "REF")
+    expect_equal(donor_snp_info(updated)$allele_on_x1, "REF")
     # Verify the packed columns were removed from snp_info
-    expect_false("xci_informative_donor" %in% colnames(get_snp_info(updated)))
+    expect_false("xci_informative_donor" %in% colnames(snp_info(updated)))
     # Verify xci_informative itself was migrated out of snp_info too, since it
     # now belongs solely to donor_snp_info (informativeness is donor-specific)
-    expect_false("xci_informative" %in% colnames(get_snp_info(updated)))
+    expect_false("xci_informative" %in% colnames(snp_info(updated)))
     # Verify the object passes validity after migration
     expect_true(methods::validObject(updated))
 })
@@ -590,8 +590,8 @@ test_that("SNPData() donor_map relabels barcode_info$donor at construction time"
     )
 
     # Verify the raw donor label was relabelled before donor_info was derived
-    expect_equal(unique(get_barcode_info(snp_data)$donor), "PatientA")
-    expect_equal(get_donor_info(snp_data)$donor, "PatientA")
+    expect_equal(unique(barcode_info(snp_data)$donor), "PatientA")
+    expect_equal(donor_info(snp_data)$donor, "PatientA")
 })
 
 test_that("SNPData() donor_map also relabels a caller-supplied donor_snp_info", {
@@ -612,7 +612,7 @@ test_that("SNPData() donor_map also relabels a caller-supplied donor_snp_info", 
     )
 
     # Verify donor_snp_info was relabelled to match barcode_info/donor_info
-    expect_equal(get_donor_snp_info(snp_data)$donor, "PatientA")
+    expect_equal(donor_snp_info(snp_data)$donor, "PatientA")
 })
 
 test_that("rename_donor() cascades a relabel across barcode_info, donor_info, and donor_snp_info", {
@@ -625,9 +625,9 @@ test_that("rename_donor() cascades a relabel across barcode_info, donor_info, an
     renamed <- rename_donor(snp_data, c(PatientA = "donor_1"))
 
     # Verify all three donor-keyed tables agree on the new label
-    expect_equal(unique(get_barcode_info(renamed)$donor), "PatientA")
-    expect_equal(get_donor_info(renamed)$donor, "PatientA")
-    expect_equal(get_donor_snp_info(renamed)$donor, "PatientA")
+    expect_equal(unique(barcode_info(renamed)$donor), "PatientA")
+    expect_equal(donor_info(renamed)$donor, "PatientA")
+    expect_equal(donor_snp_info(renamed)$donor, "PatientA")
 })
 
 test_that("rename_donor() swaps two donor labels without corrupting either", {
@@ -644,7 +644,7 @@ test_that("rename_donor() swaps two donor labels without corrupting either", {
 
     # Verify the swap applied simultaneously rather than cascading sequentially
     # (a naive pair-by-pair substitution would collapse both cells onto "A")
-    expect_equal(get_barcode_info(swapped)$donor, c("B", "A"))
+    expect_equal(barcode_info(swapped)$donor, c("B", "A"))
 })
 
 test_that("rename_donor() errors when donor_map references a donor that doesn't exist", {
@@ -675,7 +675,7 @@ test_that("rename_donor() errors when donor_map would collide two donors onto on
 
 test_that("barcode_info<- rejects a donor column change once donor_info carries data", {
     snp_data <- create_test_snpdata()
-    new_barcode_info <- get_barcode_info(snp_data)
+    new_barcode_info <- barcode_info(snp_data)
     new_barcode_info$donor <- "donor_2"
 
     # Verify the error points at rename_donor() instead
@@ -687,13 +687,13 @@ test_that("barcode_info<- rejects a donor column change once donor_info carries 
 
 test_that("barcode_info<- still allows non-donor columns to change once donor_info carries data", {
     snp_data <- create_test_snpdata()
-    new_barcode_info <- get_barcode_info(snp_data)
+    new_barcode_info <- barcode_info(snp_data)
     new_barcode_info$clonotype <- "clonotype_new"
 
     barcode_info(snp_data) <- new_barcode_info
 
     # Verify the unrelated column change went through
-    expect_equal(get_barcode_info(snp_data)$clonotype, c("clonotype_new", "clonotype_new"))
+    expect_equal(barcode_info(snp_data)$clonotype, c("clonotype_new", "clonotype_new"))
 })
 
 test_that("barcode_info<- allows a donor column to be set freely when donor_info is still empty", {
@@ -704,11 +704,11 @@ test_that("barcode_info<- allows a donor column to be set freely when donor_info
         snp_info = test_snp_info,
         barcode_info = no_donor_barcode_info
     )
-    new_barcode_info <- get_barcode_info(snp_data)
+    new_barcode_info <- barcode_info(snp_data)
     new_barcode_info$donor <- c("donor_a", "donor_b")
 
     barcode_info(snp_data) <- new_barcode_info
 
     # Verify the donor column was accepted since donor_info had no prior data
-    expect_equal(get_barcode_info(snp_data)$donor, c("donor_a", "donor_b"))
+    expect_equal(barcode_info(snp_data)$donor, c("donor_a", "donor_b"))
 })
