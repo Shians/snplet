@@ -41,7 +41,11 @@ A SNPData object with `donor_snp_info` gaining the columns
   already reads `allele_on_x1` changes behaviour), else the molecule value,
   else `NA` where `phase_conflict` is `TRUE`. Also carries a
   `"molecule_calls"` attribute (a tibble with columns `donor`, `barcode`,
-  `umi`, `snp_id`, `allele`, the per-donor `molecule_snp_alleles()` output
+  `umi`, `snp_id`, `allele`, `transcript_strand` (`"+"`/`"-"`/`NA`, the
+  molecule's inferred transcript strand -- see
+  `.infer_bam_strand_orientation()` and `molecule_read_strand()` -- used by
+  `haplotype_expression_by_molecule()` to resolve SNPs `assign_snp_genes()`
+  flagged `ambiguous`), the per-donor `molecule_snp_alleles()` output
   already computed here) so `haplotype_expression_by_molecule()` does not
   need to re-extract from the BAM.
 }
@@ -58,6 +62,7 @@ columns.
 Other molecule-level allele counting functions:
 \code{\link[=assign_snp_genes]{assign_snp_genes()}},
 \code{\link[=extract_snp_calls]{extract_snp_calls()}},
+\code{\link[=molecule_read_strand]{molecule_read_strand()}},
 \code{\link[=molecule_snp_alleles]{molecule_snp_alleles()}},
 \code{\link[=phase_snps]{phase_snps()}}
 

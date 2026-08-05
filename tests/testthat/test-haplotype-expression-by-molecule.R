@@ -67,7 +67,13 @@ make_molecule_hap_fixture <- function() {
         overwrite = TRUE
     )
 
-    snp_gene_map <- data.frame(snp_id = snp_ids, gene_name = "GENE1", stringsAsFactors = FALSE)
+    snp_gene_map <- data.frame(
+        snp_id = snp_ids,
+        gene_name = "GENE1",
+        gene_strand = "+",
+        ambiguous = FALSE,
+        stringsAsFactors = FALSE
+    )
 
     list(obj = obj, snp_ids = snp_ids, snp_gene_map = snp_gene_map)
 }
@@ -129,16 +135,19 @@ test_that("haplotype_expression_by_molecule() counts a multi-SNP molecule once, 
         ~umi,
         ~snp_id,
         ~allele,
+        ~transcript_strand,
         "donor0",
         "cell1",
         "u1",
         snpA,
         "REF",
+        "+",
         "donor0",
         "cell1",
         "u1",
         snpB,
-        "REF"
+        "REF",
+        "+"
     )
 
     result <- haplotype_expression_by_molecule(fixture$obj, molecule_calls, fixture$snp_gene_map)
@@ -165,31 +174,37 @@ test_that("haplotype_expression_by_molecule() reports non-dominant-block molecul
         ~umi,
         ~snp_id,
         ~allele,
+        ~transcript_strand,
         "donor0",
         "cell1",
         "u1",
         snpA,
         "REF",
+        "+",
         "donor0",
         "cell1",
         "u1",
         snpB,
         "REF",
+        "+",
         "donor0",
         "cell2",
         "u2",
         snpA,
         "ALT",
+        "+",
         "donor0",
         "cell2",
         "u2",
         snpB,
         "ALT",
+        "+",
         "donor0",
         "cell3",
         "u3",
         snpC,
-        "REF"
+        "REF",
+        "+"
     )
 
     result <- haplotype_expression_by_molecule(fixture$obj, molecule_calls, fixture$snp_gene_map)
@@ -212,16 +227,19 @@ test_that("haplotype_expression_by_molecule() drops a molecule with a tied haplo
         ~umi,
         ~snp_id,
         ~allele,
+        ~transcript_strand,
         "donor0",
         "cell1",
         "u1",
         snpA,
         "REF",
+        "+",
         "donor0",
         "cell1",
         "u1",
         snpB,
-        "ALT"
+        "ALT",
+        "+"
     )
 
     result <- haplotype_expression_by_molecule(fixture$obj, molecule_calls, fixture$snp_gene_map)
@@ -242,16 +260,19 @@ test_that("haplotype_expression_by_molecule() reports both active_x groups even 
         ~umi,
         ~snp_id,
         ~allele,
+        ~transcript_strand,
         "donor0",
         "cell1",
         "u1",
         snpA,
         "REF",
+        "+",
         "donor0",
         "cell1",
         "u1",
         snpB,
-        "REF"
+        "REF",
+        "+"
     )
 
     result <- haplotype_expression_by_molecule(fixture$obj, molecule_calls, fixture$snp_gene_map)
@@ -282,7 +303,8 @@ test_that("haplotype_expression_by_molecule() errors on missing snp_gene_map col
         barcode = character(),
         umi = character(),
         snp_id = character(),
-        allele = character()
+        allele = character(),
+        transcript_strand = character()
     )
     bad_map <- tibble::tibble(snp_id = "x")
 
@@ -290,5 +312,119 @@ test_that("haplotype_expression_by_molecule() errors on missing snp_gene_map col
     expect_error(
         haplotype_expression_by_molecule(fixture$obj, empty_calls, bad_map),
         "missing required column"
+    )
+})
+
+# ==============================================================================
+# Test: strand resolution of ambiguous (multi-gene) SNPs
+# ==============================================================================
+
+# A single het SNP overlapping two opposite-strand genes, as assign_snp_genes()
+# would report it: one row per candidate, both ambiguous = TRUE.
+make_ambiguous_gene_fixture <- function() {
+    ref <- matrix(0L, nrow = 1, ncol = 1)
+    alt <- matrix(0L, nrow = 1, ncol = 1)
+    snp_info <- data.frame(chrom = "chrX", pos = 5000L, ref = "A", alt = "G", stringsAsFactors = FALSE)
+    barcode_info <- data.frame(barcode = "cell1", donor = "donor0", stringsAsFactors = FALSE)
+    obj <- SNPData(
+        ref_count = Matrix(ref, sparse = TRUE),
+        alt_count = Matrix(alt, sparse = TRUE),
+        snp_info = snp_info,
+        barcode_info = barcode_info
+    )
+    snp_id <- get_snp_info(obj)$snp_id
+
+    donor_snp_diag <- data.frame(
+        snp_id = snp_id,
+        donor = "donor0",
+        xci_informative = TRUE,
+        allele_on_x1 = "REF",
+        allele_on_x1_molecule = NA_character_,
+        phase_block = 1L,
+        phase_source = NA_character_,
+        phase_conflict = FALSE,
+        zygosity = "het",
+        zygosity_source = "vireo_gt",
+        stringsAsFactors = FALSE
+    )
+    obj <- add_donor_snp_metadata(obj, donor_snp_diag, join_by = c("snp_id", "donor"), overwrite = TRUE)
+    obj <- add_barcode_metadata(
+        obj,
+        data.frame(cell_id = get_barcode_info(obj)$cell_id, active_x = "X1", stringsAsFactors = FALSE),
+        join_by = "cell_id",
+        overwrite = TRUE
+    )
+
+    snp_gene_map <- data.frame(
+        snp_id = c(snp_id, snp_id),
+        gene_name = c("GENE_PLUS", "GENE_MINUS"),
+        gene_strand = c("+", "-"),
+        ambiguous = c(TRUE, TRUE),
+        stringsAsFactors = FALSE
+    )
+
+    list(obj = obj, snp_id = snp_id, snp_gene_map = snp_gene_map)
+}
+
+test_that("haplotype_expression_by_molecule() attributes an ambiguous SNP by molecule strand", {
+    fixture <- make_ambiguous_gene_fixture()
+
+    # u1 is a "+" strand molecule (matches GENE_PLUS); u2 is "-" (matches GENE_MINUS).
+    molecule_calls <- tibble::tribble(
+        ~donor,
+        ~barcode,
+        ~umi,
+        ~snp_id,
+        ~allele,
+        ~transcript_strand,
+        "donor0",
+        "cell1",
+        "u1",
+        fixture$snp_id,
+        "REF",
+        "+",
+        "donor0",
+        "cell1",
+        "u2",
+        fixture$snp_id,
+        "REF",
+        "-"
+    )
+
+    result <- haplotype_expression_by_molecule(fixture$obj, molecule_calls, fixture$snp_gene_map)
+
+    # Verify each molecule is attributed only to the gene matching its own strand
+    plus_row <- dplyr::filter(result, gene_name == "GENE_PLUS", active_x == "X1")
+    minus_row <- dplyr::filter(result, gene_name == "GENE_MINUS", active_x == "X1")
+    expect_equal(plus_row$active_count, 1)
+    expect_equal(minus_row$active_count, 1)
+    # Check neither gene double-counts the other strand's molecule
+    expect_equal(plus_row$coverage, 1)
+    expect_equal(minus_row$coverage, 1)
+})
+
+test_that("haplotype_expression_by_molecule() drops an ambiguous SNP's molecule when strand is unknown", {
+    fixture <- make_ambiguous_gene_fixture()
+
+    # A molecule with no resolvable transcript strand cannot be attributed to
+    # either candidate gene, and must be excluded rather than guessed.
+    molecule_calls <- tibble::tribble(
+        ~donor,
+        ~barcode,
+        ~umi,
+        ~snp_id,
+        ~allele,
+        ~transcript_strand,
+        "donor0",
+        "cell1",
+        "u1",
+        fixture$snp_id,
+        "REF",
+        NA_character_
+    )
+
+    expect_error(
+        haplotype_expression_by_molecule(fixture$obj, molecule_calls, fixture$snp_gene_map),
+        "No molecule calls"
     )
 })

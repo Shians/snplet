@@ -44,6 +44,7 @@ Other molecule-level allele counting functions:
 \code{\link[=add_molecule_phase]{add_molecule_phase()}},
 \code{\link[=assign_snp_genes]{assign_snp_genes()}},
 \code{\link[=extract_snp_calls]{extract_snp_calls()}},
+\code{\link[=molecule_read_strand]{molecule_read_strand()}},
 \code{\link[=molecule_snp_alleles]{molecule_snp_alleles()}}
 }
 \concept{molecule-level allele counting functions}

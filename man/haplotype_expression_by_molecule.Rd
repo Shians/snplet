@@ -26,14 +26,22 @@ subsequently had read-backed phase added by
 \code{\link{add_molecule_phase}}.}
 
 \item{molecule_calls}{A tibble with columns \code{donor}, \code{barcode},
-\code{umi}, \code{snp_id}, \code{allele} -- the union, across every
-donor, of \code{\link{molecule_snp_alleles}}'s output (bind rows and add
-a \code{donor} column).}
+\code{umi}, \code{snp_id}, \code{allele}, \code{transcript_strand} --
+the union, across every donor, of \code{\link{add_molecule_phase}}'s
+\code{"molecule_calls"} attribute (or \code{\link{molecule_snp_alleles}}
+plus a \code{transcript_strand} column from
+\code{\link{molecule_read_strand}}, bind rows and add a \code{donor}
+column).}
 
 \item{snp_gene_map}{A tibble with columns \code{snp_id}, \code{gene_name},
-as returned by \code{\link{assign_snp_genes}} -- SNPs overlapping more
-than one gene are already excluded there, and are never double-counted
-here.}
+\code{gene_strand}, \code{ambiguous}, as returned by
+\code{\link{assign_snp_genes}}. A SNP with \code{ambiguous = TRUE}
+overlaps more than one gene and is only counted towards a given
+candidate's \code{gene_name} for molecules whose own
+\code{transcript_strand} matches that candidate's \code{gene_strand};
+molecules with no strand information (\code{NA}) or the wrong strand are
+dropped for that SNP rather than guessed. \code{ambiguous = FALSE} rows
+apply regardless of strand.}
 
 \item{escape_threshold}{Inactive-haplotype fraction at or above which a
 group is flagged as escaping. Default 0.1.}

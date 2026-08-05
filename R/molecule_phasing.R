@@ -52,7 +52,9 @@
 #'       combination, with `n_calls` the number of reads of that molecule
 #'       agreeing on that allele ("REF", "ALT", or "OTH") at that SNP.}
 #'     \item{reads}{One row per (`barcode`, `umi`, `qname`) -- the distinct
-#'       reads behind each molecule.}
+#'       reads behind each molecule, with each read's alignment `strand`
+#'       (`"+"`/`"-"`), for `molecule_read_strand()` to resolve into a single
+#'       strand per molecule.}
 #'   }
 #'
 #' @family molecule-level allele counting functions
@@ -134,6 +136,7 @@ extract_snp_calls <- function(
                 barcode = S4Vectors::mcols(sub)$CB[read_idx],
                 umi = S4Vectors::mcols(sub)$UB[read_idx],
                 qname = S4Vectors::mcols(sub)$qname[read_idx],
+                strand = as.character(BiocGenerics::strand(sub))[read_idx],
                 allele = dplyr::case_when(
                     base == snp_info$ref[snp_idx] ~ "REF",
                     base == snp_info$alt[snp_idx] ~ "ALT",
@@ -145,7 +148,7 @@ extract_snp_calls <- function(
         # region never exists at once.
         list(
             tallies = dplyr::count(calls, barcode, umi, snp_id, allele, name = "n_calls"),
-            reads = dplyr::distinct(calls, barcode, umi, qname)
+            reads = dplyr::distinct(calls, barcode, umi, qname, strand)
         )
     })
 
@@ -299,6 +302,110 @@ extract_snp_calls <- function(
     out_bam
 }
 
+#' Infer whether a BAM's reads are sense or antisense to their transcript
+#'
+#' Demultiplexing tools such as Flexiplex reorient reads before alignment,
+#' and 5' vs 3' protocol data end up flipped in opposite directions -- 5'
+#' reads sense to the transcript, 3' reads its reverse complement -- with no
+#' record of which happened left in the BAM. A spliced read's `ts:A:+/-` tag
+#' (the transcript strand minimap2 calls from the GT-AG splice-junction
+#' signal) is independent of that flip, so comparing a read's own alignment
+#' strand to its `ts` value reveals the orientation for that read; pooling
+#' this over enough `ts`-tagged reads calibrates the whole BAM, since one BAM
+#' is assumed to use a single protocol throughout. Reads are scanned in
+#' batches and the scan stops as soon as the split is decisive, rather than
+#' reading the whole file.
+#'
+#' @param bam_file Path to a BAM (read sequentially; need not be indexed).
+#' @param batch_size Reads scanned per batch. Default 5000.
+#' @param min_ts_reads `ts`-tagged reads required before checking for
+#'   confidence. Default 200.
+#' @param min_concordance Fraction of `ts`-tagged reads that must agree on
+#'   sense/antisense to stop early. Default 0.95.
+#' @param max_reads Reads scanned before giving up rather than looping over
+#'   the whole file. Default 200000.
+#'
+#' @return A list with `orientation` (`"sense"` or `"antisense"` --
+#'   whichever a majority of `ts`-tagged reads support), `n_ts_reads`,
+#'   `concordance` (fraction of those agreeing with `orientation`), and
+#'   `n_scanned` (total reads read to reach the decision).
+#'
+#' @keywords internal
+.infer_bam_strand_orientation <- function(
+    bam_file,
+    batch_size = 5000L,
+    min_ts_reads = 200L,
+    min_concordance = 0.95,
+    max_reads = 200000L
+) {
+    bam_conn <- Rsamtools::BamFile(bam_file, yieldSize = batch_size)
+    open(bam_conn)
+    on.exit(close(bam_conn), add = TRUE)
+
+    param <- Rsamtools::ScanBamParam(
+        tag = "ts",
+        flag = Rsamtools::scanBamFlag(
+            isSecondaryAlignment = FALSE,
+            isSupplementaryAlignment = FALSE,
+            isUnmappedQuery = FALSE,
+            isDuplicate = FALSE
+        )
+    )
+
+    n_sense <- 0L
+    n_antisense <- 0L
+    n_scanned <- 0L
+
+    repeat {
+        galn <- GenomicAlignments::readGAlignments(bam_conn, param = param)
+        if (length(galn) == 0) {
+            break
+        }
+        n_scanned <- n_scanned + length(galn)
+
+        ts <- S4Vectors::mcols(galn)$ts
+        has_ts <- !is.na(ts)
+        if (any(has_ts)) {
+            read_strand <- as.character(BiocGenerics::strand(galn))[has_ts]
+            concordant <- read_strand == ts[has_ts]
+            n_sense <- n_sense + sum(concordant)
+            n_antisense <- n_antisense + sum(!concordant)
+        }
+
+        n_ts_reads <- n_sense + n_antisense
+        if (n_ts_reads >= min_ts_reads) {
+            concordance <- max(n_sense, n_antisense) / n_ts_reads
+            if (concordance >= min_concordance) {
+                return(list(
+                    orientation = if (n_sense >= n_antisense) "sense" else "antisense",
+                    n_ts_reads = n_ts_reads,
+                    concordance = concordance,
+                    n_scanned = n_scanned
+                ))
+            }
+        }
+        if (n_scanned >= max_reads) {
+            break
+        }
+    }
+
+    n_ts_reads <- n_sense + n_antisense
+    if (n_ts_reads == 0) {
+        stop("No ts-tagged reads found in ", bam_file, " after scanning ", n_scanned, " reads")
+    }
+    concordance <- max(n_sense, n_antisense) / n_ts_reads
+    logger::log_warn(
+        "Strand orientation for {bam_file} inconclusive after {n_scanned} reads ",
+        "({n_ts_reads} ts-tagged, {round(concordance * 100, 1)}% concordant); using majority"
+    )
+    list(
+        orientation = if (n_sense >= n_antisense) "sense" else "antisense",
+        n_ts_reads = n_ts_reads,
+        concordance = concordance,
+        n_scanned = n_scanned
+    )
+}
+
 #' Resolve the allele call for each (molecule, SNP)
 #'
 #' Duplicate reads of one molecule vote on the allele at each SNP. Only REF
@@ -318,6 +425,32 @@ molecule_snp_alleles <- function(tallies) {
     tallies %>%
         dplyr::slice_max(n_calls, n = 1, by = c(barcode, umi, snp_id), with_ties = FALSE) %>%
         dplyr::filter(allele %in% c("REF", "ALT"))
+}
+
+#' Resolve the alignment strand of each molecule
+#'
+#' A molecule is one transcript, so every read behind it should agree on
+#' alignment strand; a majority vote absorbs the rare mismapped or chimeric
+#' read rather than letting one read decide. This is alignment strand only --
+#' converting it to the strand of the original transcript (needed to
+#' disambiguate a SNP overlapping genes on opposite strands) additionally
+#' requires the BAM's sense/antisense orientation, since some demultiplexing
+#' pipelines flip reads relative to the transcript (see
+#' `.infer_bam_strand_orientation()`).
+#'
+#' @param reads A tibble as returned by `extract_snp_calls()$reads`, with
+#'   columns `barcode`, `umi`, `qname`, `strand`.
+#'
+#' @return A tibble with one row per (`barcode`, `umi`) and columns
+#'   `barcode`, `umi`, `strand` (the majority call, `"+"` or `"-"`).
+#'
+#' @family molecule-level allele counting functions
+#' @export
+molecule_read_strand <- function(reads) {
+    reads %>%
+        dplyr::count(barcode, umi, strand, name = "n_reads") %>%
+        dplyr::slice_max(n_reads, n = 1, by = c(barcode, umi), with_ties = FALSE) %>%
+        dplyr::select(barcode, umi, strand)
 }
 
 #' Phase heterozygous SNPs directly from the molecules that span them
@@ -428,22 +561,38 @@ phase_snps <- function(per_snp, min_molecules = 5L, min_consistency = 0.9) {
     )
 }
 
-#' Assign each SNP to at most one overlapping gene
+#' Assign each SNP to the gene(s) whose molecules it can be attributed to
 #'
 #' Deliberately distinct from `add_snp_gene_names()`, which comma-joins every
-#' overlapping gene into a single label -- a fine display value, but the wrong
-#' grain for molecule counting: a SNP overlapping two gene bodies cannot have
-#' its molecules attributed to either one without guessing, so it is dropped
-#' from the gene-count join here rather than double-counted or mislabelled.
-#' Such a SNP can still take part in `phase_snps()`, since phasing does not
-#' depend on gene assignment.
+#' overlapping gene into a single display label. A SNP overlapping two gene
+#' bodies on the same strand cannot have its molecules attributed to either
+#' one without guessing, and is dropped entirely. A SNP overlapping genes on
+#' different strands is not actually ambiguous at the molecule level: a
+#' read's own alignment strand (once corrected for the BAM's sense/antisense
+#' orientation, see `.infer_bam_strand_orientation()`) picks out which gene's
+#' transcript it came from. Such a SNP is kept with one row per
+#' strand-resolvable candidate gene, flagged `ambiguous = TRUE`, for
+#' `haplotype_expression_by_molecule()` to resolve per molecule using
+#' `molecule_read_strand()`. A candidate gene sharing its strand with another
+#' candidate at the same SNP is not resolvable even by strand and is dropped
+#' from that SNP's candidates. Pre-evaluation on real data found this
+#' recovers real SNPs (24 of 81 multi-gene overlaps in one donor's chrX<20Mb
+#' het set were opposite-strand); exon/splice-based recovery of same-strand
+#' overlaps was evaluated and rejected as not worth the added complexity for
+#' 6x less yield.
+#'
+#' Any SNP can still take part in `phase_snps()` regardless of its gene
+#' assignment here, since phasing does not depend on gene assignment.
 #'
 #' @param snp_info A data.frame/tibble with columns `snp_id`, `chrom`, `pos`.
 #' @param gene_anno A data.frame/tibble with columns `chrom`, `start`, `end`,
-#'   `gene_name`, one row per gene body.
+#'   `gene_name`, `strand` (`"+"`/`"-"`), one row per gene body.
 #'
-#' @return A tibble with columns `snp_id` and `gene_name`, containing only
-#'   the SNPs that overlap exactly one gene.
+#' @return A tibble with columns `snp_id`, `gene_name`, `gene_strand`, and
+#'   `ambiguous` (`TRUE` if the SNP overlaps more than one gene overall, so
+#'   this candidate must still be matched against a molecule's own strand
+#'   before use; `FALSE` if `gene_name` is this SNP's only candidate and
+#'   applies regardless of strand).
 #'
 #' @family molecule-level allele counting functions
 #' @export
@@ -453,7 +602,7 @@ assign_snp_genes <- function(snp_info, gene_anno) {
     if (length(missing_snp_cols) > 0) {
         stop("snp_info is missing required column(s): ", paste(missing_snp_cols, collapse = ", "))
     }
-    required_gene_cols <- c("chrom", "start", "end", "gene_name")
+    required_gene_cols <- c("chrom", "start", "end", "gene_name", "strand")
     missing_gene_cols <- setdiff(required_gene_cols, colnames(gene_anno))
     if (length(missing_gene_cols) > 0) {
         stop("gene_anno is missing required column(s): ", paste(missing_gene_cols, collapse = ", "))
@@ -463,13 +612,24 @@ assign_snp_genes <- function(snp_info, gene_anno) {
     gene_gr <- plyranges::as_granges(gene_anno, seqnames = chrom, start = start, end = end)
 
     hits <- IRanges::findOverlaps(snp_gr, gene_gr)
-    tibble::tibble(
+    snp_gene_hits <- tibble::tibble(
         snp_id = snp_info$snp_id[S4Vectors::queryHits(hits)],
-        gene_name = gene_anno$gene_name[S4Vectors::subjectHits(hits)]
+        gene_name = gene_anno$gene_name[S4Vectors::subjectHits(hits)],
+        gene_strand = gene_anno$strand[S4Vectors::subjectHits(hits)]
     ) %>%
-        dplyr::summarise(n_genes = dplyr::n_distinct(gene_name), gene_name = dplyr::first(gene_name), .by = snp_id) %>%
-        dplyr::filter(n_genes == 1) %>%
-        dplyr::select(snp_id, gene_name)
+        dplyr::distinct()
+
+    genes_per_snp <- snp_gene_hits %>% dplyr::summarise(n_genes = dplyr::n_distinct(gene_name), .by = snp_id)
+
+    # Two candidate genes sharing a strand at the same SNP are still
+    # indistinguishable even once a molecule's strand is known, so they are
+    # dropped from that strand's candidates; a strand contributing exactly
+    # one gene survives as a molecule-resolvable candidate.
+    snp_gene_hits %>%
+        dplyr::mutate(n_genes_same_strand = dplyr::n(), .by = c(snp_id, gene_strand)) %>%
+        dplyr::filter(n_genes_same_strand == 1) %>%
+        dplyr::inner_join(genes_per_snp, by = "snp_id") %>%
+        dplyr::transmute(snp_id, gene_name, gene_strand, ambiguous = n_genes > 1)
 }
 
 # ==============================================================================
@@ -652,7 +812,11 @@ assign_snp_genes <- function(snp_info, gene_anno) {
 #'   already reads `allele_on_x1` changes behaviour), else the molecule value,
 #'   else `NA` where `phase_conflict` is `TRUE`. Also carries a
 #'   `"molecule_calls"` attribute (a tibble with columns `donor`, `barcode`,
-#'   `umi`, `snp_id`, `allele`, the per-donor `molecule_snp_alleles()` output
+#'   `umi`, `snp_id`, `allele`, `transcript_strand` (`"+"`/`"-"`/`NA`, the
+#'   molecule's inferred transcript strand -- see
+#'   `.infer_bam_strand_orientation()` and `molecule_read_strand()` -- used by
+#'   `haplotype_expression_by_molecule()` to resolve SNPs `assign_snp_genes()`
+#'   flagged `ambiguous`), the per-donor `molecule_snp_alleles()` output
 #'   already computed here) so `haplotype_expression_by_molecule()` does not
 #'   need to re-extract from the BAM.
 #'
@@ -729,7 +893,30 @@ add_molecule_phase <- function(
             min_baseq = min_baseq,
             threads = threads
         )
-        per_snp <- molecule_snp_alleles(extracted$tallies)
+        strand_calibration <- tryCatch(
+            .infer_bam_strand_orientation(bam_files[[d]]),
+            error = function(e) {
+                logger::log_warn(
+                    "[{d}] could not infer strand orientation ({conditionMessage(e)}); ",
+                    "strand-ambiguous SNPs will be unresolved for this donor"
+                )
+                NULL
+            }
+        )
+        is_orientation_unknown <- is.null(strand_calibration)
+        is_antisense <- !is_orientation_unknown && strand_calibration$orientation == "antisense"
+
+        molecule_strand <- molecule_read_strand(extracted$reads)
+        molecule_strand$transcript_strand <- dplyr::case_when(
+            is_orientation_unknown ~ NA_character_,
+            !is_antisense ~ molecule_strand$strand,
+            molecule_strand$strand == "+" ~ "-",
+            TRUE ~ "+"
+        )
+        molecule_strand <- dplyr::select(molecule_strand, barcode, umi, transcript_strand)
+
+        per_snp <- molecule_snp_alleles(extracted$tallies) %>%
+            dplyr::left_join(molecule_strand, by = c("barcode", "umi"))
         phase <- phase_snps(per_snp, min_molecules = min_molecules, min_consistency = min_consistency)
         if (nrow(phase) == 0) {
             logger::log_warn("[{d}] no phase blocks formed from {nrow(this_snp_info)} het SNPs")

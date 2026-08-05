@@ -2,7 +2,7 @@
 % Please edit documentation in R/molecule_phasing.R
 \name{assign_snp_genes}
 \alias{assign_snp_genes}
-\title{Assign each SNP to at most one overlapping gene}
+\title{Assign each SNP to the gene(s) whose molecules it can be attributed to}
 \usage{
 assign_snp_genes(snp_info, gene_anno)
 }
@@ -10,25 +10,43 @@ assign_snp_genes(snp_info, gene_anno)
 \item{snp_info}{A data.frame/tibble with columns `snp_id`, `chrom`, `pos`.}
 
 \item{gene_anno}{A data.frame/tibble with columns `chrom`, `start`, `end`,
-`gene_name`, one row per gene body.}
+`gene_name`, `strand` (`"+"`/`"-"`), one row per gene body.}
 }
 \value{
-A tibble with columns `snp_id` and `gene_name`, containing only
-  the SNPs that overlap exactly one gene.
+A tibble with columns `snp_id`, `gene_name`, `gene_strand`, and
+  `ambiguous` (`TRUE` if the SNP overlaps more than one gene overall, so
+  this candidate must still be matched against a molecule's own strand
+  before use; `FALSE` if `gene_name` is this SNP's only candidate and
+  applies regardless of strand).
 }
 \description{
 Deliberately distinct from `add_snp_gene_names()`, which comma-joins every
-overlapping gene into a single label -- a fine display value, but the wrong
-grain for molecule counting: a SNP overlapping two gene bodies cannot have
-its molecules attributed to either one without guessing, so it is dropped
-from the gene-count join here rather than double-counted or mislabelled.
-Such a SNP can still take part in `phase_snps()`, since phasing does not
-depend on gene assignment.
+overlapping gene into a single display label. A SNP overlapping two gene
+bodies on the same strand cannot have its molecules attributed to either
+one without guessing, and is dropped entirely. A SNP overlapping genes on
+different strands is not actually ambiguous at the molecule level: a
+read's own alignment strand (once corrected for the BAM's sense/antisense
+orientation, see `.infer_bam_strand_orientation()`) picks out which gene's
+transcript it came from. Such a SNP is kept with one row per
+strand-resolvable candidate gene, flagged `ambiguous = TRUE`, for
+`haplotype_expression_by_molecule()` to resolve per molecule using
+`molecule_read_strand()`. A candidate gene sharing its strand with another
+candidate at the same SNP is not resolvable even by strand and is dropped
+from that SNP's candidates. Pre-evaluation on real data found this
+recovers real SNPs (24 of 81 multi-gene overlaps in one donor's chrX<20Mb
+het set were opposite-strand); exon/splice-based recovery of same-strand
+overlaps was evaluated and rejected as not worth the added complexity for
+6x less yield.
+}
+\details{
+Any SNP can still take part in `phase_snps()` regardless of its gene
+assignment here, since phasing does not depend on gene assignment.
 }
 \seealso{
 Other molecule-level allele counting functions:
 \code{\link[=add_molecule_phase]{add_molecule_phase()}},
 \code{\link[=extract_snp_calls]{extract_snp_calls()}},
+\code{\link[=molecule_read_strand]{molecule_read_strand()}},
 \code{\link[=molecule_snp_alleles]{molecule_snp_alleles()}},
 \code{\link[=phase_snps]{phase_snps()}}
 }

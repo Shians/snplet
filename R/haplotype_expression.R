@@ -241,13 +241,21 @@ setMethod(
 #'   subsequently had read-backed phase added by
 #'   \code{\link{add_molecule_phase}}.
 #' @param molecule_calls A tibble with columns \code{donor}, \code{barcode},
-#'   \code{umi}, \code{snp_id}, \code{allele} -- the union, across every
-#'   donor, of \code{\link{molecule_snp_alleles}}'s output (bind rows and add
-#'   a \code{donor} column).
+#'   \code{umi}, \code{snp_id}, \code{allele}, \code{transcript_strand} --
+#'   the union, across every donor, of \code{\link{add_molecule_phase}}'s
+#'   \code{"molecule_calls"} attribute (or \code{\link{molecule_snp_alleles}}
+#'   plus a \code{transcript_strand} column from
+#'   \code{\link{molecule_read_strand}}, bind rows and add a \code{donor}
+#'   column).
 #' @param snp_gene_map A tibble with columns \code{snp_id}, \code{gene_name},
-#'   as returned by \code{\link{assign_snp_genes}} -- SNPs overlapping more
-#'   than one gene are already excluded there, and are never double-counted
-#'   here.
+#'   \code{gene_strand}, \code{ambiguous}, as returned by
+#'   \code{\link{assign_snp_genes}}. A SNP with \code{ambiguous = TRUE}
+#'   overlaps more than one gene and is only counted towards a given
+#'   candidate's \code{gene_name} for molecules whose own
+#'   \code{transcript_strand} matches that candidate's \code{gene_strand};
+#'   molecules with no strand information (\code{NA}) or the wrong strand are
+#'   dropped for that SNP rather than guessed. \code{ambiguous = FALSE} rows
+#'   apply regardless of strand.
 #' @param escape_threshold Inactive-haplotype fraction at or above which a
 #'   group is flagged as escaping. Default 0.1.
 #'
@@ -292,12 +300,12 @@ setMethod(
         if (!all(c("phase_block", "allele_on_x1") %in% colnames(donor_snp_info))) {
             stop("No stored molecule phase found. Run add_molecule_phase(x) first.")
         }
-        required_call_cols <- c("donor", "barcode", "umi", "snp_id", "allele")
+        required_call_cols <- c("donor", "barcode", "umi", "snp_id", "allele", "transcript_strand")
         missing_call_cols <- setdiff(required_call_cols, colnames(molecule_calls))
         if (length(missing_call_cols) > 0) {
             stop("molecule_calls is missing required column(s): ", paste(missing_call_cols, collapse = ", "))
         }
-        required_gene_cols <- c("snp_id", "gene_name")
+        required_gene_cols <- c("snp_id", "gene_name", "gene_strand", "ambiguous")
         missing_gene_cols <- setdiff(required_gene_cols, colnames(snp_gene_map))
         if (length(missing_gene_cols) > 0) {
             stop("snp_gene_map is missing required column(s): ", paste(missing_gene_cols, collapse = ", "))
@@ -309,10 +317,17 @@ setMethod(
 
         # is_x1: whether this molecule's allele at this SNP is the one the
         # resolved phase names as sitting on X1 -- the gene-level analogue of
-        # haplotype_expression()'s per-SNP active/inactive split.
+        # haplotype_expression()'s per-SNP active/inactive split. A SNP
+        # assign_snp_genes() flagged ambiguous only counts towards a candidate
+        # gene for molecules whose own transcript strand matches that
+        # candidate's strand; strand-unknown or mismatched molecules are
+        # dropped for that SNP rather than guessed. Joining an ambiguous SNP's
+        # multiple molecules against its multiple gene candidates is a genuine
+        # many-to-many fan-out, narrowed back down by the strand filter below.
         calls <- molecule_calls %>%
             dplyr::inner_join(phase, by = c("snp_id", "donor")) %>%
-            dplyr::inner_join(snp_gene_map, by = "snp_id") %>%
+            dplyr::inner_join(snp_gene_map, by = "snp_id", relationship = "many-to-many") %>%
+            dplyr::filter(!ambiguous | (!is.na(transcript_strand) & transcript_strand == gene_strand)) %>%
             dplyr::mutate(is_x1 = allele == allele_on_x1)
 
         if (nrow(calls) == 0) {

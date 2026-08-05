@@ -83,6 +83,61 @@ test_that("molecule_snp_alleles() drops OTH-only calls and keeps ties resolved d
 })
 
 # ==============================================================================
+# Test: molecule_read_strand()
+# ==============================================================================
+
+test_that("molecule_read_strand() takes the majority alignment strand per molecule", {
+    reads <- tibble::tribble(
+        ~barcode,
+        ~umi,
+        ~qname,
+        ~strand,
+        "AAA",
+        "UMI1",
+        "read1",
+        "+",
+        "AAA",
+        "UMI1",
+        "read2",
+        "+",
+        "AAA",
+        "UMI1",
+        "read3",
+        "-"
+    )
+
+    result <- molecule_read_strand(reads)
+
+    # Verify the majority strand ("+", 2 of 3 reads) wins for the molecule
+    expect_equal(result$strand[result$barcode == "AAA" & result$umi == "UMI1"], "+")
+    expect_equal(nrow(result), 1)
+})
+
+test_that("molecule_read_strand() resolves one row per distinct molecule", {
+    reads <- tibble::tribble(
+        ~barcode,
+        ~umi,
+        ~qname,
+        ~strand,
+        "AAA",
+        "UMI1",
+        "read1",
+        "+",
+        "BBB",
+        "UMI2",
+        "read2",
+        "-"
+    )
+
+    result <- molecule_read_strand(reads)
+
+    # Verify each distinct molecule gets its own row and strand
+    expect_equal(nrow(result), 2)
+    expect_equal(result$strand[result$barcode == "AAA"], "+")
+    expect_equal(result$strand[result$barcode == "BBB"], "-")
+})
+
+# ==============================================================================
 # Test: phase_snps()
 # ==============================================================================
 
@@ -342,32 +397,75 @@ test_that("phase_snps() returns an empty tibble when no molecule spans multiple 
 
 test_that("assign_snp_genes() keeps a SNP overlapping exactly one gene", {
     snp_info <- tibble::tibble(snp_id = "snp1", chrom = "chr1", pos = 100L)
-    gene_anno <- tibble::tibble(chrom = "chr1", start = 50L, end = 150L, gene_name = "GENE1")
+    gene_anno <- tibble::tibble(chrom = "chr1", start = 50L, end = 150L, gene_name = "GENE1", strand = "+")
 
     result <- assign_snp_genes(snp_info, gene_anno)
 
     # Verify the singly-overlapping SNP is assigned to its one gene
     expect_equal(result$gene_name[result$snp_id == "snp1"], "GENE1")
+    # Verify a singly-overlapping SNP is not flagged as requiring strand resolution
+    expect_false(result$ambiguous[result$snp_id == "snp1"])
 })
 
-test_that("assign_snp_genes() drops a SNP overlapping two genes", {
+test_that("assign_snp_genes() drops a SNP overlapping two genes on the same strand", {
     snp_info <- tibble::tibble(snp_id = "snp1", chrom = "chr1", pos = 100L)
     gene_anno <- tibble::tibble(
         chrom = c("chr1", "chr1"),
         start = c(50L, 90L),
         end = c(150L, 200L),
-        gene_name = c("GENE1", "GENE2")
+        gene_name = c("GENE1", "GENE2"),
+        strand = c("+", "+")
     )
 
     result <- assign_snp_genes(snp_info, gene_anno)
 
-    # Verify a SNP overlapping two gene bodies is excluded, not comma-joined
+    # Verify a SNP overlapping two same-strand gene bodies is excluded, not comma-joined
     expect_false("snp1" %in% result$snp_id)
+})
+
+test_that("assign_snp_genes() keeps both candidates of a SNP overlapping two opposite-strand genes", {
+    snp_info <- tibble::tibble(snp_id = "snp1", chrom = "chr1", pos = 100L)
+    gene_anno <- tibble::tibble(
+        chrom = c("chr1", "chr1"),
+        start = c(50L, 90L),
+        end = c(150L, 200L),
+        gene_name = c("GENE1", "GENE2"),
+        strand = c("+", "-")
+    )
+
+    result <- assign_snp_genes(snp_info, gene_anno)
+
+    # Verify both strand-resolvable candidates are retained, not dropped
+    expect_setequal(result$gene_name, c("GENE1", "GENE2"))
+    # Verify each candidate carries its own gene's strand
+    expect_equal(result$gene_strand[result$gene_name == "GENE1"], "+")
+    expect_equal(result$gene_strand[result$gene_name == "GENE2"], "-")
+    # Verify both are flagged as requiring molecule-level strand resolution
+    expect_true(all(result$ambiguous))
+})
+
+test_that("assign_snp_genes() drops candidates that still share a strand with another candidate", {
+    # Three overlapping genes: GENE1/GENE2 share "+" (irresolvable even by strand),
+    # GENE3 alone on "-" (resolvable).
+    snp_info <- tibble::tibble(snp_id = "snp1", chrom = "chr1", pos = 100L)
+    gene_anno <- tibble::tibble(
+        chrom = rep("chr1", 3),
+        start = c(50L, 60L, 90L),
+        end = c(150L, 160L, 200L),
+        gene_name = c("GENE1", "GENE2", "GENE3"),
+        strand = c("+", "+", "-")
+    )
+
+    result <- assign_snp_genes(snp_info, gene_anno)
+
+    # Verify only the strand-unique candidate survives
+    expect_equal(result$gene_name, "GENE3")
+    expect_true(result$ambiguous)
 })
 
 test_that("assign_snp_genes() drops a SNP overlapping no gene", {
     snp_info <- tibble::tibble(snp_id = "snp1", chrom = "chr1", pos = 1000L)
-    gene_anno <- tibble::tibble(chrom = "chr1", start = 50L, end = 150L, gene_name = "GENE1")
+    gene_anno <- tibble::tibble(chrom = "chr1", start = 50L, end = 150L, gene_name = "GENE1", strand = "+")
 
     result <- assign_snp_genes(snp_info, gene_anno)
 
@@ -378,9 +476,17 @@ test_that("assign_snp_genes() drops a SNP overlapping no gene", {
 
 test_that("assign_snp_genes() errors on missing required columns", {
     snp_info <- tibble::tibble(snp_id = "snp1", chrom = "chr1")
-    gene_anno <- tibble::tibble(chrom = "chr1", start = 50L, end = 150L, gene_name = "GENE1")
+    gene_anno <- tibble::tibble(chrom = "chr1", start = 50L, end = 150L, gene_name = "GENE1", strand = "+")
 
     # Verify a clear error is raised when snp_info lacks 'pos'
+    expect_error(assign_snp_genes(snp_info, gene_anno), "missing required column")
+})
+
+test_that("assign_snp_genes() errors when gene_anno lacks strand", {
+    snp_info <- tibble::tibble(snp_id = "snp1", chrom = "chr1", pos = 100L)
+    gene_anno <- tibble::tibble(chrom = "chr1", start = 50L, end = 150L, gene_name = "GENE1")
+
+    # Verify a clear error is raised when gene_anno lacks 'strand'
     expect_error(assign_snp_genes(snp_info, gene_anno), "missing required column")
 })
 
@@ -875,11 +981,17 @@ test_that("add_molecule_phase() ignores 'doublet' and 'unassigned' entries in ba
         allele = character(),
         n_calls = integer()
     )
+    fake_reads <- tibble::tibble(
+        barcode = character(),
+        umi = character(),
+        qname = character(),
+        strand = character()
+    )
     called_for <- character()
     testthat::local_mocked_bindings(
         extract_snp_calls = function(bam_file, snp_info, barcodes = NULL, ...) {
             called_for <<- c(called_for, bam_file)
-            list(tallies = fake_tallies, reads = tibble::tibble())
+            list(tallies = fake_tallies, reads = fake_reads)
         },
         .package = "snplet"
     )
@@ -1006,8 +1118,14 @@ test_that("add_molecule_phase() never overwrites an existing EM-derived allele_o
         "ALT",
         5L
     )
+    fake_reads <- tibble::tibble(
+        barcode = paste0("c", 1:5),
+        umi = paste0("u", 1:5),
+        qname = paste0("read", 1:5),
+        strand = "+"
+    )
     testthat::local_mocked_bindings(
-        extract_snp_calls = function(...) list(tallies = fake_tallies, reads = tibble::tibble()),
+        extract_snp_calls = function(...) list(tallies = fake_tallies, reads = fake_reads),
         .package = "snplet"
     )
 
