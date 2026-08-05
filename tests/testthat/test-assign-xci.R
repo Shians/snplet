@@ -249,8 +249,14 @@ test_that("assign_xci promotes diagnostics into SNPData slots and survives subse
     barcode_info <- barcode_info(stored)
     snp_info <- snp_info(stored)
     donor_snp_info <- donor_snp_info(stored)
+    donor_info <- donor_info(stored)
     # Check barcode diagnostics were written
     expect_true(all(c("active_x", "xci_post_X1_active") %in% colnames(barcode_info)))
+    # Check per-donor diagnostics were written to donor_info
+    expect_true(all(c("xci_rho", "xci_median_pi_g") %in% colnames(donor_info)))
+    # Confirm rho and the median escape fraction are valid, non-NA values
+    expect_true(all(!is.na(donor_info$xci_rho) & donor_info$xci_rho >= 0 & donor_info$xci_rho < 1))
+    expect_true(all(!is.na(donor_info$xci_median_pi_g)))
     # Check the per-SNP informative flag was NOT duplicated into snp_info; it
     # belongs solely to donor_snp_info since informativeness is donor-specific
     expect_false("xci_informative" %in% colnames(snp_info))
@@ -680,6 +686,47 @@ test_that("assign_xci drops an escapee gene from the informative set but still p
     expect_false(any(is.na(escapee_escape_fraction)))
     # Confirm it reads as strongly escaping (near-complete symmetry, not mild)
     expect_true(all(escapee_escape_fraction > 0.4))
+
+    # xci_median_pi_g summarises only the informative gene set, so the
+    # escapee's near-0.5 escape fraction must not pull the donor's recorded
+    # background level up toward it.
+    donor <- unique(donor_snp_info$donor)
+    median_pi_g <- donor_info(stored)$xci_median_pi_g[donor_info(stored)$donor == donor]
+    # Confirm the recorded background escape level excludes the escapee gene
+    expect_true(median_pi_g < 0.4)
+})
+
+test_that("test_escape recommended pipeline flags an injected escapee gene against non-escapees", {
+    # Full pipeline as documented in test_escape()'s examples: collapse
+    # haplotype_expression()'s SNP x active-X-group rows to one row per
+    # (donor, gene), attach the donor's empirical null, then BH-correct
+    # per donor via group_modify.
+    fixture <- make_xci_snpdata(escapee = TRUE)
+    stored <- assign_xci(fixture$snpdata, n_inits = 3)
+
+    hap_by_gene <- haplotype_expression(stored) %>%
+        dplyr::summarise(
+            active_count = sum(active_count),
+            inactive_count = sum(inactive_count),
+            .by = c(donor, gene_name)
+        ) %>%
+        dplyr::left_join(dplyr::select(donor_info(stored), donor, xci_median_pi_g, xci_rho), by = "donor")
+
+    escape_result <- hap_by_gene %>%
+        dplyr::group_by(donor) %>%
+        dplyr::group_modify(~ test_escape(.x, p = .x$xci_median_pi_g, rho = .x$xci_rho)) %>%
+        dplyr::ungroup()
+
+    # Verify the collapse actually produced one row per gene, not per SNP
+    expect_equal(nrow(escape_result), length(unique(hap_by_gene$gene_name)))
+
+    escapee_row <- escape_result[escape_result$gene_name == paste0("gene", 20), ]
+    other_rows <- escape_result[escape_result$gene_name != paste0("gene", 20), ]
+    # Confirm the injected escapee is flagged significant against the
+    # per-donor empirical null
+    expect_true(escapee_row$adj_p_val < 0.05)
+    # Confirm the escapee's p-value is smaller than every genuine XCI gene's
+    expect_true(escapee_row$p_val < min(other_rows$p_val))
 })
 
 test_that("haplotype_expression() surfaces an escapee gene that assign_xci excluded from calling", {

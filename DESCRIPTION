@@ -85,6 +85,7 @@ Collate:
     'plotting.R'
     'remove.R'
     'snplet-package.R'
+    'test_escape.R'
     'test_maf.R'
     'themes.R'
     'to_expr_matrix.R'

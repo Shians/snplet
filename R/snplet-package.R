@@ -26,7 +26,7 @@
 #' @importFrom purrr map map2_dbl map_dbl
 #' @importFrom R.utils gzip
 #' @importFrom grid unit
-#' @importFrom VGAM dbetabinom
+#' @importFrom VGAM dbetabinom pbetabinom
 #' @importFrom stats median quantile p.adjust pbeta setNames cor as.dist hclust cutree dist mad na.omit
 #' @importFrom utils head combn write.table
 #' @importFrom DelayedArray colsum

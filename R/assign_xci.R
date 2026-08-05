@@ -392,6 +392,16 @@ setMethod(
     ) %>%
         dplyr::filter(!is.na(allele_on_x1))
 
+    # Empirical background escape/noise level for this donor: the typical residual
+    # escape fraction among genes that actually drove active-X calling (informative,
+    # non-outlier). Recorded alongside rho so callers can use a donor-specific null
+    # (e.g. in test_escape()) instead of an arbitrary fixed value.
+    median_pi_g <- if (any(haplotypes$xci_informative, na.rm = TRUE)) {
+        stats::median(haplotypes$escape_fraction[haplotypes$xci_informative], na.rm = TRUE)
+    } else {
+        NA_real_
+    }
+
     # assignment already names the active X; "unassigned" carries no active call.
     active <- dplyr::na_if(assignments$assignment, "unassigned")
     counts <- table(factor(active, c("X1", "X2")))
@@ -415,6 +425,8 @@ setMethod(
         assignments = assignments,
         haplotypes = haplotypes,
         ref_mat = ref_mat_filtered,
-        alt_mat = alt_mat_filtered
+        alt_mat = alt_mat_filtered,
+        rho = xci_result$rho,
+        median_pi_g = median_pi_g
     )
 }

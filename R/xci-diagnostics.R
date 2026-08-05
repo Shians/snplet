@@ -78,9 +78,23 @@ setMethod("xci_haplotypes", signature(x = "SNPData"), function(x) {
 #' they survive subsetting: barcode metadata gains \code{active_x} and
 #' \code{xci_post_X1_active}; \code{donor_snp_info} gains one row per phased
 #' SNP x donor with \code{xci_informative} (whether the gene drove active-X
-#' calling), \code{allele_on_x1} and \code{xci_escape_fraction}. For a
-#' clonotype-level fit the per-cell projection is used for barcode
-#' annotation.
+#' calling), \code{allele_on_x1} and \code{xci_escape_fraction}; \code{donor_info}
+#' gains one row per donor with \code{xci_median_pi_g} (median escape fraction
+#' among informative genes, a per-donor empirical background/noise level) and
+#' \code{xci_rho}. For a clonotype-level fit the per-cell projection is used
+#' for barcode annotation.
+#'
+#' \code{xci_rho} is \emph{not} the EM's per-cell beta-binomial overdispersion
+#' (\code{xci_result$rho} inside \code{\link{.infer_xci}}) -- that value is fit
+#' from individual cells' small read counts and, applied directly to
+#' donor-pooled counts (as \code{\link{test_escape}} needs), implicitly assumes
+#' complete correlation across all of a donor's cells, which is far too
+#' conservative once thousands of cells are pooled (see
+#' \code{\link{.fit_pooled_rho_by_donor}}). \code{xci_rho} is instead refit
+#' directly at the donor-pooled level, against the population of informative
+#' (non-escaping) genes' pooled \code{active_count}/\code{inactive_count} from
+#' \code{\link{haplotype_expression}} -- the aggregation level \code{test_escape}
+#' actually operates at.
 #'
 #' @keywords internal
 .store_xci_fit <- function(x, fit) {
@@ -114,13 +128,94 @@ setMethod("xci_haplotypes", signature(x = "SNPData"), function(x) {
     }) %>%
         dplyr::bind_rows()
 
+    donor_diag <- purrr::map(donor_fits, function(f) {
+        tibble::tibble(donor = f$donor, xci_median_pi_g = f$median_pi_g)
+    }) %>%
+        dplyr::bind_rows()
+
     if (nrow(barcode_diag) > 0) {
         x <- add_barcode_metadata(x, barcode_diag, join_by = "cell_id", overwrite = TRUE)
     }
     if (nrow(snp_diag) > 0) {
         x <- add_donor_snp_metadata(x, snp_diag, join_by = c("snp_id", "donor", "zygosity_source"), overwrite = TRUE)
     }
+    if (nrow(donor_diag) > 0) {
+        x <- add_donor_metadata(x, donor_diag, join_by = "donor", overwrite = TRUE)
+    }
+
+    # xci_rho depends on xci_median_pi_g and haplotype_expression(), both of
+    # which require the diagnostics just written above, so this must run last.
+    pooled_rho <- .fit_pooled_rho_by_donor(x)
+    if (nrow(pooled_rho) > 0) {
+        x <- add_donor_metadata(x, pooled_rho, join_by = "donor", overwrite = TRUE)
+    }
+
     x
+}
+
+#' Fit donor-pooled beta-binomial overdispersion for escape testing
+#'
+#' Estimates \code{rho} at the same aggregation level \code{\link{test_escape}}
+#' operates at (donor-pooled gene counts), rather than reusing the EM's
+#' per-cell \code{rho}. Restricts to genes that passed
+#' \code{\link{.filter_uninformative_genes}} (the trusted, genuinely
+#' non-escaping population, same population \code{xci_median_pi_g} summarises)
+#' and fits a single scalar \code{rho} per donor via exact beta-binomial MLE
+#' against that donor's \code{xci_median_pi_g} as a fixed null probability --
+#' i.e. how much do these genes' pooled inactive-read fractions actually vary
+#' around the shared background rate, beyond binomial sampling.
+#'
+#' @param x A SNPData object with \code{active_x}, \code{allele_on_x1},
+#'   \code{xci_informative} and \code{xci_median_pi_g} already written (i.e.
+#'   called from \code{\link{.store_xci_fit}} after those are stored).
+#'
+#' @return A tibble with columns \code{donor} and \code{xci_rho}. A donor with
+#'   fewer than two informative genes (not enough points to estimate spread)
+#'   gets \code{NA}.
+#'
+#' @keywords internal
+.fit_pooled_rho_by_donor <- function(x) {
+    if (!.has_xci_diagnostics(x)) {
+        return(tibble::tibble(donor = character(0), xci_rho = double(0)))
+    }
+
+    hap_by_gene <- haplotype_expression(x, xci_informative_only = TRUE) %>%
+        dplyr::summarise(
+            active_count = sum(active_count),
+            inactive_count = sum(inactive_count),
+            .by = c(donor, gene_name)
+        ) %>%
+        dplyr::left_join(dplyr::select(donor_info(x), donor, xci_median_pi_g), by = "donor") %>%
+        dplyr::filter(!is.na(xci_median_pi_g))
+
+    if (nrow(hap_by_gene) == 0) {
+        return(tibble::tibble(donor = character(0), xci_rho = double(0)))
+    }
+
+    hap_by_gene %>%
+        dplyr::summarise(
+            xci_rho = if (dplyr::n() >= 2) {
+                .fit_pooled_rho(inactive_count, active_count + inactive_count, dplyr::first(xci_median_pi_g))
+            } else {
+                NA_real_
+            },
+            .by = donor
+        )
+}
+
+#' Exact beta-binomial MLE of rho against a fixed null probability
+#'
+#' @param x Integer vector of pooled inactive-allele counts, one per gene.
+#' @param n Integer vector of pooled coverage, one per gene.
+#' @param p Numeric scalar, the fixed null probability (e.g. \code{xci_median_pi_g}).
+#' @param rho_bounds Numeric length-2 vector, the search interval for \code{rho}.
+#'
+#' @keywords internal
+.fit_pooled_rho <- function(x, n, p, rho_bounds = c(1e-4, 0.999)) {
+    neg_ll <- function(rho) {
+        -sum(VGAM::dbetabinom(x, size = n, prob = p, rho = rho, log = TRUE))
+    }
+    stats::optimize(neg_ll, interval = rho_bounds)$minimum
 }
 
 #' Whether a SNPData object carries stored XCI fit diagnostics

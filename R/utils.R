@@ -235,6 +235,62 @@ binom_test <- function(x, n, p, alternative = c("greater", "less")) {
     p_val
 }
 
+#' Vectorised exact beta-binomial test
+#'
+#' Computes one-sided beta-binomial test p-values, the overdispersed analogue
+#' of \code{\link{binom_test}}. Uses \code{VGAM::pbetabinom} directly rather
+#' than a closed-form identity (unlike \code{binom_test}, no beta-CDF shortcut
+#' is available for the beta-binomial), but is still fully vectorised over
+#' `x`, `n`, `p` and `rho`.
+#'
+#' \itemize{
+#'   \item `alternative = "greater"`: \eqn{P(X \ge x) = 1 - \mathrm{pbetabinom}(x - 1, n, p, \rho)}.
+#'     Edge case: when `x == 0`, the p-value is 1.
+#'   \item `alternative = "less"`: \eqn{P(X \le x) = \mathrm{pbetabinom}(x, n, p, \rho)}.
+#'     Edge case: when `x == n`, the p-value is 1.
+#' }
+#'
+#' `rho = 0` reduces to the exact binomial test (VGAM's beta-binomial CDF is
+#' well-defined at `rho = 0`).
+#'
+#' @param x Integer vector of successes.
+#' @param n Integer vector of trials. Recycled with `x`.
+#' @param p Numeric scalar or vector giving the hypothesised probability of
+#'   success under the null. Recycled with `x` and `n`.
+#' @param rho Numeric scalar or vector in `[0, 1)` giving the beta-binomial
+#'   overdispersion. Recycled with `x`, `n` and `p`.
+#' @param alternative One of `"greater"` or `"less"`.
+#'
+#' @return Numeric vector of p-values, the same length as the recycled inputs.
+#'
+#' @keywords internal
+betabinom_test <- function(x, n, p, rho, alternative = c("greater", "less")) {
+    alternative <- match.arg(alternative)
+
+    if (any(x < 0, na.rm = TRUE) || any(x > n, na.rm = TRUE)) {
+        stop("x must satisfy 0 <= x <= n")
+    }
+    if (any(p < 0 | p > 1, na.rm = TRUE)) {
+        stop("p must be in [0, 1]")
+    }
+    if (any(rho < 0 | rho >= 1, na.rm = TRUE)) {
+        stop("rho must be in [0, 1)")
+    }
+
+    if (alternative == "greater") {
+        p_val <- 1 - VGAM::pbetabinom(x - 1, n, p, rho)
+        p_val[x == 0] <- 1
+    } else {
+        p_val <- VGAM::pbetabinom(x, n, p, rho)
+        p_val[x == n] <- 1
+    }
+
+    # VGAM::pbetabinom can overshoot 1 by floating-point error (observed up to
+    # ~4e-16) for some (x, n, p, rho) combinations, which turns 1 - pbetabinom(...)
+    # slightly negative. Clamp to the documented [0, 1] range.
+    pmin(pmax(p_val, 0), 1)
+}
+
 #' Check if a file exists
 #' @param path Path to the file to check
 check_file <- function(path) {
