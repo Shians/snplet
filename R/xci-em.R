@@ -173,7 +173,7 @@
 .run_em <- function(dat, n_genes, max_iter = 50, tol = 1e-4, init_seed = 1) {
     h_g <- withr::with_seed(init_seed, sample(0:1, n_genes, replace = TRUE)) # random phase initialisation
     pi_g <- rep(0.05, n_genes) # start conservatively: assume 5% escape fraction
-    rho <- 0.05 # fixed beta-binomial overdispersion
+    rho <- 0.05 # initial beta-binomial overdispersion, re-estimated by .m_step_rho below
 
     # Unique kernel arguments are fixed across iterations; index them once.
     dedup <- .build_ll_dedup(dat)
@@ -185,6 +185,7 @@
         post <- .e_step(dat, h_g, ll)
         h_g <- .m_step_phase(dat, post, h_g, ll)
         pi_g <- .m_step_pi(dat, post, h_g)
+        rho <- .m_step_rho(dat, dedup, post, h_g, pi_g)
         # Observed-data mixture log-likelihood (see .e_step). `post` comes from
         # the E-step above, i.e. before this iteration's M-steps, so this scores
         # the parameters at the start of the iteration.
@@ -321,6 +322,28 @@
     # Clamp to (0.001, 0.499) so pi_g stays interpretable as a minor fraction
     pi_g_new[pi_new$gene] <- pmax(pi_bounds[1], pmin(pi_bounds[2], pi_new$pi))
     pi_g_new
+}
+
+#' @keywords internal
+.m_step_rho <- function(dat, dedup, post, h_g, pi_g, rho_bounds = c(1e-4, 0.999)) {
+    # Same posterior lookup/weighting pattern as .m_step_phase: expected
+    # log-likelihood under each cell's current phase call, but as a function of
+    # rho rather than h_g. A single dataset-wide scalar rather than per-gene --
+    # per-gene estimation would trade off against pi_g on typically sparse
+    # single-cell counts, especially for low-coverage genes.
+    post_lookup <- rep(NA_real_, max(dat$cell))
+    post_lookup[post$cell] <- post$post_X1_active
+    post_X1_active <- post_lookup[dat$cell]
+    .check_post_covers_dat(post_X1_active)
+
+    neg_expected_ll <- function(rho) {
+        ll <- .betabinom_ll_both(dedup, pi_g, rho)
+        obs_h0 <- (1 - post_X1_active) * ll$L0 + post_X1_active * ll$L1
+        obs_h1 <- (1 - post_X1_active) * ll$L1 + post_X1_active * ll$L0
+        chosen <- ifelse(h_g[dat$gene] == 0, obs_h0, obs_h1)
+        -sum(chosen)
+    }
+    stats::optimize(neg_expected_ll, interval = rho_bounds)$minimum
 }
 
 #' Re-estimate phase and escape fraction for every gene against a frozen cell assignment
