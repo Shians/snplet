@@ -9,16 +9,14 @@ donor_het_status_df(
   x,
   min_total_count = 10,
   p_value_threshold = 0.05,
-  minor_allele_prop = 0.1,
-  zygosity_source = NULL
+  minor_allele_prop = 0.1
 )
 
 \S4method{donor_het_status_df}{SNPData}(
   x,
   min_total_count = 10,
   p_value_threshold = 0.05,
-  minor_allele_prop = 0.1,
-  zygosity_source = NULL
+  minor_allele_prop = 0.1
 )
 }
 \arguments{
@@ -29,13 +27,6 @@ donor_het_status_df(
 \item{p_value_threshold}{P-value threshold for binomial test (default: 0.05). P-values are multiple-testing corrected and SNPs with p < threshold reject monoallelic expression.}
 
 \item{minor_allele_prop}{Minor allele proportion used as the null threshold for monoallelic expression testing (default: 0.1).}
-
-\item{zygosity_source}{Character vector of \code{donor_snp_info$zygosity_source} values
-to trust, or \code{NULL} (default) to trust a stored call from any source. Pass
-\code{character(0)} to distrust every stored call and force every pair through the
-binomial test -- e.g. to compare a Vireo-genotype-based analysis against a
-binomial-inferred one on the same object. Pass a specific source (e.g.
-\code{"vireo_gt"}) to trust only that source once more than one is in use.}
 }
 \value{
 A tibble with columns: snp_id, gene_name, chrom, pos, strand (if available in
@@ -48,17 +39,16 @@ A tibble with columns: snp_id, gene_name, chrom, pos, strand (if available in
 \description{
 Returns a long-format data frame with heterozygosity status per SNP and donor.
 A \code{(snp_id, donor)} pair with a zygosity call already stored in
-\code{donor_snp_info} (e.g. from Vireo genotypes read at import) is returned as-is
-rather than recomputed, so the same pair's zygosity doesn't silently flip depending
-on which chromosomes happen to be loaded alongside it. Pairs with no stored call fall
-back to the binomial test as before.
+\code{donor_snp_info(x)} (e.g. from Vireo genotypes read at import, or from
+\code{\link{infer_zygosity}}) is returned as-is rather than recomputed, so the same
+pair's zygosity doesn't silently flip depending on which chromosomes happen to be
+loaded alongside it. Pairs with no stored call fall back to the binomial test as
+before. Errors if \code{x} has no active zygosity source at all (see
+\code{\link{zygosity_source}}) -- call \code{\link{infer_zygosity}} first.
 }
 \examples{
 \dontrun{
 snp_data <- get_example_snpdata()
 donor_het_status_df(snp_data)
-
-# Compare a Vireo-genotype-based analysis against a binomial-inferred one
-donor_het_status_df(snp_data, zygosity_source = character(0))
 }
 }

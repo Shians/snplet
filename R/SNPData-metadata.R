@@ -118,8 +118,17 @@ NULL
         new_cols <- grep("\\.new$", colnames(updated_info), value = TRUE)
         base_cols <- sub("\\.new$", "", new_cols)
 
+        # A row absent from `metadata` produces NA in every ".new" column from
+        # the join -- indistinguishable, by value alone, from metadata
+        # legitimately setting that column to NA for a row it does cover. So
+        # "was this row actually in metadata" has to be tracked directly
+        # rather than inferred from NA-ness: only matched rows get
+        # overwritten (NA included), unmatched rows are left untouched.
+        key_of <- function(df, cols) do.call(paste, c(as.list(df[cols]), list(sep = "")))
+        matched <- key_of(updated_info, join_by) %in% key_of(metadata, join_by)
+
         for (i in seq_along(new_cols)) {
-            updated_info[[base_cols[i]]] <- updated_info[[new_cols[i]]]
+            updated_info[[base_cols[i]]][matched] <- updated_info[[new_cols[i]]][matched]
             updated_info[[new_cols[i]]] <- NULL
         }
     }
@@ -166,7 +175,7 @@ add_barcode_metadata <- function(x, metadata, join_by = "cell_id", overwrite = F
     )
 
     # Create new SNPData object
-    new(
+    result <- new(
         "SNPData",
         ref_count = x@ref_count,
         alt_count = x@alt_count,
@@ -174,8 +183,9 @@ add_barcode_metadata <- function(x, metadata, join_by = "cell_id", overwrite = F
         snp_info = x@snp_info,
         barcode_info = updated_barcode_info,
         donor_info = donor_info(x),
-        donor_snp_info = donor_snp_info(x)
+        donor_snp_info = donor_snp_info(x, source = "all")
     )
+    .propagate_zygosity_source(result, x)
 }
 
 #' @rdname add_metadata
@@ -205,7 +215,7 @@ add_snp_metadata <- function(x, metadata, join_by = "snp_id", overwrite = FALSE)
     )
 
     # Create new SNPData object
-    new(
+    result <- new(
         "SNPData",
         ref_count = x@ref_count,
         alt_count = x@alt_count,
@@ -213,8 +223,9 @@ add_snp_metadata <- function(x, metadata, join_by = "snp_id", overwrite = FALSE)
         snp_info = updated_snp_info,
         barcode_info = x@barcode_info,
         donor_info = donor_info(x),
-        donor_snp_info = donor_snp_info(x)
+        donor_snp_info = donor_snp_info(x, source = "all")
     )
+    .propagate_zygosity_source(result, x)
 }
 
 #' @rdname add_metadata
@@ -244,7 +255,7 @@ add_donor_metadata <- function(x, metadata, join_by = "donor", overwrite = FALSE
     )
 
     # Create new SNPData object
-    new(
+    result <- new(
         "SNPData",
         ref_count = x@ref_count,
         alt_count = x@alt_count,
@@ -252,13 +263,14 @@ add_donor_metadata <- function(x, metadata, join_by = "donor", overwrite = FALSE
         snp_info = x@snp_info,
         barcode_info = x@barcode_info,
         donor_info = updated_donor_info,
-        donor_snp_info = donor_snp_info(x)
+        donor_snp_info = donor_snp_info(x, source = "all")
     )
+    .propagate_zygosity_source(result, x)
 }
 
 #' @rdname add_metadata
 #' @export
-add_donor_snp_metadata <- function(x, metadata, join_by = c("snp_id", "donor"), overwrite = TRUE) {
+add_donor_snp_metadata <- function(x, metadata, join_by = c("snp_id", "donor", "zygosity_source"), overwrite = TRUE) {
     # Validate input
     if (!methods::is(x, "SNPData")) {
         stop("Input must be a SNPData object")
@@ -272,7 +284,7 @@ add_donor_snp_metadata <- function(x, metadata, join_by = c("snp_id", "donor"), 
         stop(paste0(.column_word(join_by), " '", paste(join_by, collapse = ", "), "' not found in metadata data.frame"))
     }
 
-    current_donor_snp_info <- donor_snp_info(x)
+    current_donor_snp_info <- donor_snp_info(x, source = "all")
     updated_donor_snp_info <- .update_metadata_info(
         current_info = current_donor_snp_info,
         metadata = metadata,
@@ -284,7 +296,7 @@ add_donor_snp_metadata <- function(x, metadata, join_by = c("snp_id", "donor"), 
     )
 
     # Create new SNPData object
-    new(
+    result <- new(
         "SNPData",
         ref_count = x@ref_count,
         alt_count = x@alt_count,
@@ -294,4 +306,5 @@ add_donor_snp_metadata <- function(x, metadata, join_by = c("snp_id", "donor"), 
         donor_info = donor_info(x),
         donor_snp_info = updated_donor_snp_info
     )
+    .propagate_zygosity_source(result, x)
 }

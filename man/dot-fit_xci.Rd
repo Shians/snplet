@@ -8,7 +8,6 @@
   x,
   n_inits = 10,
   confidence_threshold = 0.95,
-  zygosity_source = NULL,
   by = c("cell", "clonotype")
 )
 }
@@ -21,10 +20,6 @@ clonotype information must also be present.}
 
 \item{confidence_threshold}{Posterior probability threshold for hard
 assignment.}
-
-\item{zygosity_source}{Character vector of \code{donor_snp_info$zygosity_source} values
-the het-SNP filtering step should trust, or \code{NULL} to trust a stored call from
-any source. See \code{\link{donor_het_status_df}}.}
 
 \item{by}{Modelling unit, \code{"cell"} or \code{"clonotype"}.}
 }

@@ -166,25 +166,28 @@
     tibble::as_tibble(merged)
 }
 
-# Merging donor_snp_info is not a plain coalesce: the same (snp_id, donor)
-# call disagreeing between x and y on a "hazard" column (zygosity, its
-# source, the XCI phase, or informativeness) is a genuine reproducibility
+# Merging donor_snp_info is not a plain coalesce: the same (snp_id, donor,
+# zygosity_source) call disagreeing between x and y on a "hazard" column
+# (zygosity, the XCI phase, or informativeness) is a genuine reproducibility
 # problem and must stop the merge rather than silently pick a side. Numeric
 # estimate columns (p-values, GT posteriors, escape fractions) are exempt:
 # two independently fit/tested values can differ by floating point alone,
 # which is not a hazard, so those keep the x-priority coalesce used
-# elsewhere in this file.
+# elsewhere in this file. zygosity_source is part of the join key (a pair
+# may carry one row per source), not a value to compare -- the object-level
+# *active* source is a separate concern, resolved by .merge_zygosity_source().
 .merge_donor_snp_info <- function(x, y, snp_ids_retained, donors_retained) {
-    hazard_cols <- c("zygosity", "zygosity_source", "allele_on_x1", "xci_informative")
+    hazard_cols <- c("zygosity", "allele_on_x1", "xci_informative")
+    key_cols <- c("snp_id", "donor", "zygosity_source")
 
-    dsi_x <- donor_snp_info(x)
-    dsi_y <- donor_snp_info(y)
-    value_cols <- setdiff(colnames(dsi_x), c("snp_id", "donor"))
+    dsi_x <- donor_snp_info(x, source = "all")
+    dsi_y <- donor_snp_info(y, source = "all")
+    value_cols <- setdiff(colnames(dsi_x), key_cols)
 
     merged <- dplyr::full_join(
         dsi_x,
         dsi_y,
-        by = c("snp_id", "donor"),
+        by = key_cols,
         suffix = c(".x", ".y")
     )
 
@@ -219,6 +222,26 @@
 
     merged <- merged[merged$snp_id %in% snp_ids_retained & merged$donor %in% donors_retained, , drop = FALSE]
     tibble::as_tibble(merged)
+}
+
+# Resolves the object-level *active* zygosity_source slot for a merge, using
+# the same error-on-conflict/coalesce-on-agreement philosophy as the hazard
+# columns above: if both objects have an active source and they differ,
+# merging would silently change which source drives downstream analysis, so
+# it errors instead. If only one is set, that one carries over.
+.merge_zygosity_source <- function(x, y) {
+    source_x <- zygosity_source(x)
+    source_y <- zygosity_source(y)
+
+    if (!is.na(source_x) && !is.na(source_y) && source_x != source_y) {
+        stop(sprintf(
+            "merge_snpdata(): conflicting active zygosity_source ('%s' vs '%s'). Resolve with zygosity_source<-() before merging.",
+            source_x,
+            source_y
+        ))
+    }
+
+    dplyr::coalesce(source_x, source_y)
 }
 
 .merge_barcode_info <- function(x, y, barcodes_retained, cell_join) {

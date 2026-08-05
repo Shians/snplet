@@ -30,11 +30,6 @@
 #'   assignment. Cells whose posterior probability that a given X is the active
 #'   one reaches \code{confidence_threshold} are assigned that X; cells where
 #'   neither X reaches the threshold receive \code{NA}. Default 0.95.
-#' @param zygosity_source Character vector of \code{donor_snp_info$zygosity_source} values
-#'   the het-SNP filtering step should trust, or \code{NULL} (default) to trust a stored
-#'   call from any source. See \code{\link{donor_het_status_df}}. Pass \code{character(0)}
-#'   to distrust every stored call and compare a purely binomial-inferred fit against a
-#'   Vireo-genotype-based one on the same object.
 #'
 #' @return SNPData object with an additional \code{active_x} column in
 #'   barcode metadata, with values "X1" or "X2" indicating the inferred
@@ -58,17 +53,13 @@
 #'
 #' # Diagnostics are stored, so plotting works directly
 #' plot_xci_heatmap(snp_data, donor = "donor1")
-#'
-#' # Compare a binomial-inferred fit against the Vireo-genotype-based one
-#' snp_data_binomial <- assign_xci(snp_data, zygosity_source = character(0))
 #' }
 setGeneric(
     "assign_xci",
     function(
         x,
         n_inits = 10,
-        confidence_threshold = 0.95,
-        zygosity_source = NULL
+        confidence_threshold = 0.95
     ) {
         standardGeneric("assign_xci")
     }
@@ -79,12 +70,11 @@ setGeneric(
 setMethod(
     "assign_xci",
     signature(x = "SNPData"),
-    function(x, n_inits = 10, confidence_threshold = 0.95, zygosity_source = NULL) {
+    function(x, n_inits = 10, confidence_threshold = 0.95) {
         .fit_xci(
             x,
             n_inits = n_inits,
             confidence_threshold = confidence_threshold,
-            zygosity_source = zygosity_source,
             by = "cell"
         )
     }
@@ -149,17 +139,13 @@ setMethod(
 #'
 #' # Diagnostics are stored, so plotting works directly
 #' plot_xci_heatmap(snp_data, donor = "donor1")
-#'
-#' # Compare a binomial-inferred fit against the Vireo-genotype-based one
-#' snp_data_binomial <- assign_xci_by_clonotype(snp_data, zygosity_source = character(0))
 #' }
 setGeneric(
     "assign_xci_by_clonotype",
     function(
         x,
         n_inits = 10,
-        confidence_threshold = 0.95,
-        zygosity_source = NULL
+        confidence_threshold = 0.95
     ) {
         standardGeneric("assign_xci_by_clonotype")
     }
@@ -170,12 +156,11 @@ setGeneric(
 setMethod(
     "assign_xci_by_clonotype",
     signature(x = "SNPData"),
-    function(x, n_inits = 10, confidence_threshold = 0.95, zygosity_source = NULL) {
+    function(x, n_inits = 10, confidence_threshold = 0.95) {
         .fit_xci(
             x,
             n_inits = n_inits,
             confidence_threshold = confidence_threshold,
-            zygosity_source = zygosity_source,
             by = "clonotype"
         )
     }
@@ -199,9 +184,6 @@ setMethod(
 #' @param n_inits Number of random initialisations for the EM algorithm.
 #' @param confidence_threshold Posterior probability threshold for hard
 #'   assignment.
-#' @param zygosity_source Character vector of \code{donor_snp_info$zygosity_source} values
-#'   the het-SNP filtering step should trust, or \code{NULL} to trust a stored call from
-#'   any source. See \code{\link{donor_het_status_df}}.
 #' @param by Modelling unit, \code{"cell"} or \code{"clonotype"}.
 #'
 #' @return The input SNPData object with diagnostics written into its metadata
@@ -213,7 +195,6 @@ setMethod(
     x,
     n_inits = 10,
     confidence_threshold = 0.95,
-    zygosity_source = NULL,
     by = c("cell", "clonotype")
 ) {
     by <- match.arg(by)
@@ -239,7 +220,6 @@ setMethod(
                     dd,
                     n_inits,
                     confidence_threshold,
-                    zygosity_source = zygosity_source,
                     by = by
                 ),
                 error = function(e) {
@@ -284,7 +264,6 @@ setMethod(
     snp_data,
     n_inits = 10,
     confidence_threshold = 0.95,
-    zygosity_source = NULL,
     by = c("cell", "clonotype")
 ) {
     by <- match.arg(by)
@@ -296,7 +275,7 @@ setMethod(
         logger::log_info("[{donor}] Fitting XCI model")
     }
 
-    snp_data <- .filter_to_informative_het_snps(snp_data, donor, zygosity_source = zygosity_source)
+    snp_data <- .filter_to_informative_het_snps(snp_data, donor)
 
     unit_data <- .xci_unit_matrices(snp_data, by, donor)
     ref_mat <- unit_data$ref_mat
@@ -395,8 +374,10 @@ setMethod(
         dplyr::select(cell_id, post_X1_active, post_X2_active, assignment)
 
     # Phase and escape fraction for every gene, not just the informative subset that drove
-    # calling: an escapee carries no information about which X is active (correctly excluded
-    # from that job), but once active-X is called it can still be phased against it.
+    # calling: a gene with LLR <= 0 (inconsistent with the fitted phase) or an outlier escape
+    # fraction carries no information about which X is active (correctly excluded from that
+    # job) — genes with real but moderate escape are not excluded — but once active-X is
+    # called, any gene can still be phased against it.
     all_genes <- .rephase_all_genes(ref_mat, alt_mat, post = xci_result$post, rho = xci_result$rho)
     haplotypes <- tibble::tibble(
         snp_id = snp_info$snp_id,

@@ -16,7 +16,7 @@
 }
 \arguments{
 \item{ref_mat, alt_mat}{Full per-donor gene x cell count matrices (one row per het SNP/gene),
-unfiltered by the outlier or escapee filters.}
+unfiltered by the outlier or uninformative-gene filters.}
 
 \item{post}{Frozen per-cell posterior from the informative-gene fit (\code{xci_result$post}),
 with \code{cell} and \code{post_X1_active} columns.}
@@ -30,13 +30,13 @@ List with \code{h_g} (integer phase, 0 = REF on X1) and \code{pi_g} (numeric esc
 }
 \description{
 \code{.infer_xci} discards phase (\code{h_g}) and escape fraction (\code{pi_g}) for any gene
-that fails the outlier or escapee filters, because a gene uninformative for calling active-X
-state has no business influencing that call. But once the call is made, those same genes can
-still be phased against it: given the cells' active-X state as fixed, ground truth, fitting a
-gene's own phase and escape fraction is a well-posed one-gene problem, unlike the joint EM
-where a weakly-discriminative gene's own fit is nearly indifferent between phase orientations.
-Alternates the existing M-steps (\code{.m_step_phase}, \code{.m_step_pi}) with no
-E-step, since the point is to quantify escape without letting escapee data influence which cell
-is called X1- or X2-active (that would be circular).
+that fails the outlier or uninformative-gene filters, because a gene uninformative for calling
+active-X state has no business influencing that call. But once the call is made, those same
+genes can still be phased against it: given the cells' active-X state as fixed, ground truth,
+fitting a gene's own phase and escape fraction is a well-posed one-gene problem, unlike the
+joint EM where a weakly-discriminative gene's own fit is nearly indifferent between phase
+orientations. Alternates the existing M-steps (\code{.m_step_phase}, \code{.m_step_pi}) with no
+E-step, since the point is to quantify escape without letting uninformative genes' data
+influence which cell is called X1- or X2-active (that would be circular).
 }
 \keyword{internal}

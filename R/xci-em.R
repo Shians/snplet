@@ -1,5 +1,5 @@
 #' @keywords internal
-.filter_to_informative_het_snps <- function(snp_data, donor = NULL, zygosity_source = NULL) {
+.filter_to_informative_het_snps <- function(snp_data, donor = NULL) {
     # Suppress the generic per-filter logs from filter_snps; we emit a single
     # consolidated, donor-labelled summary instead.
     old_threshold <- logger::log_threshold()
@@ -23,7 +23,7 @@
     n_chrx <- nrow(snp_info(snp_data))
 
     het_snp_ids <- snp_data %>%
-        donor_het_status_df(zygosity_source = zygosity_source) %>%
+        donor_het_status_df() %>%
         dplyr::filter(zygosity == "het") %>%
         dplyr::pull(snp_id)
 
@@ -74,14 +74,15 @@
     best <- fits[[which.max(purrr::map_dbl(fits, "ll"))]]
     logger::log_info("[{donor}] EM complete: best logLik = {round(best$ll, 2)}")
 
-    # Post-convergence escapee filter: genes with LLR <= 0 are inconsistent with
-    # current cell assignments; MAD filter on pi_g removes outlier escape fractions.
-    # This decides which genes get reported as xci_informative (drove active-X
-    # calling) — it does not change best$post, so escapee genes' contribution to
-    # the cell-assignment posterior above is already baked in either way. Computed
-    # against the pre-relabel h_g/post (relabelling below is a symmetric X1<->X2
-    # swap and does not change which genes pass).
-    passes_escapee_filter <- .filter_escapee_genes(dat, n_genes, best$h_g, best$pi_g, best$rho, best$post)
+    # Post-convergence uninformative-gene filter: genes with LLR <= 0 are inconsistent
+    # with current cell assignments; MAD filter on pi_g removes outlier escape fractions
+    # (not incomplete escape in general — a gene with real but moderate escape keeps a
+    # positive LLR and stays). This decides which genes get reported as xci_informative
+    # (drove active-X calling) — it does not change best$post, so these genes'
+    # contribution to the cell-assignment posterior above is already baked in either
+    # way. Computed against the pre-relabel h_g/post (relabelling below is a symmetric
+    # X1<->X2 swap and does not change which genes pass).
+    passes_uninformative_filter <- .filter_uninformative_genes(dat, n_genes, best$h_g, best$pi_g, best$rho, best$post)
 
     # assignment names the *active* X, matching the stored active_x column.
     best$post <- best$post %>%
@@ -96,9 +97,9 @@
     best <- .canonicalise_x1_label(best)
 
     # gene_keep: logical of length nrow(original ref_mat), TRUE = gene survived
-    # both the outlier filter and the post-convergence escapee filter.
+    # both the outlier filter and the post-convergence uninformative-gene filter.
     gene_keep <- passes_outlier_filter
-    gene_keep[passes_outlier_filter] <- passes_escapee_filter
+    gene_keep[passes_outlier_filter] <- passes_uninformative_filter
 
     c(best, list(gene_keep = gene_keep))
 }
@@ -148,7 +149,7 @@
 }
 
 #' @keywords internal
-.filter_escapee_genes <- function(dat, n_genes, h_g, pi_g, rho, post, mad_threshold = 2) {
+.filter_uninformative_genes <- function(dat, n_genes, h_g, pi_g, rho, post, mad_threshold = 2) {
     gene_llr <- .compute_gene_llr(dat, post, h_g, pi_g, rho)
 
     # Genes absent from dat have no observations above min_cov — exclude them
@@ -325,17 +326,17 @@
 #' Re-estimate phase and escape fraction for every gene against a frozen cell assignment
 #'
 #' \code{.infer_xci} discards phase (\code{h_g}) and escape fraction (\code{pi_g}) for any gene
-#' that fails the outlier or escapee filters, because a gene uninformative for calling active-X
-#' state has no business influencing that call. But once the call is made, those same genes can
-#' still be phased against it: given the cells' active-X state as fixed, ground truth, fitting a
-#' gene's own phase and escape fraction is a well-posed one-gene problem, unlike the joint EM
-#' where a weakly-discriminative gene's own fit is nearly indifferent between phase orientations.
-#' Alternates the existing M-steps (\code{.m_step_phase}, \code{.m_step_pi}) with no
-#' E-step, since the point is to quantify escape without letting escapee data influence which cell
-#' is called X1- or X2-active (that would be circular).
+#' that fails the outlier or uninformative-gene filters, because a gene uninformative for calling
+#' active-X state has no business influencing that call. But once the call is made, those same
+#' genes can still be phased against it: given the cells' active-X state as fixed, ground truth,
+#' fitting a gene's own phase and escape fraction is a well-posed one-gene problem, unlike the
+#' joint EM where a weakly-discriminative gene's own fit is nearly indifferent between phase
+#' orientations. Alternates the existing M-steps (\code{.m_step_phase}, \code{.m_step_pi}) with no
+#' E-step, since the point is to quantify escape without letting uninformative genes' data
+#' influence which cell is called X1- or X2-active (that would be circular).
 #'
 #' @param ref_mat,alt_mat Full per-donor gene x cell count matrices (one row per het SNP/gene),
-#'   unfiltered by the outlier or escapee filters.
+#'   unfiltered by the outlier or uninformative-gene filters.
 #' @param post Frozen per-cell posterior from the informative-gene fit (\code{xci_result$post}),
 #'   with \code{cell} and \code{post_X1_active} columns.
 #' @param rho Beta-binomial overdispersion from the informative-gene fit (\code{xci_result$rho}).

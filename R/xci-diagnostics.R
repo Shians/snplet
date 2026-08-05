@@ -106,6 +106,7 @@ setMethod("xci_haplotypes", signature(x = "SNPData"), function(x) {
             dplyr::transmute(
                 snp_id,
                 donor = f$donor,
+                zygosity_source = zygosity_source(x),
                 xci_informative,
                 allele_on_x1,
                 xci_escape_fraction = escape_fraction
@@ -117,7 +118,7 @@ setMethod("xci_haplotypes", signature(x = "SNPData"), function(x) {
         x <- add_barcode_metadata(x, barcode_diag, join_by = "cell_id", overwrite = TRUE)
     }
     if (nrow(snp_diag) > 0) {
-        x <- add_donor_snp_metadata(x, snp_diag, join_by = c("snp_id", "donor"), overwrite = TRUE)
+        x <- add_donor_snp_metadata(x, snp_diag, join_by = c("snp_id", "donor", "zygosity_source"), overwrite = TRUE)
     }
     x
 }

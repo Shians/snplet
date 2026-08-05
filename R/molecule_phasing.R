@@ -941,13 +941,23 @@ add_molecule_phase <- function(
         return(x)
     }
 
+    new_cols$zygosity_source <- zygosity_source(x)
+
     # Step 1 adds only brand-new columns, so unmatched existing rows (this
     # donor_snp_info row was never touched by phasing) pass through untouched
     # -- critically, this cannot clobber any pre-existing allele_on_x1.
     x <- add_donor_snp_metadata(
         x,
-        new_cols[, c("snp_id", "donor", "allele_on_x1_molecule", "phase_block", "phase_source", "phase_conflict")],
-        join_by = c("snp_id", "donor"),
+        new_cols[, c(
+            "snp_id",
+            "donor",
+            "zygosity_source",
+            "allele_on_x1_molecule",
+            "phase_block",
+            "phase_source",
+            "phase_conflict"
+        )],
+        join_by = c("snp_id", "donor", "zygosity_source"),
         overwrite = TRUE
     )
 
@@ -964,9 +974,9 @@ add_molecule_phase <- function(
                 TRUE ~ allele_on_x1_molecule
             )
         ) %>%
-        dplyr::select(snp_id, donor, allele_on_x1_em, allele_on_x1)
+        dplyr::select(snp_id, donor, zygosity_source, allele_on_x1_em, allele_on_x1)
 
-    x <- add_donor_snp_metadata(x, resolved, join_by = c("snp_id", "donor"), overwrite = TRUE)
+    x <- add_donor_snp_metadata(x, resolved, join_by = c("snp_id", "donor", "zygosity_source"), overwrite = TRUE)
 
     # BAM extraction is the expensive step this function already pays for;
     # attaching the per-molecule calls lets haplotype_expression_by_molecule()

@@ -1259,6 +1259,7 @@ test_that("add_donor_snp_metadata errors for duplicate (snp_id, donor) values in
     dup_metadata <- data.frame(
         snp_id = c("snp_1", "snp_1"),
         donor = c("donor_1", "donor_1"),
+        zygosity_source = c("vireo_gt", "vireo_gt"),
         zygosity = c("het", "hom")
     )
 
@@ -1302,7 +1303,13 @@ test_that("add_donor_snp_metadata overwrite enriches an existing row without tou
 
     updated <- add_donor_snp_metadata(
         snp_data,
-        data.frame(snp_id = "snp_1", donor = "donor_1", xci_informative = TRUE, allele_on_x1 = "REF"),
+        data.frame(
+            snp_id = "snp_1",
+            donor = "donor_1",
+            zygosity_source = "vireo_gt",
+            xci_informative = TRUE,
+            allele_on_x1 = "REF"
+        ),
         overwrite = TRUE
     )
     row <- donor_snp_info(updated)
@@ -1993,6 +2000,65 @@ test_that("merge_snpdata unions donor_info and donor_snp_info across non-overlap
     expect_setequal(donor_snp_info$donor, c("d1", "d3"))
 })
 
+test_that("merge_snpdata preserves multiple zygosity_source rows for the same (snp_id, donor) pair", {
+    data <- create_merge_test_data()
+    # x carries both a vireo_gt and a binomial call for the same snpA/d1 pair
+    # -- the widened key must let both survive, including through a merge
+    # with an unrelated object y (which stays active-source NA and so
+    # doesn't conflict with x's active "vireo_gt").
+    x <- add_donor_snp_metadata(
+        data$x,
+        data.frame(snp_id = "snpA", donor = "d1", zygosity = "het", zygosity_source = "vireo_gt")
+    )
+    x <- add_donor_snp_metadata(
+        x,
+        data.frame(snp_id = "snpA", donor = "d1", zygosity = "hom", zygosity_source = "binomial")
+    )
+    expect_equal(zygosity_source(x), "vireo_gt")
+
+    merged <- merge_snpdata(x, data$y, snp_join = "union", cell_join = "union")
+    all_calls <- donor_snp_info(merged, source = "all") %>%
+        dplyr::filter(snp_id == "snpA", donor == "d1")
+
+    # Verify both sources' rows for the same pair survived the merge intact
+    expect_setequal(all_calls$zygosity_source, c("vireo_gt", "binomial"))
+    expect_equal(all_calls$zygosity[all_calls$zygosity_source == "vireo_gt"], "het")
+    expect_equal(all_calls$zygosity[all_calls$zygosity_source == "binomial"], "hom")
+})
+
+test_that("merge_snpdata coalesces the active zygosity_source when only one side has it set", {
+    data <- create_merge_test_data()
+    x <- add_donor_snp_metadata(
+        data$x,
+        data.frame(snp_id = "snpA", donor = "d1", zygosity = "het", zygosity_source = "vireo_gt")
+    )
+    # y has no zygosity information at all
+    y <- data$y
+
+    merged <- merge_snpdata(x, y, snp_join = "union", cell_join = "union")
+
+    # Verify x's active source carries over when y has none
+    expect_equal(zygosity_source(merged), "vireo_gt")
+})
+
+test_that("merge_snpdata errors on conflicting active zygosity_source", {
+    data <- create_merge_test_data()
+    x <- add_donor_snp_metadata(
+        data$x,
+        data.frame(snp_id = "snpA", donor = "d1", zygosity = "het", zygosity_source = "vireo_gt")
+    )
+    y <- add_donor_snp_metadata(
+        data$y,
+        data.frame(snp_id = "snpC", donor = "d3", zygosity = "hom", zygosity_source = "binomial")
+    )
+
+    # Verify a genuine active-source disagreement aborts the merge
+    expect_error(
+        merge_snpdata(x, y, snp_join = "union", cell_join = "union"),
+        "conflicting active zygosity_source"
+    )
+})
+
 test_that("merge_snpdata errors when x and y disagree on a stored zygosity call", {
     two_donor_barcode_info <- data.frame(
         cell_id = c("cell1", "cell2"),
@@ -2120,6 +2186,9 @@ create_heterozygous_test_data <- function() {
 
 test_that("donor_het_status_df reports het/hom status with tested flag", {
     snp_data <- create_heterozygous_test_data()
+    # No genotype source is supplied, so establish one via the binomial test
+    # before donor_het_status_df(), which now requires an active source.
+    snp_data <- infer_zygosity(snp_data, min_total_count = 10)
 
     status_df <- donor_het_status_df(
         snp_data,
@@ -2154,24 +2223,38 @@ test_that("donor_het_status_df reports het/hom status with tested flag", {
     expect_false(snp4_d1$tested)
 })
 
-test_that("donor_het_status_df handles cases with no tested SNPs", {
+test_that("donor_het_status_df errors when the object has no established zygosity source", {
     snp_data <- create_heterozygous_test_data()
 
-    status_df <- donor_het_status_df(
-        snp_data,
-        min_total_count = 100,
-        p_value_threshold = 0.05,
-        minor_allele_prop = 0.1
+    # Verify the error names the function to call to establish one
+    expect_error(
+        donor_het_status_df(snp_data, min_total_count = 100),
+        "infer_zygosity"
     )
+})
 
-    # Verify all SNPs are untested with missing statistics
-    expect_true(all(!status_df$tested))
-    # Verify minor_allele_count is missing for untested SNPs
-    expect_true(all(is.na(status_df$minor_allele_count)))
-    # Verify p_val is missing for untested SNPs
-    expect_true(all(is.na(status_df$p_val)))
-    # Verify adj_p_val is missing for untested SNPs
-    expect_true(all(is.na(status_df$adj_p_val)))
+test_that("donor_het_status_df marks a pair unknown when it has no stored call and fails min_total_count", {
+    snp_data <- create_heterozygous_test_data()
+    # Establishes an active source from the pairs testable at the low default
+    # threshold; snp4 (genuinely low coverage everywhere) gets no stored call.
+    snp_data <- infer_zygosity(snp_data, min_total_count = 10)
+
+    status_df <- donor_het_status_df(snp_data, min_total_count = 100)
+    snp4_d1 <- status_df %>% dplyr::filter(snp_id == "snp4", donor == "donor1")
+
+    # Verify a pair with no stored call and insufficient depth stays unknown/untested
+    # even once the object has an active source
+    expect_equal(snp4_d1$zygosity, "unknown")
+    expect_false(snp4_d1$tested)
+    # Verify minor_allele_count is missing for the untested pair
+    expect_true(is.na(snp4_d1$minor_allele_count))
+
+    snp1_d1 <- status_df %>% dplyr::filter(snp_id == "snp1", donor == "donor1")
+    # Verify a pair already covered by the stored (binomial) call from
+    # infer_zygosity() stays trusted regardless of this call's higher
+    # min_total_count
+    expect_true(snp1_d1$tested)
+    expect_equal(snp1_d1$zygosity_source, "binomial")
 })
 
 test_that("donor_het_status_df returns a stored zygosity call as-is instead of recomputing it", {
@@ -2198,49 +2281,38 @@ test_that("donor_het_status_df returns a stored zygosity call as-is instead of r
     expect_equal(snp1_d1$zygosity_source, "binomial")
 })
 
-test_that("donor_het_status_df(zygosity_source = character(0)) ignores every stored call", {
+test_that("switching zygosity_source flips which stored call donor_het_status_df trusts", {
     snp_data <- create_heterozygous_test_data()
-    # Same contradicting stored call as above: snp2/donor1 would binomial-test
-    # as homozygous, but is stashed as a stored "het" call.
-    snp_data <- add_donor_snp_metadata(
-        snp_data,
+
+    # A binomial-only object: infer_zygosity() finds snp2/donor1 genuinely
+    # homozygous from the counts.
+    binomial_only <- infer_zygosity(snp_data, min_total_count = 10)
+    binomial_status <- donor_het_status_df(binomial_only, min_total_count = 10)
+    snp2_d1_binomial <- binomial_status %>% dplyr::filter(snp_id == "snp2", donor == "donor1")
+    # Verify the binomial test correctly calls this pair homozygous
+    expect_equal(snp2_d1_binomial$zygosity, "hom")
+    expect_equal(snp2_d1_binomial$zygosity_source, "binomial")
+    # Verify the binomial test was actually run and persisted for this pair
+    expect_true(is.na(snp2_d1_binomial$p_val))
+
+    # Stash a contradicting Vireo "het" call for the same pair (coexists via
+    # the widened (snp_id, donor, zygosity_source) key) and switch the active
+    # source to it.
+    with_vireo <- add_donor_snp_metadata(
+        binomial_only,
         data.frame(snp_id = "snp2", donor = "donor1", zygosity = "het", zygosity_source = "vireo_gt")
     )
-
-    status_df <- donor_het_status_df(snp_data, min_total_count = 10, zygosity_source = character(0))
-    snp2_d1 <- status_df %>% dplyr::filter(snp_id == "snp2", donor == "donor1")
-
-    # Verify the stored call is ignored and the binomial test's "hom" result stands
-    expect_equal(snp2_d1$zygosity, "hom")
-    # Verify its source is reported as binomial, not the stored source
-    expect_equal(snp2_d1$zygosity_source, "binomial")
-    # Verify the binomial test was actually run for this pair
-    expect_false(is.na(snp2_d1$p_val))
-})
-
-test_that("donor_het_status_df(zygosity_source = ) trusts only the named source", {
-    snp_data <- create_heterozygous_test_data()
-    snp_data <- add_donor_snp_metadata(
-        snp_data,
-        data.frame(snp_id = "snp2", donor = "donor1", zygosity = "het", zygosity_source = "vireo_gt")
-    )
-
-    # Naming the actual stored source still trusts the call
-    trusted <- donor_het_status_df(snp_data, min_total_count = 10, zygosity_source = "vireo_gt")
-    snp2_d1_trusted <- trusted %>% dplyr::filter(snp_id == "snp2", donor == "donor1")
-    # Verify the stored call is used when its source is explicitly named
-    expect_equal(snp2_d1_trusted$zygosity, "het")
-
-    # Naming a source that isn't the one stored distrusts the call
-    distrusted <- donor_het_status_df(snp_data, min_total_count = 10, zygosity_source = "bulk_wgs")
-    snp2_d1_distrusted <- distrusted %>% dplyr::filter(snp_id == "snp2", donor == "donor1")
-    # Verify the stored call is ignored when its source doesn't match
-    expect_equal(snp2_d1_distrusted$zygosity, "hom")
-    expect_equal(snp2_d1_distrusted$zygosity_source, "binomial")
+    zygosity_source(with_vireo) <- "vireo_gt"
+    vireo_status <- donor_het_status_df(with_vireo, min_total_count = 10)
+    snp2_d1_vireo <- vireo_status %>% dplyr::filter(snp_id == "snp2", donor == "donor1")
+    # Verify switching the active source flips the trusted call
+    expect_equal(snp2_d1_vireo$zygosity, "het")
+    expect_equal(snp2_d1_vireo$zygosity_source, "vireo_gt")
 })
 
 test_that("get_donor_het_snpdata returns heterozygous SNPs for a donor", {
     snp_data <- create_heterozygous_test_data()
+    snp_data <- infer_zygosity(snp_data, min_total_count = 10)
 
     result <- get_donor_het_snpdata(
         snp_data,
@@ -2256,13 +2328,15 @@ test_that("get_donor_het_snpdata returns heterozygous SNPs for a donor", {
     expect_equal(ncol(result), 2)
 })
 
-test_that("get_donor_het_snpdata errors when no heterozygous SNPs remain", {
+test_that("get_donor_het_snpdata errors when no zygosity source has been established", {
     snp_data <- create_heterozygous_test_data()
 
-    # Verify error when no SNPs are tested due to high coverage threshold
+    # Nothing in this fixture meets a threshold this high, so infer_zygosity()
+    # would find nothing testable either -- no source ever gets established,
+    # and the error propagates from donor_het_status_df()'s guard.
     expect_error(
         get_donor_het_snpdata(snp_data, "donor1", min_total_count = 100),
-        "No SNPs remain after filtering"
+        "infer_zygosity"
     )
 })
 

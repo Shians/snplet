@@ -45,8 +45,16 @@
         return(problems)
     }
 
-    if (any(duplicated(donor_snp_info[c("snp_id", "donor")]))) {
-        problems <- c(problems, "donor_snp_info contains duplicate (snp_id, donor) rows")
+    # A (snp_id, donor) pair may carry one row per zygosity_source (e.g. a
+    # "vireo_gt" row and a "binomial" row coexisting) -- so the key only
+    # widens to include zygosity_source when that column is actually present.
+    dup_key <- if ("zygosity_source" %in% colnames(donor_snp_info)) {
+        c("snp_id", "donor", "zygosity_source")
+    } else {
+        c("snp_id", "donor")
+    }
+    if (any(duplicated(donor_snp_info[dup_key]))) {
+        problems <- c(problems, sprintf("donor_snp_info contains duplicate (%s) rows", paste(dup_key, collapse = ", ")))
     }
 
     unknown_snps <- setdiff(donor_snp_info$snp_id, snp_info$snp_id)
@@ -121,7 +129,21 @@
     }
 
     idx <- match(donor, donor_map)
-    ifelse(is.na(idx), donor, names(donor_map)[idx])
+    matched <- !is.na(idx)
+    # Not `ifelse()`: on zero-length input it returns `logical(0)` regardless
+    # of `donor`'s type (a base R quirk), which breaks a downstream join
+    # expecting `donor` to stay character.
+    result <- donor
+    result[matched] <- names(donor_map)[idx[matched]]
+    result
+}
+
+.derive_zygosity_source <- function(donor_snp_info) {
+    if (!"zygosity_source" %in% colnames(donor_snp_info)) {
+        return(NA_character_)
+    }
+    sources <- unique(stats::na.omit(donor_snp_info$zygosity_source))
+    if (length(sources) == 1) sources else NA_character_
 }
 
 .default_donor_info <- function(barcode_info) {

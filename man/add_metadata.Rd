@@ -17,7 +17,7 @@ add_donor_metadata(x, metadata, join_by = "donor", overwrite = FALSE)
 add_donor_snp_metadata(
   x,
   metadata,
-  join_by = c("snp_id", "donor"),
+  join_by = c("snp_id", "donor", "zygosity_source"),
   overwrite = TRUE
 )
 }

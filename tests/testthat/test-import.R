@@ -960,4 +960,7 @@ test_that("import_cellsnp(vireo_folder=) populates donor_snp_info from real Vire
     expect_true(all(donor_snp_info$zygosity_source == "vireo_gt"))
     # Verify every call's snp_id matches a SNP actually present in the object
     expect_true(all(donor_snp_info$snp_id %in% snp_info(snp_data)$snp_id))
+    # Verify the object's active zygosity source was set automatically from
+    # the imported Vireo calls
+    expect_equal(zygosity_source(snp_data), "vireo_gt")
 })

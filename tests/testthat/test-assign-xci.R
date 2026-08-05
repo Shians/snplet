@@ -87,13 +87,19 @@ make_xci_snpdata <- function(
             stringsAsFactors = FALSE
         )
 
+        snpdata <- SNPData(
+            ref_count = ref_mat,
+            alt_count = alt_mat,
+            snp_info = snp_info,
+            barcode_info = barcode_info
+        )
+        # No genotype source is supplied, so establish an active zygosity
+        # source via the binomial test before any assign_xci()/
+        # donor_het_status_df() call, which now require one.
+        snpdata <- infer_zygosity(snpdata)
+
         list(
-            snpdata = SNPData(
-                ref_count = ref_mat,
-                alt_count = alt_mat,
-                snp_info = snp_info,
-                barcode_info = barcode_info
-            ),
+            snpdata = snpdata,
             allele_on_x1 = allele_on_x1
         )
     })
@@ -718,30 +724,36 @@ test_that("assign_xci fits each donor independently in a multi-donor object", {
     expect_true(max(agree_donor1, 1 - agree_donor1) > 0.9)
 })
 
-test_that("zygosity_source controls whether the het-SNP filter trusts a stored zygosity call", {
+test_that("zygosity_source<- switches which stored zygosity call the het-SNP filter trusts", {
     fixture <- make_xci_snpdata(n_genes = 3, n_cells_per_group = 20, seed = 42)
     snp_info <- snp_info(fixture$snpdata)
     target_snp <- snp_info$snp_id[1]
 
-    # Stash a stored call claiming this genuinely-heterozygous SNP is homozygous
-    # in donor0, contradicting what the binomial test would find.
+    # fixture$snpdata already carries binomial-derived calls (infer_zygosity() inside
+    # make_xci_snpdata()). Add a competing Vireo call for the same pair claiming it's
+    # homozygous, contradicting what the binomial test genuinely found. The widened
+    # (snp_id, donor, zygosity_source) key lets both coexist without conflict.
     snp_data <- add_donor_snp_metadata(
         fixture$snpdata,
         data.frame(snp_id = target_snp, donor = "donor0", zygosity = "hom", zygosity_source = "vireo_gt")
     )
 
-    trusting_stored <- assign_xci(snp_data, n_inits = 3)
-    informative_trusting <- donor_snp_info(trusting_stored) %>%
+    # Confirm the fixture's active source is still "binomial" (unaffected by adding a
+    # second, non-active source)
+    expect_equal(zygosity_source(snp_data), "binomial")
+    trusting_binomial <- assign_xci(snp_data, n_inits = 3)
+    informative_binomial <- donor_snp_info(trusting_binomial) %>%
         dplyr::filter(snp_id == target_snp, xci_informative) %>%
         nrow()
-    # Verify the stored "hom" call excludes the SNP from the het-SNP filter by default
-    expect_equal(informative_trusting, 0)
+    # Verify the binomial call (correctly heterozygous) lets the SNP into the fit
+    expect_equal(informative_binomial, 1)
 
-    ignoring_stored <- assign_xci(snp_data, n_inits = 3, zygosity_source = character(0))
-    informative_ignoring <- donor_snp_info(ignoring_stored) %>%
+    zygosity_source(snp_data) <- "vireo_gt"
+    trusting_vireo <- assign_xci(snp_data, n_inits = 3)
+    informative_vireo <- donor_snp_info(trusting_vireo) %>%
         dplyr::filter(snp_id == target_snp, xci_informative) %>%
         nrow()
-    # Verify zygosity_source = character(0) ignores every stored call, so the binomial
-    # test (correctly finding the SNP heterozygous) lets it back into the fit
-    expect_equal(informative_ignoring, 1)
+    # Verify switching the active source to the (contradicting) Vireo "hom" call
+    # excludes the SNP from the het-SNP filter
+    expect_equal(informative_vireo, 0)
 })

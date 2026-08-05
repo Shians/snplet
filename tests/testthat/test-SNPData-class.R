@@ -460,6 +460,47 @@ test_that("SNPData() throws error when donor_snp_info has duplicate (snp_id, don
     )
 })
 
+test_that("SNPData() allows the same (snp_id, donor) pair once per distinct zygosity_source", {
+    two_source_donor_snp_info <- data.frame(
+        snp_id = c("snp_1", "snp_1"),
+        donor = c("donor_1", "donor_1"),
+        zygosity = c("het", "hom"),
+        zygosity_source = c("vireo_gt", "binomial")
+    )
+
+    snp_data <- SNPData(
+        ref_count = test_ref_count,
+        alt_count = test_alt_count,
+        snp_info = test_snp_info,
+        barcode_info = test_barcode_info,
+        donor_snp_info = two_source_donor_snp_info
+    )
+
+    # Verify both source-tagged rows for the same pair are retained
+    expect_equal(nrow(donor_snp_info(snp_data, source = "all")), 2)
+})
+
+test_that("SNPData() throws error when donor_snp_info has duplicate (snp_id, donor, zygosity_source) rows", {
+    duplicate_donor_snp_info <- data.frame(
+        snp_id = c("snp_1", "snp_1"),
+        donor = c("donor_1", "donor_1"),
+        zygosity = c("het", "hom"),
+        zygosity_source = c("vireo_gt", "vireo_gt")
+    )
+
+    # Verify validity rejects a duplicate key once zygosity_source is part of it
+    expect_error(
+        SNPData(
+            ref_count = test_ref_count,
+            alt_count = test_alt_count,
+            snp_info = test_snp_info,
+            barcode_info = test_barcode_info,
+            donor_snp_info = duplicate_donor_snp_info
+        ),
+        "duplicate"
+    )
+})
+
 test_that("SNPData() throws error when donor_snp_info references an unknown snp_id", {
     unknown_snp_donor_info <- data.frame(
         snp_id = "snp_does_not_exist",
@@ -519,6 +560,130 @@ test_that("SNPData() throws error when a zygosity call has no zygosity_source", 
         ),
         "zygosity call but no zygosity_source"
     )
+})
+
+test_that("zygosity_source() defaults to NA when no donor_snp_info is supplied", {
+    snp_data <- create_test_snpdata()
+
+    # Verify a fresh object with no genotype calls has no active source
+    expect_true(is.na(zygosity_source(snp_data)))
+})
+
+test_that("zygosity_source() is auto-derived at construction from a single-source donor_snp_info", {
+    snp_data <- SNPData(
+        ref_count = test_ref_count,
+        alt_count = test_alt_count,
+        snp_info = test_snp_info,
+        barcode_info = test_barcode_info,
+        donor_snp_info = data.frame(
+            snp_id = "snp_1",
+            donor = "donor_1",
+            zygosity = "het",
+            zygosity_source = "vireo_gt"
+        )
+    )
+
+    # Verify the single distinct source is picked up automatically
+    expect_equal(zygosity_source(snp_data), "vireo_gt")
+})
+
+test_that("zygosity_source() stays NA at construction when donor_snp_info carries more than one source", {
+    snp_data <- SNPData(
+        ref_count = test_ref_count,
+        alt_count = test_alt_count,
+        snp_info = test_snp_info,
+        barcode_info = test_barcode_info,
+        donor_snp_info = data.frame(
+            snp_id = c("snp_1", "snp_1"),
+            donor = c("donor_1", "donor_1"),
+            zygosity = c("het", "hom"),
+            zygosity_source = c("vireo_gt", "binomial")
+        )
+    )
+
+    # Verify ambiguity between sources is left unresolved rather than guessed
+    expect_true(is.na(zygosity_source(snp_data)))
+})
+
+test_that("zygosity_source<- switches the active source and validates against what's present", {
+    snp_data <- SNPData(
+        ref_count = test_ref_count,
+        alt_count = test_alt_count,
+        snp_info = test_snp_info,
+        barcode_info = test_barcode_info,
+        donor_snp_info = data.frame(
+            snp_id = c("snp_1", "snp_1"),
+            donor = c("donor_1", "donor_1"),
+            zygosity = c("het", "hom"),
+            zygosity_source = c("vireo_gt", "binomial")
+        )
+    )
+
+    zygosity_source(snp_data) <- "binomial"
+    # Verify the active source switched
+    expect_equal(zygosity_source(snp_data), "binomial")
+
+    # Verify switching to a source not present in donor_snp_info errors
+    expect_error(
+        zygosity_source(snp_data) <- "bulk_wgs",
+        "not found in donor_snp_info"
+    )
+})
+
+test_that("donor_snp_info() filters to the active source by default", {
+    snp_data <- SNPData(
+        ref_count = test_ref_count,
+        alt_count = test_alt_count,
+        snp_info = test_snp_info,
+        barcode_info = test_barcode_info,
+        donor_snp_info = data.frame(
+            snp_id = c("snp_1", "snp_1"),
+            donor = c("donor_1", "donor_1"),
+            zygosity = c("het", "hom"),
+            zygosity_source = c("vireo_gt", "binomial")
+        )
+    )
+    # Two sources are present, so construction leaves the active source
+    # unresolved (see the ambiguity test above); set it explicitly.
+    zygosity_source(snp_data) <- "vireo_gt"
+
+    # Verify the default view only surfaces the active source's row
+    default_view <- donor_snp_info(snp_data)
+    expect_equal(nrow(default_view), 1)
+    expect_equal(default_view$zygosity_source, "vireo_gt")
+
+    # Verify source = "all" surfaces every row regardless of the active source
+    expect_equal(nrow(donor_snp_info(snp_data, source = "all")), 2)
+
+    # Verify naming a specific source filters to just that one
+    binomial_view <- donor_snp_info(snp_data, source = "binomial")
+    expect_equal(nrow(binomial_view), 1)
+    expect_equal(binomial_view$zygosity_source, "binomial")
+})
+
+test_that("updateObject() derives zygosity_source for a legacy object missing the slot", {
+    snp_data <- SNPData(
+        ref_count = test_ref_count,
+        alt_count = test_alt_count,
+        snp_info = test_snp_info,
+        barcode_info = test_barcode_info,
+        donor_snp_info = data.frame(
+            snp_id = "snp_1",
+            donor = "donor_1",
+            zygosity = "het",
+            zygosity_source = "vireo_gt"
+        )
+    )
+    # Simulate a legacy object serialised before the zygosity_source slot
+    # existed, same technique as the packed *_by_donor migration test below
+    legacy_attrs <- attributes(snp_data)
+    legacy_attrs$zygosity_source <- NULL
+    attributes(snp_data) <- legacy_attrs
+
+    updated <- updateObject(snp_data)
+
+    # Verify the slot was derived from the existing donor_snp_info on update
+    expect_equal(zygosity_source(updated), "vireo_gt")
 })
 
 test_that("[() drops a donor's donor_info and donor_snp_info rows once its cells are subsetted out", {

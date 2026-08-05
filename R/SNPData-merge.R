@@ -214,12 +214,16 @@ merge_snpdata <- function(
     }
     donor_info_merged <- .merge_donor_info(x, y, donors_retained)
     donor_snp_info_merged <- .merge_donor_snp_info(x, y, snp_ids_retained, donors_retained)
+    zygosity_source_merged <- .merge_zygosity_source(x, y)
 
     # Create new SNPData object
     # The initialize method will automatically compute:
     # - coverage, non_zero_samples (in snp_info)
     # - library_size, non_zero_snps (in barcode_info)
     # - n_cells (in donor_info)
+    # zygosity_source is set explicitly below rather than left to the
+    # constructor's auto-derivation, which collapses to NA once the merged
+    # donor_snp_info carries more than one source -- see .merge_zygosity_source().
     merged_obj <- SNPData(
         ref_count = ref_merged,
         alt_count = alt_merged,
@@ -229,6 +233,7 @@ merge_snpdata <- function(
         donor_info = donor_info_merged,
         donor_snp_info = donor_snp_info_merged
     )
+    merged_obj@zygosity_source <- zygosity_source_merged
 
     logger::log_success(
         "Merged SNPData: {nrow(merged_obj)} SNPs x {ncol(merged_obj)} cells"

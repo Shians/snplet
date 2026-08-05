@@ -13,11 +13,17 @@
 #'   distinct value of \code{barcode_info$donor} (empty if \code{barcode_info} has no
 #'   \code{donor} column). Must contain a \code{donor} column; \code{n_cells} is computed
 #'   automatically.
-#' @param donor_snp_info A data.frame with one row per (\code{snp_id}, \code{donor}) pair,
-#'   optional. Defaults to an empty table. Must contain \code{snp_id} and \code{donor}
-#'   columns, both of which must already appear in \code{snp_info}/\code{donor_info}; a row
-#'   with a non-\code{NA} \code{zygosity} must also carry a non-\code{NA}
-#'   \code{zygosity_source}.
+#' @param donor_snp_info A data.frame with one row per (\code{snp_id}, \code{donor},
+#'   \code{zygosity_source}) triple, optional -- a pair may carry more than one row when
+#'   more than one source has called it (e.g. a \code{"vireo_gt"} row and a
+#'   \code{"binomial"} row for the same pair). Defaults to an empty table. Must contain
+#'   \code{snp_id} and \code{donor} columns, both of which must already appear in
+#'   \code{snp_info}/\code{donor_info}; a row with a non-\code{NA} \code{zygosity} must
+#'   also carry a non-\code{NA} \code{zygosity_source}.
+#' @param source Character vector of \code{zygosity_source} value(s) to filter
+#'   \code{donor_snp_info(x)} to, or \code{"all"} to return every source unfiltered.
+#'   Defaults to \code{NULL}, meaning the object's active source (see
+#'   \code{\link{zygosity_source}}).
 #' @param donor_map A named character vector, \code{c(new_label = old_label, ...)} (the same
 #'   \code{new = old} convention as \code{dplyr::rename()}), optional. Applied to
 #'   \code{barcode_info$donor} and, if supplied, \code{donor_info$donor}/
@@ -42,11 +48,18 @@
 #' @slot donor_info A tibble with one row per donor and an automatically computed
 #'   \code{n_cells} column. Rows are dropped when a donor loses all of its cells, via
 #'   subsetting or \code{merge_snpdata()}.
-#' @slot donor_snp_info A tibble with one row per (\code{snp_id}, \code{donor}) pair,
-#'   carrying zygosity calls (\code{zygosity}, \code{zygosity_source} and per-source
-#'   confidence columns) and XCI fit diagnostics (\code{xci_informative},
-#'   \code{allele_on_x1}, \code{xci_escape_fraction}) written by \code{\link{assign_xci}}.
-#'   Rows are dropped along with their donor, same as \code{donor_info}.
+#' @slot donor_snp_info A tibble with one row per (\code{snp_id}, \code{donor},
+#'   \code{zygosity_source}) triple, carrying zygosity calls (\code{zygosity},
+#'   \code{zygosity_source} and per-source confidence columns) and XCI fit diagnostics
+#'   (\code{xci_informative}, \code{allele_on_x1}, \code{xci_escape_fraction}) written by
+#'   \code{\link{assign_xci}} for whichever source was active when it ran. Rows are dropped
+#'   along with their donor, same as \code{donor_info}.
+#' @slot zygosity_source Character string naming the \emph{active} zygosity-call source
+#'   (a value of \code{donor_snp_info$zygosity_source}), or \code{NA_character_} if none
+#'   has been established yet. \code{\link{donor_snp_info}}, \code{\link{assign_xci}}, and
+#'   other zygosity-dependent functions default to this source; switch it with
+#'   \code{zygosity_source<-()}. Set automatically at import (e.g. \code{"vireo_gt"} after
+#'   importing Vireo genotypes) or by \code{\link{infer_zygosity}}.
 #'
 #' @section Accessors:
 #' \describe{
@@ -57,8 +70,11 @@
 #'   \item{\code{barcode_info(x)}}{Get cell/barcode metadata data.frame (alias: \code{get_barcode_info()})}
 #'   \item{\code{get_sample_info(x)}}{Alias for barcode_info()}
 #'   \item{\code{donor_info(x)}}{Get per-donor metadata tibble (alias: \code{get_donor_info()})}
-#'   \item{\code{donor_snp_info(x)}}{Get per-(SNP, donor) metadata tibble (alias: \code{get_donor_snp_info()})}
+#'   \item{\code{donor_snp_info(x, source = NULL)}}{Get per-(SNP, donor) metadata tibble,
+#'     filtered to the active zygosity source by default (alias: \code{get_donor_snp_info()})}
 #'   \item{\code{chr_style(x)}}{Get chromosome naming style}
+#'   \item{\code{zygosity_source(x)}}{Get the active zygosity-call source; set with
+#'     \code{zygosity_source<-()}}
 #'   \item{\code{coverage(x)}}{Get total coverage matrix (ref + alt counts)}
 #' }
 #'
@@ -112,7 +128,8 @@ setClass(
         barcode_info = "data.frame",
         chr_style = "character",
         donor_info = "tbl_df",
-        donor_snp_info = "tbl_df"
+        donor_snp_info = "tbl_df",
+        zygosity_source = "character"
     )
 )
 
@@ -197,6 +214,7 @@ setMethod(
         .Object@barcode_info <- metrics$barcode_info
         .Object@donor_info <- metrics$donor_info
         .Object@donor_snp_info <- donor_snp_info
+        .Object@zygosity_source <- .derive_zygosity_source(donor_snp_info)
 
         methods::validObject(.Object)
         .Object
@@ -262,6 +280,7 @@ setMethod(
         if (methods::.hasSlot(x, "chr_style")) {
             obj@chr_style <- x@chr_style
         }
+        obj <- .propagate_zygosity_source(obj, x)
         obj
     }
 )
@@ -392,20 +411,25 @@ get_donor_info <- function(x) donor_info(x)
 
 #' @exportMethod donor_snp_info
 #' @rdname SNPData-class
-setGeneric("donor_snp_info", function(x) standardGeneric("donor_snp_info"))
+setGeneric("donor_snp_info", function(x, source = NULL) standardGeneric("donor_snp_info"))
 #' @exportMethod donor_snp_info
 #' @rdname SNPData-class
-setMethod("donor_snp_info", signature(x = "SNPData"), function(x) {
+setMethod("donor_snp_info", signature(x = "SNPData"), function(x, source = NULL) {
     # Handle backwards compatibility with older SNPData objects
     if (!methods::.hasSlot(x, "donor_snp_info")) {
         return(.empty_donor_snp_info())
     }
-    x@donor_snp_info
+    raw <- x@donor_snp_info
+    if (identical(source, "all")) {
+        return(raw)
+    }
+    active_source <- if (is.null(source)) zygosity_source(x) else source
+    dplyr::filter(raw, .data$zygosity_source %in% active_source)
 })
 
 #' @export
 #' @rdname SNPData-class
-get_donor_snp_info <- function(x) donor_snp_info(x)
+get_donor_snp_info <- function(x, source = NULL) donor_snp_info(x, source = source)
 
 #' @exportMethod chr_style
 #' @rdname SNPData-class
@@ -419,6 +443,61 @@ setMethod("chr_style", signature(x = "SNPData"), function(x) {
     }
     x@chr_style
 })
+
+#' @exportMethod zygosity_source
+#' @rdname SNPData-class
+setGeneric("zygosity_source", function(x) standardGeneric("zygosity_source"))
+#' @exportMethod zygosity_source
+#' @rdname SNPData-class
+setMethod("zygosity_source", signature(x = "SNPData"), function(x) {
+    # Handle backwards compatibility with older SNPData objects
+    if (!methods::.hasSlot(x, "zygosity_source")) {
+        return(NA_character_)
+    }
+    x@zygosity_source
+})
+
+#' @exportMethod zygosity_source<-
+#' @rdname SNPData-class
+setGeneric("zygosity_source<-", function(x, value) standardGeneric("zygosity_source<-"))
+#' @exportMethod zygosity_source<-
+#' @rdname SNPData-class
+setReplaceMethod("zygosity_source", signature(x = "SNPData", value = "character"), function(x, value) {
+    if (length(value) != 1 || is.na(value)) {
+        stop("zygosity_source<- requires a single, non-NA character value")
+    }
+    available <- unique(stats::na.omit(donor_snp_info(x, source = "all")$zygosity_source))
+    if (!value %in% available) {
+        stop(sprintf(
+            "zygosity_source<-: '%s' not found in donor_snp_info$zygosity_source. Available source(s): %s",
+            value,
+            if (length(available) > 0) paste(available, collapse = ", ") else "(none)"
+        ))
+    }
+    x@zygosity_source <- value
+    x
+})
+
+# Propagates the active zygosity_source slot from an existing object to one
+# just rebuilt via new("SNPData", ...) -- the constructor's own
+# auto-derivation (see .derive_zygosity_source()) collapses to NA once more
+# than one source is present, so anything that reconstructs from an existing
+# object (rather than building fresh) must carry an already-active source
+# over explicitly rather than relying on re-derivation. If the old object had
+# no active source yet (e.g. a direct add_donor_snp_metadata() call just
+# introduced the first one, as infer_zygosity() does), it derives one from
+# the *new* object's donor_snp_info instead of leaving it stuck at NA.
+.propagate_zygosity_source <- function(new_x, old_x) {
+    if (!methods::.hasSlot(old_x, "zygosity_source")) {
+        return(new_x)
+    }
+    new_x@zygosity_source <- if (!is.na(old_x@zygosity_source)) {
+        old_x@zygosity_source
+    } else {
+        .derive_zygosity_source(donor_snp_info(new_x, source = "all"))
+    }
+    new_x
+}
 
 #' @exportMethod updateObject
 #' @rdname SNPData-class
@@ -490,6 +569,14 @@ setMethod("updateObject", signature(object = "SNPData"), function(object, ..., v
         object@snp_info <- snp_info
         object@donor_info <- .default_donor_info(object@barcode_info)
         object@donor_snp_info <- donor_snp_info
+    }
+
+    if (!methods::.hasSlot(object, "zygosity_source")) {
+        zygosity_source <- .derive_zygosity_source(object@donor_snp_info)
+        if (verbose) {
+            log_info("updateObject(SNPData): derived zygosity_source '{zygosity_source}'")
+        }
+        object@zygosity_source <- zygosity_source
     }
 
     methods::validObject(object)
@@ -605,10 +692,10 @@ rename_donor <- function(x, donor_map) {
         barcode_info$donor <- .apply_donor_map(barcode_info$donor, donor_map)
     }
     donor_info$donor <- new_labels
-    donor_snp_info <- donor_snp_info(x)
+    donor_snp_info <- donor_snp_info(x, source = "all")
     donor_snp_info$donor <- .apply_donor_map(donor_snp_info$donor, donor_map)
 
-    new(
+    result <- new(
         "SNPData",
         ref_count = x@ref_count,
         alt_count = x@alt_count,
@@ -618,6 +705,7 @@ rename_donor <- function(x, donor_map) {
         donor_info = donor_info,
         donor_snp_info = donor_snp_info
     )
+    .propagate_zygosity_source(result, x)
 }
 
 # Dimensions
@@ -668,8 +756,8 @@ setMethod(
         if (methods::.hasSlot(object, "chr_style")) {
             cat("Chromosome style:", object@chr_style, "\n")
         }
-        if (methods::.hasSlot(object, "")) {
-            cat("SNP info (snp_info()):", "\n")
+        if (methods::.hasSlot(object, "zygosity_source")) {
+            cat("Active zygosity source:", object@zygosity_source, "\n")
         }
         print(object@snp_info)
         cat("Barcode info (barcode_info()):", "\n")

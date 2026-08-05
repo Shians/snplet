@@ -5,19 +5,9 @@
 \alias{assign_xci,SNPData-method}
 \title{Assign the active X chromosome to cells}
 \usage{
-assign_xci(
-  x,
-  n_inits = 10,
-  confidence_threshold = 0.95,
-  zygosity_source = NULL
-)
+assign_xci(x, n_inits = 10, confidence_threshold = 0.95)
 
-\S4method{assign_xci}{SNPData}(
-  x,
-  n_inits = 10,
-  confidence_threshold = 0.95,
-  zygosity_source = NULL
-)
+\S4method{assign_xci}{SNPData}(x, n_inits = 10, confidence_threshold = 0.95)
 }
 \arguments{
 \item{x}{SNPData object containing X chromosome SNP data with donor
@@ -30,12 +20,6 @@ The run with the highest log-likelihood is returned. Default 10.}
 assignment. Cells whose posterior probability that a given X is the active
 one reaches \code{confidence_threshold} are assigned that X; cells where
 neither X reaches the threshold receive \code{NA}. Default 0.95.}
-
-\item{zygosity_source}{Character vector of \code{donor_snp_info$zygosity_source} values
-the het-SNP filtering step should trust, or \code{NULL} (default) to trust a stored
-call from any source. See \code{\link{donor_het_status_df}}. Pass \code{character(0)}
-to distrust every stored call and compare a purely binomial-inferred fit against a
-Vireo-genotype-based one on the same object.}
 }
 \value{
 SNPData object with an additional \code{active_x} column in
@@ -80,9 +64,6 @@ barcode_info(snp_data) \%>\%
 
 # Diagnostics are stored, so plotting works directly
 plot_xci_heatmap(snp_data, donor = "donor1")
-
-# Compare a binomial-inferred fit against the Vireo-genotype-based one
-snp_data_binomial <- assign_xci(snp_data, zygosity_source = character(0))
 }
 }
 \seealso{
