@@ -1,43 +1,56 @@
 # Merge helpers for SNPData
 
-.expand_subset_matrix <- function(mat, retained_rows, retained_cols, col_mapping = NULL) {
-    # Hash-based lookup: the retained position of every row/column of `mat`,
-    # NA where it is not retained. Looking this up directly and remapping the
-    # triplet form avoids first subsetting `mat` with `[`, which is the
-    # expensive step for large sparse matrices with arbitrary index vectors.
-    retained_rows_set <- setNames(seq_along(retained_rows), retained_rows)
-    row_target <- unname(retained_rows_set[rownames(mat)])
+# Retained position (1-based) of every entry of `names_vec` in `retained`,
+# or NA where it is not retained. A hash-based lookup shared by both the
+# row and (name-based) column mapping in .merge_count_matrix().
+.retained_position <- function(names_vec, retained) {
+    lookup <- setNames(seq_along(retained), retained)
+    unname(lookup[names_vec])
+}
 
-    if (is.null(col_mapping)) {
-        # Match by column name
-        retained_cols_set <- setNames(seq_along(retained_cols), retained_cols)
-        col_target <- unname(retained_cols_set[colnames(mat)])
-    } else {
-        # Barcode-based behaviour: column mapping already gives the retained
-        # position (or NA) for each column of `mat`
-        col_target <- col_mapping
-    }
-
-    # Convert to triplet format (works for both sparse and dense matrices)
-    mat_T <- methods::as(mat, "TsparseMatrix")
+# Merges one allele channel (ref/alt/oth) of x and y directly from their
+# triplet forms into the retained dimensions, rather than expanding x and y
+# to the merged dimensions separately and adding the results -- sparseMatrix()
+# sums duplicate (i, j) entries automatically, so concatenating both objects'
+# remapped triplets and building the merged matrix in one call does the same
+# work as expand-then-add without materialising two full-size intermediates.
+# `col_target_x`/`col_target_y` are either name-based lookups (built the same
+# way as `row_target_x`/`row_target_y`) or, in the barcode-matched case, the
+# caller's precomputed `match(barcodes, barcodes_retained)` mapping -- both
+# give the retained column position (or NA) for each column of the matrix.
+.merge_count_matrix <- function(
+    mat_x,
+    mat_y,
+    row_target_x,
+    col_target_x,
+    row_target_y,
+    col_target_y,
+    retained_rows,
+    retained_cols
+) {
+    mat_x_T <- methods::as(mat_x, "TsparseMatrix")
+    mat_y_T <- methods::as(mat_y, "TsparseMatrix")
 
     # Remap indices (TsparseMatrix uses 0-based indexing, but slot access gives 1-based)
-    new_i <- row_target[mat_T@i + 1L]
-    new_j <- col_target[mat_T@j + 1L]
-    keep <- !is.na(new_i) & !is.na(new_j)
+    new_i_x <- row_target_x[mat_x_T@i + 1L]
+    new_j_x <- col_target_x[mat_x_T@j + 1L]
+    keep_x <- !is.na(new_i_x) & !is.na(new_j_x)
 
-    # Create sparse matrix from the retained triplets
-    expanded <- Matrix::sparseMatrix(
-        i = new_i[keep],
-        j = new_j[keep],
-        x = mat_T@x[keep],
+    new_i_y <- row_target_y[mat_y_T@i + 1L]
+    new_j_y <- col_target_y[mat_y_T@j + 1L]
+    keep_y <- !is.na(new_i_y) & !is.na(new_j_y)
+
+    merged <- Matrix::sparseMatrix(
+        i = c(new_i_x[keep_x], new_i_y[keep_y]),
+        j = c(new_j_x[keep_x], new_j_y[keep_y]),
+        x = c(mat_x_T@x[keep_x], mat_y_T@x[keep_y]),
         dims = c(length(retained_rows), length(retained_cols))
     )
 
-    rownames(expanded) <- retained_rows
-    colnames(expanded) <- retained_cols
+    rownames(merged) <- retained_rows
+    colnames(merged) <- retained_cols
 
-    expanded
+    merged
 }
 
 .merge_snp_info <- function(x, y, snp_ids_retained, snp_join) {

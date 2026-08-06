@@ -186,19 +186,29 @@ merge_snpdata <- function(
     cell_from_x <- intersect(cell_ids_retained, cell_ids_x)
     cell_from_y <- intersect(cell_ids_retained, cell_ids_y)
 
-    # Expand all matrices to retained dimensions
-    ref_x_exp <- .expand_subset_matrix(x@ref_count, snp_ids_retained, cell_ids_retained, col_mapping_x)
-    alt_x_exp <- .expand_subset_matrix(x@alt_count, snp_ids_retained, cell_ids_retained, col_mapping_x)
-    oth_x_exp <- .expand_subset_matrix(x@oth_count, snp_ids_retained, cell_ids_retained, col_mapping_x)
+    # Retained-position lookup for each object's rows/columns (NA when not
+    # retained), computed once and shared across the ref/alt/oth channels
+    # since all three carry identical dimnames.
+    row_target_x <- .retained_position(snp_ids_x, snp_ids_retained)
+    row_target_y <- .retained_position(snp_ids_y, snp_ids_retained)
+    col_target_x <- col_mapping_x %||% .retained_position(cell_ids_x, cell_ids_retained)
+    col_target_y <- col_mapping_y %||% .retained_position(cell_ids_y, cell_ids_retained)
 
-    ref_y_exp <- .expand_subset_matrix(y@ref_count, snp_ids_retained, cell_ids_retained, col_mapping_y)
-    alt_y_exp <- .expand_subset_matrix(y@alt_count, snp_ids_retained, cell_ids_retained, col_mapping_y)
-    oth_y_exp <- .expand_subset_matrix(y@oth_count, snp_ids_retained, cell_ids_retained, col_mapping_y)
-
-    # Merge by addition
-    ref_merged <- ref_x_exp + ref_y_exp
-    alt_merged <- alt_x_exp + alt_y_exp
-    oth_merged <- oth_x_exp + oth_y_exp
+    # Merge each allele channel directly from x's and y's triplets in one
+    # pass, rather than expanding x and y to the merged dimensions separately
+    # and adding -- sparseMatrix() sums duplicate (i, j) entries automatically.
+    ref_merged <- .merge_count_matrix(
+        x@ref_count, y@ref_count, row_target_x, col_target_x, row_target_y, col_target_y,
+        snp_ids_retained, cell_ids_retained
+    )
+    alt_merged <- .merge_count_matrix(
+        x@alt_count, y@alt_count, row_target_x, col_target_x, row_target_y, col_target_y,
+        snp_ids_retained, cell_ids_retained
+    )
+    oth_merged <- .merge_count_matrix(
+        x@oth_count, y@oth_count, row_target_x, col_target_x, row_target_y, col_target_y,
+        snp_ids_retained, cell_ids_retained
+    )
 
     # Merge metadata using helper functions
     snp_info_merged <- .merge_snp_info(x, y, snp_ids_retained, snp_join)
