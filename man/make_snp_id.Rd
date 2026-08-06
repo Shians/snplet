@@ -2,7 +2,7 @@
 % Please edit documentation in R/utils.R
 \name{make_snp_id}
 \alias{make_snp_id}
-\title{Generate standardized SNP IDs from genomic coordinates}
+\title{Generate standardised SNP IDs from genomic coordinates}
 \usage{
 make_snp_id(chrom, pos, ref, alt)
 }

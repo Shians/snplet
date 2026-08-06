@@ -1,7 +1,7 @@
 Package: snplet
 Type: Package
 Title: Package for handling SNP based allele-specific expression analysis
-Version: 0.5.2
+Version: 0.6.2
 Authors@R: c(
     person(
       "Shian", "Su",
@@ -10,24 +10,29 @@ Authors@R: c(
       comment = c(ORCID = "0000-0003-0800-3567")
     )
   )
-Description: Enables downstream analysis of allele-specific expression and clonal evolution in
-    single-cell RNA sequencing data using output from cellSNP-lite, Vireo, and cellranger VDJ.
-    The package integrates SNP genotype calls, donor assignments, and clonotype annotations to
-    assess allelic imbalance and analyze clonal relationships across individual cells. Core
-    functionality includes statistical testing for differential allele usage and aggregation
-    of allele counts across cells sharing clonotypes or donor identities.
+Description: Enables downstream analysis of allele-specific expression in single-cell RNA
+    sequencing data using output from cellSNP-lite, Vireo, and cellranger VDJ. The package
+    integrates SNP genotype calls, donor assignments, and clonotype annotations to assess
+    allelic imbalance across individual cells. Clonotype annotations are used to aggregate
+    cells for X-chromosome inactivation assignment. Core functionality includes statistical
+    testing for allele usage against a null minor allele frequency and aggregation of allele
+    counts across cells sharing clonotypes or donor identities.
 Depends:
     methods,
     Matrix
 Imports:
     BiocGenerics,
+    Biostrings,
     DelayedArray,
     dplyr,
     fs,
+    GenomicAlignments,
+    GenomicRanges,
     ggplot2,
     ggrepel,
     glue,
     grid,
+    IRanges,
     logger,
     magrittr,
     mclust,
@@ -38,6 +43,9 @@ Imports:
     R.utils,
     readr,
     rlang,
+    Rsamtools,
+    S4Vectors,
+    Seqinfo,
     scales,
     stringr,
     tibble,
@@ -48,6 +56,8 @@ Imports:
 Suggests:
     testthat,
     withr
+SystemRequirements: samtools (optional; accelerates extract_snp_calls() when
+    on PATH, otherwise falls back to pure Rsamtools/GenomicAlignments)
 License: Apache License (>= 2)
 Encoding: UTF-8
 LazyData: false
@@ -67,14 +77,20 @@ Collate:
     'SNPData-metadata.R'
     'VCFData-class.R'
     'add_snp_gene_names.R'
-    'assign_inactive_x.R'
+    'assign_xci.R'
+    'haplotype_expression.R'
+    'molecule_phasing.R'
+    'plot_xci_heatmap.R'
     'plots.R'
     'plotting.R'
     'remove.R'
     'snplet-package.R'
+    'test_escape.R'
     'test_maf.R'
     'themes.R'
     'to_expr_matrix.R'
     'utils.R'
     'vcf_utils.R'
+    'xci-diagnostics.R'
+    'xci-em.R'
 Config/roxygen2/version: 8.0.0

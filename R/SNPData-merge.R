@@ -43,6 +43,16 @@
 #' computed columns (coverage, non_zero_samples, library_size, non_zero_snps)
 #' are recalculated for the merged object.
 #'
+#' \code{donor_info} is merged the same way (x takes priority, \code{n_cells}
+#' recalculated). \code{donor_snp_info} instead \strong{errors} if x and y disagree on
+#' \code{zygosity}, \code{zygosity_source}, \code{allele_on_x1}, or
+#' \code{xci_informative} for the same (SNP, donor) pair, since a silent pick would hide
+#' a real reproducibility problem; numeric estimate columns (p-values, GT posteriors,
+#' escape fractions) still take x priority on conflict, since two independently fit or
+#' tested values can differ by floating point alone. A donor with no cells left after
+#' the \code{cell_join} has its \code{donor_info}/\code{donor_snp_info} rows dropped, same
+#' as subsetting.
+#'
 #' The independent join parameters enable fine-grained control:
 #' \itemize{
 #'   \item \code{snp_join="union", cell_join="union"}: Maximum data retention
@@ -194,17 +204,36 @@ merge_snpdata <- function(
     snp_info_merged <- .merge_snp_info(x, y, snp_ids_retained, snp_join)
     barcode_info_merged <- .merge_barcode_info(x, y, barcodes_retained, cell_join)
 
+    # Donor genotypes are a property of the donor, not of the retained cells:
+    # a donor with no surviving cells after the cell_join has its rows dropped
+    # from both donor tables, same as `[` subsetting.
+    donors_retained <- if ("donor" %in% colnames(barcode_info_merged)) {
+        unique(stats::na.omit(barcode_info_merged$donor))
+    } else {
+        character(0)
+    }
+    donor_info_merged <- .merge_donor_info(x, y, donors_retained)
+    donor_snp_info_merged <- .merge_donor_snp_info(x, y, snp_ids_retained, donors_retained)
+    zygosity_source_merged <- .merge_zygosity_source(x, y)
+
     # Create new SNPData object
     # The initialize method will automatically compute:
     # - coverage, non_zero_samples (in snp_info)
     # - library_size, non_zero_snps (in barcode_info)
+    # - n_cells (in donor_info)
+    # zygosity_source is set explicitly below rather than left to the
+    # constructor's auto-derivation, which collapses to NA once the merged
+    # donor_snp_info carries more than one source -- see .merge_zygosity_source().
     merged_obj <- SNPData(
         ref_count = ref_merged,
         alt_count = alt_merged,
         oth_count = oth_merged,
         snp_info = snp_info_merged,
-        barcode_info = barcode_info_merged
+        barcode_info = barcode_info_merged,
+        donor_info = donor_info_merged,
+        donor_snp_info = donor_snp_info_merged
     )
+    merged_obj@zygosity_source <- zygosity_source_merged
 
     logger::log_success(
         "Merged SNPData: {nrow(merged_obj)} SNPs x {ncol(merged_obj)} cells"

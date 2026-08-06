@@ -5,12 +5,15 @@
 \alias{VCFData-class}
 \alias{VCFData}
 \alias{VCFData,character,character,data.frame-method}
+\alias{header}
+\alias{header,VCFData-method}
 \alias{get_header}
-\alias{get_header,VCFData-method}
+\alias{samples}
+\alias{samples,VCFData-method}
 \alias{get_samples}
-\alias{get_samples,VCFData-method}
+\alias{variants}
+\alias{variants,VCFData-method}
 \alias{get_variants}
-\alias{get_variants,VCFData-method}
 \alias{nrow,VCFData-method}
 \alias{ncol,VCFData-method}
 \alias{dim,VCFData-method}
@@ -24,17 +27,23 @@ VCFData(header, samples, variants)
 
 \S4method{VCFData}{character,character,data.frame}(header, samples, variants)
 
+header(x)
+
+\S4method{header}{VCFData}(x)
+
 get_header(x)
 
-\S4method{get_header}{VCFData}(x)
+samples(x)
+
+\S4method{samples}{VCFData}(x)
 
 get_samples(x)
 
-\S4method{get_samples}{VCFData}(x)
+variants(x)
+
+\S4method{variants}{VCFData}(x)
 
 get_variants(x)
-
-\S4method{get_variants}{VCFData}(x)
 
 \S4method{nrow}{VCFData}(x)
 
@@ -88,9 +97,9 @@ to support genomic variant analysis workflows.
 \section{Accessors}{
 
 \describe{
-  \item{\code{get_header(x)}}{Get VCF header lines}
-  \item{\code{get_samples(x)}}{Get sample names}
-  \item{\code{get_variants(x)}}{Get variant data.frame}
+  \item{\code{header(x)}}{Get VCF header lines (alias: \code{get_header()})}
+  \item{\code{samples(x)}}{Get sample names (alias: \code{get_samples()})}
+  \item{\code{variants(x)}}{Get variant data.frame (alias: \code{get_variants()})}
 }
 }
 
@@ -112,9 +121,9 @@ vcf_data <- VCFData(
 )
 
 # Access components
-header <- get_header(vcf_data)
-samples <- get_samples(vcf_data)
-variants <- get_variants(vcf_data)
+header <- header(vcf_data)
+samples <- samples(vcf_data)
+variants <- variants(vcf_data)
 }
 
 }

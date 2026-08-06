@@ -24,7 +24,7 @@ remove_doublets <- function(x, drop_na = TRUE) {
     }
 
     # Get sample info
-    barcode_info <- get_barcode_info(x)
+    barcode_info <- barcode_info(x)
 
     # Check if donor column exists
     if (!"donor" %in% colnames(barcode_info)) {
@@ -78,7 +78,7 @@ remove_na_genes <- function(x, gene_col = "gene_name") {
     }
 
     # Get SNP info
-    snp_info <- get_snp_info(x)
+    snp_info <- snp_info(x)
 
     # Check if gene column exists
     if (!gene_col %in% colnames(snp_info)) {
@@ -125,12 +125,14 @@ remove_na_clonotypes <- function(x, clonotype_col = "clonotype") {
     }
 
     # Get sample info
-    barcode_info <- get_barcode_info(x)
+    barcode_info <- barcode_info(x)
 
     # Check if clonotype column exists
     if (!clonotype_col %in% colnames(barcode_info)) {
         warning(paste0(
-            "No '", clonotype_col, "' column found in barcode_info. ",
+            "No '",
+            clonotype_col,
+            "' column found in barcode_info. ",
             "Add clonotype information using add_barcode_metadata() or import_cellsnp() with vdj_file. ",
             "Returning original object."
         ))

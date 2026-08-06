@@ -66,6 +66,21 @@ make_unknown_style_snpdata <- function(suppress_warnings = TRUE) {
     }
 }
 
+# Helper to build a SNPData object with SNP info in a given chromosome style
+make_snpdata_with_chr_style <- function(chr_style) {
+    snp_info <- make_test_snp_info(chr_style)
+    barcode_info <- data.frame(barcode = c("cell1", "cell2"))
+    alt_count <- sparseMatrix(i = c(1, 2), j = c(1, 2), x = c(5, 3), dims = c(6, 2))
+    ref_count <- sparseMatrix(i = c(1, 2), j = c(1, 2), x = c(10, 7), dims = c(6, 2))
+
+    SNPData(
+        ref_count = ref_count,
+        alt_count = alt_count,
+        snp_info = snp_info,
+        barcode_info = barcode_info
+    )
+}
+
 # ==============================================================================
 # Test: detect_chr_style
 # ==============================================================================
@@ -142,9 +157,19 @@ test_that("detect_chr_style handles all NA values", {
 
 test_that("detect_chr_style handles data with many contigs", {
     # Realistic case: standard chromosomes plus many contigs/scaffolds
-    chr_names <- c("chr1", "chr2", "chr3", "chrX", "chrY",
-                   "contig_1", "contig_2", "scaffold_999",
-                   "chrUn_001", "chrUn_002", "chrUn_003")
+    chr_names <- c(
+        "chr1",
+        "chr2",
+        "chr3",
+        "chrX",
+        "chrY",
+        "contig_1",
+        "contig_2",
+        "scaffold_999",
+        "chrUn_001",
+        "chrUn_002",
+        "chrUn_003"
+    )
 
     # Verify UCSC style is still detected despite contigs
     expect_equal(detect_chr_style(chr_names), "ucsc")
@@ -160,80 +185,86 @@ test_that("detect_chr_style works with minimal standard chromosomes", {
 
 test_that("detect_chr_style detects style with any matches", {
     # With loosened criteria, any standard chromosome match identifies the style
-    chr_names <- c("chr1", "chr2", "contig1", "contig2", "contig3",
-                   "scaffold1", "scaffold2", "scaffold3")
+    chr_names <- c("chr1", "chr2", "contig1", "contig2", "contig3", "scaffold1", "scaffold2", "scaffold3")
 
     # Even with 2/8 = 25% matching, UCSC style is detected
     expect_equal(detect_chr_style(chr_names), "ucsc")
 })
 
 # ==============================================================================
-# Test: normalize_chr_names
+# Test: normalise_chr_names
 # ==============================================================================
 
-test_that("normalize_chr_names preserves UCSC format", {
+test_that("normalise_chr_names preserves UCSC format", {
     chr_names <- c("chr1", "chr2", "chrX", "chrY", "chrM")
 
     # Verify UCSC names are preserved (already canonical)
-    result <- normalize_chr_names(chr_names)
+    result <- normalise_chr_names(chr_names)
+    # Confirm output matches input unchanged
     expect_equal(result, c("chr1", "chr2", "chrX", "chrY", "chrM"))
 })
 
-test_that("normalize_chr_names converts RefSeq mouse to UCSC", {
+test_that("normalise_chr_names converts RefSeq mouse to UCSC", {
     chr_names <- c("NC_000067.6", "NC_000086.7", "NC_005089.1")
 
-    # Verify RefSeq mouse names are normalized to UCSC
-    result <- normalize_chr_names(chr_names, from_style = "refseq_mouse")
+    # Verify RefSeq mouse names are normalised to UCSC
+    result <- normalise_chr_names(chr_names, from_style = "refseq_mouse")
+    # Confirm converted names match expected UCSC form
     expect_equal(result, c("chr1", "chrX", "chrM"))
 })
 
-test_that("normalize_chr_names converts GenBank human to UCSC", {
+test_that("normalise_chr_names converts GenBank human to UCSC", {
     chr_names <- c("CM000663.2", "CM000685.2", "J01415.2")
 
-    # Verify GenBank human names are normalized to UCSC
-    result <- normalize_chr_names(chr_names, from_style = "genbank_human")
+    # Verify GenBank human names are normalised to UCSC
+    result <- normalise_chr_names(chr_names, from_style = "genbank_human")
+    # Confirm converted names match expected UCSC form
     expect_equal(result, c("chr1", "chrX", "chrM"))
 })
 
-test_that("normalize_chr_names converts numeric to UCSC", {
+test_that("normalise_chr_names converts numeric to UCSC", {
     chr_names <- c("1", "2", "X", "Y")
 
     # Verify numeric format is converted to UCSC
-    result <- normalize_chr_names(chr_names)
+    result <- normalise_chr_names(chr_names)
+    # Confirm converted names match expected UCSC form
     expect_equal(result, c("chr1", "chr2", "chrX", "chrY"))
 })
 
-test_that("normalize_chr_names issues warning for unknown style", {
+test_that("normalise_chr_names issues warning for unknown style", {
     chr_names <- c("custom1", "custom2")
 
     # Verify warning is issued for unknown style
     expect_warning(
-        normalize_chr_names(chr_names),
+        normalise_chr_names(chr_names),
         "Chromosome style is unknown"
     )
 })
 
-test_that("normalize_chr_names returns original names for unknown style", {
+test_that("normalise_chr_names returns original names for unknown style", {
     chr_names <- c("custom1", "custom2")
 
     # Verify original names are returned despite warning
-    result <- suppressWarnings(normalize_chr_names(chr_names))
+    result <- suppressWarnings(normalise_chr_names(chr_names))
+    # Confirm output is identical to the original unrecognized names
     expect_equal(result, chr_names)
 })
 
-test_that("normalize_chr_names auto-detects style", {
+test_that("normalise_chr_names auto-detects style", {
     chr_names <- c("1", "2", "X")
 
     # Verify auto-detection works (numeric -> UCSC)
-    result <- normalize_chr_names(chr_names, from_style = "auto")
+    result <- normalise_chr_names(chr_names, from_style = "auto")
+    # Confirm auto-detected conversion matches expected UCSC form
     expect_equal(result, c("chr1", "chr2", "chrX"))
 })
 
-test_that("normalize_chr_names handles unmapped chromosomes", {
+test_that("normalise_chr_names handles unmapped chromosomes", {
     chr_names <- c("chr1", "chr2", "chrUn")
 
     # Verify unmapped chromosomes are preserved (UCSC -> UCSC)
-    result <- normalize_chr_names(chr_names)
+    result <- normalise_chr_names(chr_names)
+    # Confirm unmapped chromosome name passes through unchanged
     expect_equal(result, c("chr1", "chr2", "chrUn"))
 })
 
@@ -246,6 +277,7 @@ test_that("convert_chr_style converts numeric to UCSC (default)", {
 
     # Verify conversion to UCSC style (default)
     result <- convert_chr_style(chr_names)
+    # Confirm converted names match expected UCSC form
     expect_equal(result, c("chr1", "chr2", "chrX", "chrY", "chrM"))
 })
 
@@ -254,6 +286,7 @@ test_that("convert_chr_style converts UCSC to RefSeq mouse", {
 
     # Verify conversion to RefSeq mouse style
     result <- convert_chr_style(chr_names, from_style = "ucsc", to_style = "refseq_mouse")
+    # Confirm converted names match expected RefSeq mouse accessions
     expect_equal(result, c("NC_000067.6", "NC_000086.7", "NC_005089.1"))
 })
 
@@ -262,6 +295,7 @@ test_that("convert_chr_style converts numeric to GenBank human", {
 
     # Verify conversion to GenBank human style
     result <- convert_chr_style(chr_names, to_style = "genbank_human")
+    # Confirm converted names match expected GenBank human accessions
     expect_equal(result, c("CM000663.2", "CM000685.2", "J01415.2"))
 })
 
@@ -270,6 +304,7 @@ test_that("convert_chr_style auto-detects source style", {
 
     # Verify auto-detection and conversion works (numeric -> UCSC)
     result <- convert_chr_style(chr_names)
+    # Confirm auto-detected conversion matches expected UCSC form
     expect_equal(result, c("chr1", "chr2", "chrX"))
 })
 
@@ -278,6 +313,7 @@ test_that("convert_chr_style handles unmapped chromosomes", {
 
     # Verify unmapped chromosomes are preserved in canonical form
     result <- convert_chr_style(chr_names, to_style = "numeric")
+    # Confirm unmapped chromosome name passes through unchanged
     expect_equal(result, c("1", "2", "custom"))
 })
 
@@ -285,84 +321,62 @@ test_that("convert_chr_style handles unmapped chromosomes", {
 # Test: SNPData chromosome integration
 # ==============================================================================
 
-test_that("SNPData detects and stores chr_style for numeric chromosomes", {
-    snp_info <- make_test_snp_info("numeric")
-    barcode_info <- data.frame(barcode = c("cell1", "cell2"))
-    alt_count <- sparseMatrix(i = c(1, 2), j = c(1, 2), x = c(5, 3), dims = c(6, 2))
-    ref_count <- sparseMatrix(i = c(1, 2), j = c(1, 2), x = c(10, 7), dims = c(6, 2))
-
-    # Verify SNPData object is created with correct chr_style
-    snp_data <- SNPData(
-        ref_count = ref_count,
-        alt_count = alt_count,
-        snp_info = snp_info,
-        barcode_info = barcode_info
-    )
+test_that("SNPData detects chr_style as numeric", {
+    snp_data <- make_snpdata_with_chr_style("numeric")
 
     # Check chr_style is detected as numeric
     expect_equal(chr_style(snp_data), "numeric")
-
-    # Check chrom_canonical column is added
-    expect_true("chrom_canonical" %in% colnames(get_snp_info(snp_data)))
-
-    # Verify chrom_canonical is converted to UCSC
-    expect_equal(get_snp_info(snp_data)$chrom_canonical, c("chr1", "chr2", "chr3", "chrX", "chrY", "chrM"))
 })
 
-test_that("SNPData detects and stores chr_style for UCSC chromosomes", {
-    snp_info <- make_test_snp_info("ucsc")
-    barcode_info <- data.frame(barcode = c("cell1", "cell2"))
-    alt_count <- sparseMatrix(i = c(1, 2), j = c(1, 2), x = c(5, 3), dims = c(6, 2))
-    ref_count <- sparseMatrix(i = c(1, 2), j = c(1, 2), x = c(10, 7), dims = c(6, 2))
+test_that("SNPData converts chrom_canonical to UCSC for numeric chromosomes", {
+    snp_data <- make_snpdata_with_chr_style("numeric")
 
-    # Verify SNPData object is created with correct chr_style
-    snp_data <- SNPData(
-        ref_count = ref_count,
-        alt_count = alt_count,
-        snp_info = snp_info,
-        barcode_info = barcode_info
-    )
+    # Check chrom_canonical column is added
+    expect_true("chrom_canonical" %in% colnames(snp_info(snp_data)))
+    # Verify chrom_canonical is converted to UCSC
+    expect_equal(snp_info(snp_data)$chrom_canonical, c("chr1", "chr2", "chr3", "chrX", "chrY", "chrM"))
+})
+
+test_that("SNPData detects chr_style as UCSC", {
+    snp_data <- make_snpdata_with_chr_style("ucsc")
 
     # Check chr_style is detected as UCSC
     expect_equal(chr_style(snp_data), "ucsc")
+})
+
+test_that("SNPData preserves chrom_canonical already in UCSC style", {
+    snp_data <- make_snpdata_with_chr_style("ucsc")
 
     # Check chrom_canonical is preserved (already UCSC)
     expect_equal(
-        get_snp_info(snp_data)$chrom_canonical,
+        snp_info(snp_data)$chrom_canonical,
         c("chr1", "chr2", "chr3", "chrX", "chrY", "chrM")
     )
 })
 
-test_that("SNPData handles unknown chromosome style", {
+test_that("SNPData warns when chromosome style is unknown", {
     # Verify SNPData object is created even with unknown chr_style
     expect_warning(
-        snp_data <- make_unknown_style_snpdata(suppress_warnings = FALSE),
+        make_unknown_style_snpdata(suppress_warnings = FALSE),
         "Chromosome style is unknown"
     )
+})
+
+test_that("SNPData records chr_style as unknown and preserves original chrom names", {
+    snp_data <- make_unknown_style_snpdata()
 
     # Check chr_style is unknown
     expect_equal(chr_style(snp_data), "unknown")
-
     # Check chrom_canonical preserves original names
     expected_chrom <- CHR_STYLES[["unknown"]]
     expect_equal(
-        get_snp_info(snp_data)$chrom_canonical,
+        snp_info(snp_data)$chrom_canonical,
         expected_chrom
     )
 })
 
 test_that("SNPData subsetting preserves chr_style", {
-    snp_info <- make_test_snp_info("ucsc")
-    barcode_info <- data.frame(barcode = c("cell1", "cell2"))
-    alt_count <- sparseMatrix(i = c(1, 2), j = c(1, 2), x = c(5, 3), dims = c(6, 2))
-    ref_count <- sparseMatrix(i = c(1, 2), j = c(1, 2), x = c(10, 7), dims = c(6, 2))
-
-    snp_data <- SNPData(
-        ref_count = ref_count,
-        alt_count = alt_count,
-        snp_info = snp_info,
-        barcode_info = barcode_info
-    )
+    snp_data <- make_snpdata_with_chr_style("ucsc")
 
     # Verify subsetting preserves chr_style
     subset_data <- snp_data[1:3, ]
@@ -374,17 +388,7 @@ test_that("SNPData subsetting preserves chr_style", {
 # ==============================================================================
 
 test_that(".validate_chr_style passes for known chr_style", {
-    snp_info <- make_test_snp_info("numeric")
-    barcode_info <- data.frame(barcode = c("cell1", "cell2"))
-    alt_count <- sparseMatrix(i = c(1, 2), j = c(1, 2), x = c(5, 3), dims = c(6, 2))
-    ref_count <- sparseMatrix(i = c(1, 2), j = c(1, 2), x = c(10, 7), dims = c(6, 2))
-
-    snp_data <- SNPData(
-        ref_count = ref_count,
-        alt_count = alt_count,
-        snp_info = snp_info,
-        barcode_info = barcode_info
-    )
+    snp_data <- make_snpdata_with_chr_style("numeric")
 
     # Verify validation passes for known style
     expect_true(.validate_chr_style(snp_data))
@@ -417,21 +421,10 @@ test_that(".validate_chr_style provides informative error message", {
 # ==============================================================================
 
 test_that("chr_style accessor handles SNPData objects without chr_style slot", {
-    snp_info <- make_test_snp_info("numeric")
-    barcode_info <- data.frame(barcode = c("cell1", "cell2"))
-    alt_count <- sparseMatrix(i = c(1, 2), j = c(1, 2), x = c(5, 3), dims = c(6, 2))
-    ref_count <- sparseMatrix(i = c(1, 2), j = c(1, 2), x = c(10, 7), dims = c(6, 2))
+    snp_data <- make_snpdata_with_chr_style("numeric")
 
-    snp_data <- SNPData(
-        ref_count = ref_count,
-        alt_count = alt_count,
-        snp_info = snp_info,
-        barcode_info = barcode_info
-    )
-
-    # Simulate an old object by removing chr_style slot content
-    # We cannot actually remove the slot from an S4 object, but we can test the accessor logic
-    # by checking that it correctly handles the .hasSlot check
+    # An S4 slot can't actually be removed, so this exercises the accessor's
+    # .hasSlot() branch rather than a truly slot-less legacy object
     # Verify accessor works for normal objects
     expect_equal(chr_style(snp_data), "numeric")
     # Verify .hasSlot returns TRUE for new objects
@@ -439,17 +432,7 @@ test_that("chr_style accessor handles SNPData objects without chr_style slot", {
 })
 
 test_that("show method handles SNPData objects without chr_style slot gracefully", {
-    snp_info <- make_test_snp_info("ucsc")
-    barcode_info <- data.frame(barcode = c("cell1", "cell2"))
-    alt_count <- sparseMatrix(i = c(1, 2), j = c(1, 2), x = c(5, 3), dims = c(6, 2))
-    ref_count <- sparseMatrix(i = c(1, 2), j = c(1, 2), x = c(10, 7), dims = c(6, 2))
-
-    snp_data <- SNPData(
-        ref_count = ref_count,
-        alt_count = alt_count,
-        snp_info = snp_info,
-        barcode_info = barcode_info
-    )
+    snp_data <- make_snpdata_with_chr_style("ucsc")
 
     # Verify show method works without errors
     expect_output(show(snp_data), "Object of class 'SNPData'")
@@ -458,17 +441,7 @@ test_that("show method handles SNPData objects without chr_style slot gracefully
 })
 
 test_that("subsetting preserves backwards compatibility", {
-    snp_info <- make_test_snp_info("ucsc")
-    barcode_info <- data.frame(barcode = c("cell1", "cell2"))
-    alt_count <- sparseMatrix(i = c(1, 2), j = c(1, 2), x = c(5, 3), dims = c(6, 2))
-    ref_count <- sparseMatrix(i = c(1, 2), j = c(1, 2), x = c(10, 7), dims = c(6, 2))
-
-    snp_data <- SNPData(
-        ref_count = ref_count,
-        alt_count = alt_count,
-        snp_info = snp_info,
-        barcode_info = barcode_info
-    )
+    snp_data <- make_snpdata_with_chr_style("ucsc")
 
     # Verify subsetting works correctly
     subset_data <- snp_data[1:3, ]

@@ -34,7 +34,7 @@ convert_chr_style(c("chr1", "chrX"), from_style = "ucsc", to_style = "refseq_mou
 }
 \seealso{
 Other chromosome naming functions:
-\code{\link[=detect_chr_style]{detect_chr_style()}},
-\code{\link[=normalize_chr_names]{normalize_chr_names()}}
+\code{\link[=detect_chr_style]{detect_chr_style()}}
 }
 \concept{chromosome naming functions}
+\keyword{internal}

@@ -12,7 +12,7 @@
     row_idx_in_expanded <- retained_rows_set[rows_to_keep]
 
     if (is.null(col_mapping)) {
-        # Original behavior: match by column names
+        # Original behaviour: match by column names
         retained_cols_set <- setNames(seq_along(retained_cols), retained_cols)
         mat_cols <- colnames(mat)
 
@@ -54,7 +54,7 @@
         rownames(expanded) <- retained_rows
         colnames(expanded) <- retained_cols
     } else {
-        # Barcode-based behavior: use column mapping
+        # Barcode-based behaviour: use column mapping
         # Only process columns that map to retained positions
         valid_cols <- !is.na(col_mapping)
 
@@ -133,6 +133,115 @@
     merged <- merged[order_idx, , drop = FALSE]
 
     tibble::as_tibble(merged)
+}
+
+.merge_donor_info <- function(x, y, donors_retained) {
+    auto_cols <- c("n_cells")
+    donor_info_x <- donor_info(x) %>% dplyr::select(-dplyr::any_of(auto_cols))
+    donor_info_y <- donor_info(y) %>% dplyr::select(-dplyr::any_of(auto_cols))
+
+    merged <- dplyr::full_join(
+        donor_info_x,
+        donor_info_y,
+        by = "donor",
+        suffix = c(".x", ".y")
+    )
+
+    x_conflicts <- grep("\\.x$", colnames(merged), value = TRUE)
+    for (x_col in x_conflicts) {
+        base_col <- sub("\\.x$", "", x_col)
+        y_col <- paste0(base_col, ".y")
+        merged[[base_col]] <- dplyr::coalesce(merged[[x_col]], merged[[y_col]])
+        merged[[x_col]] <- NULL
+        merged[[y_col]] <- NULL
+    }
+
+    merged <- merged[merged$donor %in% donors_retained, , drop = FALSE]
+    order_idx <- match(donors_retained, merged$donor)
+    if (any(is.na(order_idx))) {
+        stop("Some donors could not be matched during merge_donor_info()")
+    }
+    merged <- merged[order_idx, , drop = FALSE]
+
+    tibble::as_tibble(merged)
+}
+
+# Merging donor_snp_info is not a plain coalesce: the same (snp_id, donor,
+# zygosity_source) call disagreeing between x and y on a "hazard" column
+# (zygosity, the XCI phase, or informativeness) is a genuine reproducibility
+# problem and must stop the merge rather than silently pick a side. Numeric
+# estimate columns (p-values, GT posteriors, escape fractions) are exempt:
+# two independently fit/tested values can differ by floating point alone,
+# which is not a hazard, so those keep the x-priority coalesce used
+# elsewhere in this file. zygosity_source is part of the join key (a pair
+# may carry one row per source), not a value to compare -- the object-level
+# *active* source is a separate concern, resolved by .merge_zygosity_source().
+.merge_donor_snp_info <- function(x, y, snp_ids_retained, donors_retained) {
+    hazard_cols <- c("zygosity", "allele_on_x1", "xci_informative")
+    key_cols <- c("snp_id", "donor", "zygosity_source")
+
+    dsi_x <- donor_snp_info(x, source = "all")
+    dsi_y <- donor_snp_info(y, source = "all")
+    value_cols <- setdiff(colnames(dsi_x), key_cols)
+
+    merged <- dplyr::full_join(
+        dsi_x,
+        dsi_y,
+        by = key_cols,
+        suffix = c(".x", ".y")
+    )
+
+    for (col in value_cols) {
+        x_col <- paste0(col, ".x")
+        y_col <- paste0(col, ".y")
+        if (!all(c(x_col, y_col) %in% colnames(merged))) {
+            next
+        }
+
+        if (col %in% hazard_cols) {
+            conflict <- !is.na(merged[[x_col]]) & !is.na(merged[[y_col]]) & merged[[x_col]] != merged[[y_col]]
+            if (any(conflict)) {
+                conflict_labels <- paste0(merged$snp_id[conflict], "/", merged$donor[conflict])
+                conflict_msg <- paste(head(conflict_labels, 5), collapse = ", ")
+                if (length(conflict_labels) > 5) {
+                    conflict_msg <- paste0(conflict_msg, ", ... (", length(conflict_labels), " conflicts)")
+                }
+                stop(sprintf(
+                    "merge_snpdata(): conflicting '%s' values in donor_snp_info for snp_id/donor %s. %s",
+                    col,
+                    conflict_msg,
+                    "Resolve the disagreement before merging."
+                ))
+            }
+        }
+
+        merged[[col]] <- dplyr::coalesce(merged[[x_col]], merged[[y_col]])
+        merged[[x_col]] <- NULL
+        merged[[y_col]] <- NULL
+    }
+
+    merged <- merged[merged$snp_id %in% snp_ids_retained & merged$donor %in% donors_retained, , drop = FALSE]
+    tibble::as_tibble(merged)
+}
+
+# Resolves the object-level *active* zygosity_source slot for a merge, using
+# the same error-on-conflict/coalesce-on-agreement philosophy as the hazard
+# columns above: if both objects have an active source and they differ,
+# merging would silently change which source drives downstream analysis, so
+# it errors instead. If only one is set, that one carries over.
+.merge_zygosity_source <- function(x, y) {
+    source_x <- zygosity_source(x)
+    source_y <- zygosity_source(y)
+
+    if (!is.na(source_x) && !is.na(source_y) && source_x != source_y) {
+        stop(sprintf(
+            "merge_snpdata(): conflicting active zygosity_source ('%s' vs '%s'). Resolve with zygosity_source<-() before merging.",
+            source_x,
+            source_y
+        ))
+    }
+
+    dplyr::coalesce(source_x, source_y)
 }
 
 .merge_barcode_info <- function(x, y, barcodes_retained, cell_join) {

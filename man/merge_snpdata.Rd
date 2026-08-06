@@ -60,6 +60,16 @@ SNPs or cells with conflicting metadata, values from x take priority. Auto-
 computed columns (coverage, non_zero_samples, library_size, non_zero_snps)
 are recalculated for the merged object.
 
+\code{donor_info} is merged the same way (x takes priority, \code{n_cells}
+recalculated). \code{donor_snp_info} instead \strong{errors} if x and y disagree on
+\code{zygosity}, \code{zygosity_source}, \code{allele_on_x1}, or
+\code{xci_informative} for the same (SNP, donor) pair, since a silent pick would hide
+a real reproducibility problem; numeric estimate columns (p-values, GT posteriors,
+escape fractions) still take x priority on conflict, since two independently fit or
+tested values can differ by floating point alone. A donor with no cells left after
+the \code{cell_join} has its \code{donor_info}/\code{donor_snp_info} rows dropped, same
+as subsetting.
+
 The independent join parameters enable fine-grained control:
 \itemize{
   \item \code{snp_join="union", cell_join="union"}: Maximum data retention

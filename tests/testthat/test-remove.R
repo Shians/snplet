@@ -65,8 +65,9 @@ test_that("remove_doublets keeps only non-doublet cells", {
 
     filtered_data <- remove_doublets(snp_data)
 
+    remaining_barcode_info <- barcode_info(filtered_data)
+
     # Verify remaining cell is the non-doublet donor
-    remaining_barcode_info <- get_barcode_info(filtered_data)
     expect_equal(remaining_barcode_info$donor, "donor_1")
 })
 
@@ -87,7 +88,7 @@ test_that("remove_doublets preserves SNP info", {
     filtered_data <- remove_doublets(snp_data)
 
     # Verify SNP info unchanged (row subsetting not affected)
-    expect_equal(nrow(get_snp_info(filtered_data)), 3)
+    expect_equal(nrow(snp_info(filtered_data)), 3)
 })
 
 test_that("remove_doublets handles missing donor column", {
@@ -164,14 +165,15 @@ test_that("remove_doublets keeps NA donors when drop_na is FALSE", {
     expect_equal(ncol(filtered_keep_na), 3)
 })
 
-test_that("remove_doublets validates input", {
-    # Test with non-SNPData object
+test_that("remove_doublets errors when input is not a SNPData object", {
     # Verify error when input is not SNPData object
     expect_error(
         remove_doublets("not_snpdata"),
         "Input must be a SNPData object"
     )
+})
 
+test_that("remove_doublets errors when input is NULL", {
     # Verify error with NULL input
     expect_error(
         remove_doublets(NULL),
@@ -202,7 +204,7 @@ test_that("remove_na_genes keeps only SNPs with valid gene names", {
 
     filtered_data <- remove_na_genes(snp_data)
 
-    remaining_snp_info <- get_snp_info(filtered_data)
+    remaining_snp_info <- snp_info(filtered_data)
     # Verify remaining SNPs don't have NA gene names
     expect_false(any(is.na(remaining_snp_info$gene_name)))
     # Check that correct genes are retained
@@ -226,7 +228,7 @@ test_that("remove_na_genes preserves barcode info", {
     filtered_data <- remove_na_genes(snp_data)
 
     # Verify barcode info structure is unchanged (column subsetting not affected)
-    expect_equal(ncol(get_barcode_info(filtered_data)), ncol(get_barcode_info(snp_data)))
+    expect_equal(ncol(barcode_info(filtered_data)), ncol(barcode_info(snp_data)))
 })
 
 test_that("remove_na_genes handles missing gene column", {
@@ -274,7 +276,7 @@ test_that("remove_na_genes handles custom gene column", {
 
     # Verify filtering worked with custom column
     expect_equal(nrow(filtered_data), 2)
-    remaining_snp_info <- get_snp_info(filtered_data)
+    remaining_snp_info <- snp_info(filtered_data)
     # Check that NA genes are removed from custom column
     expect_false(any(is.na(remaining_snp_info$custom_gene)))
 })
@@ -311,7 +313,7 @@ test_that("remove_na_clonotypes keeps only cells with valid clonotypes", {
 
     filtered_data <- remove_na_clonotypes(snp_data)
 
-    remaining_barcode_info <- get_barcode_info(filtered_data)
+    remaining_barcode_info <- barcode_info(filtered_data)
     # Verify remaining cells don't have NA clonotypes
     expect_false(any(is.na(remaining_barcode_info$clonotype)))
     # Check that correct clonotype is retained
@@ -335,7 +337,7 @@ test_that("remove_na_clonotypes preserves SNP info", {
     filtered_data <- remove_na_clonotypes(snp_data)
 
     # Verify SNP info unchanged (row subsetting not affected)
-    expect_equal(nrow(get_snp_info(filtered_data)), 3)
+    expect_equal(nrow(snp_info(filtered_data)), 3)
 })
 
 test_that("remove_na_clonotypes handles missing clonotype column", {
@@ -383,7 +385,7 @@ test_that("remove_na_clonotypes handles custom clonotype column", {
 
     # Verify filtering worked with custom column
     expect_equal(ncol(filtered_data), 1)
-    remaining_barcode_info <- get_barcode_info(filtered_data)
+    remaining_barcode_info <- barcode_info(filtered_data)
     # Check that NA clonotypes are removed
     expect_false(any(is.na(remaining_barcode_info$custom_clonotype)))
 })

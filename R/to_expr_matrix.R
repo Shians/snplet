@@ -37,7 +37,7 @@ setGeneric("to_expr_matrix", function(x, level = c("barcode", "clonotype", "dono
 #' @include SNPData-class.R
 setMethod("to_expr_matrix", signature(x = "SNPData"), function(x, level = c("barcode", "clonotype", "donor")) {
     level <- match.arg(level)
-    barcode_info <- get_barcode_info(x)
+    barcode_info <- barcode_info(x)
 
     if (level != "barcode" && !level %in% colnames(barcode_info)) {
         if (level == "clonotype") {
@@ -90,7 +90,7 @@ setMethod("to_expr_matrix", signature(x = "SNPData"), function(x, level = c("bar
             )
         }
         stop(
-            "All donor values are NA. Cannot perform donor-level aggregation. Add donor data using add_barcode_metadata() or import_cellsnp() with vireo_file parameter."
+            "All donor values are NA. Cannot perform donor-level aggregation. Add donor data using add_barcode_metadata() or import_cellsnp() with vireo_folder parameter."
         )
     }
 

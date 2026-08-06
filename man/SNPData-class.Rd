@@ -12,14 +12,27 @@
 \alias{alt_count,SNPData-method}
 \alias{oth_count}
 \alias{oth_count,SNPData-method}
+\alias{snp_info}
+\alias{snp_info,SNPData-method}
 \alias{get_snp_info}
-\alias{get_snp_info,SNPData-method}
+\alias{barcode_info}
+\alias{barcode_info,SNPData-method}
 \alias{get_barcode_info}
-\alias{get_barcode_info,SNPData-method}
 \alias{get_sample_info}
 \alias{get_sample_info,SNPData-method}
+\alias{donor_info}
+\alias{donor_info,SNPData-method}
+\alias{get_donor_info}
+\alias{donor_snp_info}
+\alias{donor_snp_info,SNPData-method}
+\alias{get_donor_snp_info}
 \alias{chr_style}
 \alias{chr_style,SNPData-method}
+\alias{zygosity_source}
+\alias{zygosity_source,SNPData-method}
+\alias{zygosity_source<-}
+\alias{zygosity_source<-,SNPData,character-method}
+\alias{updateObject,SNPData-method}
 \alias{barcode_info<-}
 \alias{barcode_info<-,SNPData,data.frame-method}
 \alias{snp_info<-}
@@ -36,9 +49,27 @@
 \usage{
 \S4method{[}{SNPData,ANY,ANY,ANY}(x, i, j)
 
-SNPData(ref_count, alt_count, snp_info, barcode_info, oth_count = NULL)
+SNPData(
+  ref_count,
+  alt_count,
+  snp_info,
+  barcode_info,
+  oth_count = NULL,
+  donor_info = NULL,
+  donor_snp_info = NULL,
+  donor_map = NULL
+)
 
-\S4method{SNPData}{Matrix,Matrix,data.frame,data.frame}(ref_count, alt_count, snp_info, barcode_info, oth_count = NULL)
+\S4method{SNPData}{Matrix,Matrix,data.frame,data.frame}(
+  ref_count,
+  alt_count,
+  snp_info,
+  barcode_info,
+  oth_count = NULL,
+  donor_info = NULL,
+  donor_snp_info = NULL,
+  donor_map = NULL
+)
 
 ref_count(x)
 
@@ -52,21 +83,47 @@ oth_count(x)
 
 \S4method{oth_count}{SNPData}(x)
 
+snp_info(x)
+
+\S4method{snp_info}{SNPData}(x)
+
 get_snp_info(x)
 
-\S4method{get_snp_info}{SNPData}(x)
+barcode_info(x)
+
+\S4method{barcode_info}{SNPData}(x)
 
 get_barcode_info(x)
-
-\S4method{get_barcode_info}{SNPData}(x)
 
 get_sample_info(x)
 
 \S4method{get_sample_info}{SNPData}(x)
 
+donor_info(x)
+
+\S4method{donor_info}{SNPData}(x)
+
+get_donor_info(x)
+
+donor_snp_info(x, source = NULL)
+
+\S4method{donor_snp_info}{SNPData}(x, source = NULL)
+
+get_donor_snp_info(x, source = NULL)
+
 chr_style(x)
 
 \S4method{chr_style}{SNPData}(x)
+
+zygosity_source(x)
+
+\S4method{zygosity_source}{SNPData}(x)
+
+zygosity_source(x) <- value
+
+\S4method{zygosity_source}{SNPData,character}(x) <- value
+
+\S4method{updateObject}{SNPData}(object, ..., verbose = FALSE)
 
 barcode_info(x) <- value
 
@@ -109,9 +166,39 @@ coverage(x)
 
 \item{oth_count}{A sparse Matrix containing other allele counts (SNPs x cells), optional}
 
+\item{donor_info}{A data.frame with one row per donor, optional. Defaults to one row per
+distinct value of \code{barcode_info$donor} (empty if \code{barcode_info} has no
+\code{donor} column). Must contain a \code{donor} column; \code{n_cells} is computed
+automatically.}
+
+\item{donor_snp_info}{A data.frame with one row per (\code{snp_id}, \code{donor},
+\code{zygosity_source}) triple, optional -- a pair may carry more than one row when
+more than one source has called it (e.g. a \code{"vireo_gt"} row and a
+\code{"binomial"} row for the same pair). Defaults to an empty table. Must contain
+\code{snp_id} and \code{donor} columns, both of which must already appear in
+\code{snp_info}/\code{donor_info}; a row with a non-\code{NA} \code{zygosity} must
+also carry a non-\code{NA} \code{zygosity_source}.}
+
+\item{donor_map}{A named character vector, \code{c(new_label = old_label, ...)} (the same
+\code{new = old} convention as \code{dplyr::rename()}), optional. Applied to
+\code{barcode_info$donor} and, if supplied, \code{donor_info$donor}/
+\code{donor_snp_info$donor} before the object is built -- useful since Vireo assigns
+arbitrary labels (\code{donor0}, \code{donor1}, ...) that this can relabel at import
+time rather than after the fact via \code{\link{rename_donor}}.}
+
+\item{source}{Character vector of \code{zygosity_source} value(s) to filter
+\code{donor_snp_info(x)} to, or \code{"all"} to return every source unfiltered.
+Defaults to \code{NULL}, meaning the object's active source (see
+\code{\link{zygosity_source}}).}
+
 \item{value}{A data.frame for replacement methods (barcode_info<- or snp_info<-)}
 
 \item{object}{A SNPData object for show method}
+
+\item{...}{Additional arguments (unused; required by the \code{updateObject} generic)}
+
+\item{verbose}{Logical, whether \code{updateObject} logs which legacy slots it migrated
+(default \code{FALSE})}
 }
 \value{
 A subsetted SNPData object
@@ -137,6 +224,24 @@ cell/barcode metadata to support allele-specific expression analysis workflows.
 \item{\code{barcode_info}}{A data.frame containing cell/barcode metadata with automatically computed library_size and non_zero_snps columns}
 
 \item{\code{chr_style}}{Character string indicating the chromosome naming style. One of: "numeric", "ucsc", "refseq_mouse", "genbank_mouse", "refseq_human", "genbank_human", or "unknown"}
+
+\item{\code{donor_info}}{A tibble with one row per donor and an automatically computed
+\code{n_cells} column. Rows are dropped when a donor loses all of its cells, via
+subsetting or \code{merge_snpdata()}.}
+
+\item{\code{donor_snp_info}}{A tibble with one row per (\code{snp_id}, \code{donor},
+\code{zygosity_source}) triple, carrying zygosity calls (\code{zygosity},
+\code{zygosity_source} and per-source confidence columns) and XCI fit diagnostics
+(\code{xci_informative}, \code{allele_on_x1}, \code{xci_escape_fraction}) written by
+\code{\link{assign_xci}} for whichever source was active when it ran. Rows are dropped
+along with their donor, same as \code{donor_info}.}
+
+\item{\code{zygosity_source}}{Character string naming the \emph{active} zygosity-call source
+(a value of \code{donor_snp_info$zygosity_source}), or \code{NA_character_} if none
+has been established yet. \code{\link{donor_snp_info}}, \code{\link{assign_xci}}, and
+other zygosity-dependent functions default to this source; switch it with
+\code{zygosity_source<-()}. Set automatically at import (e.g. \code{"vireo_gt"} after
+importing Vireo genotypes) or by \code{\link{infer_zygosity}}.}
 }}
 
 \section{Accessors}{
@@ -145,10 +250,15 @@ cell/barcode metadata to support allele-specific expression analysis workflows.
   \item{\code{ref_count(x)}}{Get reference allele count matrix}
   \item{\code{alt_count(x)}}{Get alternate allele count matrix}
   \item{\code{oth_count(x)}}{Get other allele count matrix}
-  \item{\code{get_snp_info(x)}}{Get SNP metadata data.frame}
-  \item{\code{get_barcode_info(x)}}{Get cell/barcode metadata data.frame}
-  \item{\code{get_sample_info(x)}}{Alias for get_barcode_info()}
+  \item{\code{snp_info(x)}}{Get SNP metadata data.frame (alias: \code{get_snp_info()})}
+  \item{\code{barcode_info(x)}}{Get cell/barcode metadata data.frame (alias: \code{get_barcode_info()})}
+  \item{\code{get_sample_info(x)}}{Alias for barcode_info()}
+  \item{\code{donor_info(x)}}{Get per-donor metadata tibble (alias: \code{get_donor_info()})}
+  \item{\code{donor_snp_info(x, source = NULL)}}{Get per-(SNP, donor) metadata tibble,
+    filtered to the active zygosity source by default (alias: \code{get_donor_snp_info()})}
   \item{\code{chr_style(x)}}{Get chromosome naming style}
+  \item{\code{zygosity_source(x)}}{Get the active zygosity-call source; set with
+    \code{zygosity_source<-()}}
   \item{\code{coverage(x)}}{Get total coverage matrix (ref + alt counts)}
 }
 }
@@ -187,8 +297,8 @@ ref_counts <- ref_count(snp_data)
 alt_counts <- alt_count(snp_data)
 
 # Access metadata
-snp_metadata <- get_snp_info(snp_data)
-cell_metadata <- get_barcode_info(snp_data)
+snp_metadata <- snp_info(snp_data)
+cell_metadata <- barcode_info(snp_data)
 
 # Calculate derived metrics
 total_coverage <- coverage(snp_data)

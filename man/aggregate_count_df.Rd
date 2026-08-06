@@ -12,7 +12,9 @@ aggregate_count_df(x, group_by, test_maf = TRUE)
 \arguments{
 \item{x}{A SNPData object}
 
-\item{group_by}{Character string specifying the column name in barcode_info to group by}
+\item{group_by}{Character vector specifying the column name(s) in barcode_info to group by. When
+more than one column is given, counts are aggregated over each unique combination of values
+across those columns, and each grouping column is retained in the output.}
 
 \item{test_maf}{Logical, whether to include a test_maf column (default TRUE)}
 }
@@ -30,6 +32,9 @@ aggregate_count_df(snp_data, "donor")
 
 # Aggregate by clonotype
 aggregate_count_df(snp_data, "clonotype")
+
+# Aggregate by donor and cell_type combined
+aggregate_count_df(snp_data, c("donor", "cell_type"))
 }
 }
 \seealso{

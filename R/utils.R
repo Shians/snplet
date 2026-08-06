@@ -7,7 +7,6 @@ utils::globalVariables(c(
     "allele_on_x1",
     "alt",
     "barcode",
-    "binom_p_value",
     "cell",
     "cell_id",
     "gene",
@@ -19,46 +18,80 @@ utils::globalVariables(c(
     "donor_id",
     "end",
     "gene_name",
-    "inactive_x",
-    "inactive_x_prob",
+    "active_x",
     "pi_g",
     "escape_fraction",
     "xci_informative",
     "xci_informative_donor",
-    "xci_allele_on_x1",
+    "xci_allele_on_x1_by_donor",
+    "xci_escape_fraction_by_donor",
     "xci_escape_fraction",
-    "xci_post_X1",
+    "xci_post_X1_active",
     "xci_fit_unit",
     "unit_id",
     "library_size",
     "maf",
-    "minor_count",
     "minor_allele_count",
     "n",
-    "n_het_donors",
     "p_val",
     "pos",
     "ref",
     "assignment",
-    "ll_X1",
-    "ll_X2",
+    "ll_x1_inactive",
+    "ll_x2_inactive",
     "llr",
     "lor",
     "pi",
-    "post_X1",
-    "post_X2",
-    "sum_X1",
-    "sum_X2",
+    "post_X1_active",
+    "post_X2_active",
     "xi_ref_count",
     "xi_total",
     "seqnames",
-    "signif_snps_clonotype",
     "snp_id",
     "start",
     "tested",
     "total_count",
-    "total_library_size",
-    "zygosity"
+    "active_count",
+    "inactive_count",
+    "dominant_allele",
+    "same_allele_dominant",
+    "escapes",
+    "zygosity",
+    "zygosity_source",
+    "umi",
+    "allele",
+    "n_calls",
+    "qname",
+    "base",
+    "base_quality",
+    "read_idx",
+    "snp_idx",
+    "snp_a",
+    "snp_b",
+    "same",
+    "n_same",
+    "relation",
+    "consistency",
+    "n_genes",
+    "allele_on_h1",
+    "allele_on_x1_em",
+    "allele_on_x1_molecule",
+    "implies_h1_is_x1",
+    "block",
+    "n_anchors",
+    "n_x1",
+    "n_x2",
+    "orientation",
+    "own_vote",
+    "is_outlier_anchor",
+    "phase_conflict",
+    "phase_source",
+    "phase_block",
+    "is_x1",
+    "haplotype",
+    "molecules",
+    "dominant_molecules",
+    "n_stranded_molecules"
 ))
 
 percentile_summary <- function(x, percentiles = c(0.1, 0.25, 0.75, 0.9, 0.95, 0.99)) {
@@ -112,7 +145,7 @@ groupedRowSums <- function(x, groups) {
     out
 }
 
-#' Generate standardized SNP IDs from genomic coordinates
+#' Generate standardised SNP IDs from genomic coordinates
 #'
 #' Creates SNP identifiers in the format "chr:pos:ref:alt" for consistent
 #' identification across datasets. This format is deterministic and contains
@@ -202,6 +235,62 @@ binom_test <- function(x, n, p, alternative = c("greater", "less")) {
     p_val
 }
 
+#' Vectorised exact beta-binomial test
+#'
+#' Computes one-sided beta-binomial test p-values, the overdispersed analogue
+#' of \code{\link{binom_test}}. Uses \code{VGAM::pbetabinom} directly rather
+#' than a closed-form identity (unlike \code{binom_test}, no beta-CDF shortcut
+#' is available for the beta-binomial), but is still fully vectorised over
+#' `x`, `n`, `p` and `rho`.
+#'
+#' \itemize{
+#'   \item `alternative = "greater"`: \eqn{P(X \ge x) = 1 - \mathrm{pbetabinom}(x - 1, n, p, \rho)}.
+#'     Edge case: when `x == 0`, the p-value is 1.
+#'   \item `alternative = "less"`: \eqn{P(X \le x) = \mathrm{pbetabinom}(x, n, p, \rho)}.
+#'     Edge case: when `x == n`, the p-value is 1.
+#' }
+#'
+#' `rho = 0` reduces to the exact binomial test (VGAM's beta-binomial CDF is
+#' well-defined at `rho = 0`).
+#'
+#' @param x Integer vector of successes.
+#' @param n Integer vector of trials. Recycled with `x`.
+#' @param p Numeric scalar or vector giving the hypothesised probability of
+#'   success under the null. Recycled with `x` and `n`.
+#' @param rho Numeric scalar or vector in `[0, 1)` giving the beta-binomial
+#'   overdispersion. Recycled with `x`, `n` and `p`.
+#' @param alternative One of `"greater"` or `"less"`.
+#'
+#' @return Numeric vector of p-values, the same length as the recycled inputs.
+#'
+#' @keywords internal
+betabinom_test <- function(x, n, p, rho, alternative = c("greater", "less")) {
+    alternative <- match.arg(alternative)
+
+    if (any(x < 0, na.rm = TRUE) || any(x > n, na.rm = TRUE)) {
+        stop("x must satisfy 0 <= x <= n")
+    }
+    if (any(p < 0 | p > 1, na.rm = TRUE)) {
+        stop("p must be in [0, 1]")
+    }
+    if (any(rho < 0 | rho >= 1, na.rm = TRUE)) {
+        stop("rho must be in [0, 1)")
+    }
+
+    if (alternative == "greater") {
+        p_val <- 1 - VGAM::pbetabinom(x - 1, n, p, rho)
+        p_val[x == 0] <- 1
+    } else {
+        p_val <- VGAM::pbetabinom(x, n, p, rho)
+        p_val[x == n] <- 1
+    }
+
+    # VGAM::pbetabinom can overshoot 1 by floating-point error (observed up to
+    # ~4e-16) for some (x, n, p, rho) combinations, which turns 1 - pbetabinom(...)
+    # slightly negative. Clamp to the documented [0, 1] range.
+    pmin(pmax(p_val, 0), 1)
+}
+
 #' Check if a file exists
 #' @param path Path to the file to check
 check_file <- function(path) {
@@ -248,7 +337,7 @@ check_file <- function(path) {
 #' }
 #'
 #' @family chromosome naming functions
-#' @export
+#' @keywords internal
 detect_chr_style <- function(chr_names) {
     if (length(chr_names) == 0) {
         return("unknown")
@@ -311,10 +400,10 @@ detect_chr_style <- function(chr_names) {
     "unknown"
 }
 
-#' Normalize chromosome names to canonical form
+#' Normalise chromosome names to canonical form
 #'
-#' Converts chromosome names from any recognized style to the canonical UCSC form (chr1, chr2, chrX).
-#' Recognized styles include: numeric, UCSC (chr-prefix), RefSeq, and GenBank accessions
+#' Converts chromosome names from any recognised style to the canonical UCSC form (chr1, chr2, chrX).
+#' Recognised styles include: numeric, UCSC (chr-prefix), RefSeq, and GenBank accessions
 #' for mouse and human genomes.
 #'
 #' @param chr_names Character vector of chromosome names
@@ -324,17 +413,9 @@ detect_chr_style <- function(chr_names) {
 #'
 #' @return Character vector of chromosome names in canonical UCSC form
 #'
-#' @examples
-#' \dontrun{
-#' normalize_chr_names(c("1", "2", "X"))  # Returns c("chr1", "chr2", "chrX")
-#' normalize_chr_names(c("NC_000067.6", "NC_000086.7"), from_style = "refseq_mouse")
-#' # Returns c("chr1", "chrX")
-#' }
-#'
 #' @importFrom magrittr set_names
-#' @family chromosome naming functions
-#' @export
-normalize_chr_names <- function(chr_names, from_style = "auto") {
+#' @noRd
+normalise_chr_names <- function(chr_names, from_style = "auto") {
     if (from_style == "auto") {
         from_style <- detect_chr_style(chr_names)
     }
@@ -354,12 +435,12 @@ normalize_chr_names <- function(chr_names, from_style = "auto") {
     lookup <- magrittr::set_names(chr_table$ucsc, chr_table[[from_style]])
 
     # Map chromosomes, keeping NA for unmatched values
-    normalized <- lookup[chr_names]
+    normalised <- lookup[chr_names]
 
     # For any NA values, keep original
-    normalized[is.na(normalized)] <- chr_names[is.na(normalized)]
+    normalised[is.na(normalised)] <- chr_names[is.na(normalised)]
 
-    as.character(normalized)
+    as.character(normalised)
 }
 
 #' Convert chromosome names between styles
@@ -385,10 +466,10 @@ normalize_chr_names <- function(chr_names, from_style = "auto") {
 #' }
 #'
 #' @family chromosome naming functions
-#' @export
+#' @keywords internal
 convert_chr_style <- function(chr_names, from_style = "auto", to_style = "ucsc") {
-    # First normalize to canonical UCSC form
-    canonical <- normalize_chr_names(chr_names, from_style)
+    # First normalise to canonical UCSC form
+    canonical <- normalise_chr_names(chr_names, from_style)
 
     if (to_style == "ucsc") {
         return(canonical)

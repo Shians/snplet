@@ -8,26 +8,32 @@ library(Matrix)
 
 # ==============================================================================
 
-test_that("get_example_snpdata works correctly", {
-    # Setup - Load example data
+test_that("get_example_snpdata returns a valid SNPData object with data", {
     snp_data <- get_example_snpdata()
 
-    # Test basic object structure
     # Verify get_example_snpdata returns a valid SNPData object
     expect_s4_class(snp_data, "SNPData")
     # Verify example data has SNPs (rows > 0)
     expect_true(nrow(snp_data) > 0)
     # Verify example data has samples (columns > 0)
     expect_true(ncol(snp_data) > 0)
+})
 
-    # Test SNP info structure
-    snp_info <- get_snp_info(snp_data)
+test_that("get_example_snpdata includes essential SNP info columns", {
+    snp_data <- get_example_snpdata()
+
+    snp_info <- snp_info(snp_data)
     expected_snp_cols <- c("snp_id", "chrom", "pos")
+
     # Verify essential SNP info columns are present
     expect_true(all(expected_snp_cols %in% colnames(snp_info)))
+})
 
-    # Test sample info structure
-    barcode_info <- get_barcode_info(snp_data)
+test_that("get_example_snpdata includes cell_id in sample info", {
+    snp_data <- get_example_snpdata()
+
+    barcode_info <- barcode_info(snp_data)
+
     # Verify cell_id column is present in sample info
     expect_true("cell_id" %in% colnames(barcode_info))
 })
@@ -229,53 +235,67 @@ test_that("merge_cell_annotations handles mixed column naming scenarios", {
     expect_equal(cell2_row$clonotype, "clonotype2")
 })
 
-test_that("import_cellsnp works with example data", {
-    # Setup - Get example data file paths
+# Shared fixture paths and import call for the "works with example data" tests below
+import_example_snpdata <- function() {
     cellsnp_dir <- system.file("extdata/example_snpdata", package = "snplet")
     vdj_file <- system.file("extdata/example_snpdata/filtered_contig_annotations.csv", package = "snplet")
     gene_anno_file <- system.file("extdata/example_gene_anno.tsv", package = "snplet")
-    vireo_file <- system.file("extdata/example_snpdata/donor_ids.tsv", package = "snplet")
+    vireo_folder <- system.file("extdata/example_snpdata", package = "snplet")
 
-    required_files <- c(cellsnp_dir, vdj_file, gene_anno_file, vireo_file)
+    required_files <- c(cellsnp_dir, vdj_file, gene_anno_file, file.path(vireo_folder, "donor_ids.tsv"))
     skip_if_not(all(file.exists(required_files)), "Example data files not found")
 
-    # Load gene annotation
     gene_annotation <- readr::read_tsv(gene_anno_file, show_col_types = FALSE)
 
-    # Execute import
-    # Verify import completes without error
-    snp_data <- expect_no_error(import_cellsnp(
+    import_cellsnp(
         cellsnp_dir = cellsnp_dir,
         gene_annotation = gene_annotation,
         vdj_file = vdj_file,
-        vireo_file = vireo_file
-    ))
+        vireo_folder = vireo_folder
+    )
+}
 
-    # Test return object
+test_that("import_cellsnp completes without error and returns a populated SNPData object", {
+    # Verify import completes without error
+    snp_data <- expect_no_error(import_example_snpdata())
+
     # Verify import_cellsnp returns a valid SNPData object
     expect_s4_class(snp_data, "SNPData")
     # Verify imported data has SNPs (rows > 0)
     expect_true(nrow(snp_data) > 0)
     # Verify imported data has samples (columns > 0)
     expect_true(ncol(snp_data) > 0)
+})
 
-    # Test matrix dimension consistency
+test_that("import_cellsnp returns matrices with consistent dimensions", {
+    snp_data <- import_example_snpdata()
+
     # Verify ref_count and alt_count matrices have same dimensions
     expect_equal(dim(ref_count(snp_data)), dim(alt_count(snp_data)))
     # Verify ref_count and oth_count matrices have same dimensions
     expect_equal(dim(ref_count(snp_data)), dim(oth_count(snp_data)))
+})
 
-    # Test metadata structure
-    snp_info <- get_snp_info(snp_data)
-    barcode_info <- get_barcode_info(snp_data)
+test_that("import_cellsnp metadata row counts match matrix dimensions", {
+    snp_data <- import_example_snpdata()
+
+    snp_info <- snp_info(snp_data)
+    barcode_info <- barcode_info(snp_data)
+
     # Verify SNP info rows match matrix rows
     expect_equal(nrow(snp_info), nrow(snp_data))
     # Verify sample info rows match matrix columns
     expect_equal(nrow(barcode_info), ncol(snp_data))
+})
 
-    # Test required columns
+test_that("import_cellsnp metadata includes all expected columns", {
+    snp_data <- import_example_snpdata()
+
+    snp_info <- snp_info(snp_data)
+    barcode_info <- barcode_info(snp_data)
     expected_snp_cols <- c("snp_id", "chrom", "pos", "ref", "alt")
     expected_sample_cols <- c("cell_id", "donor", "clonotype")
+
     # Verify all expected SNP info columns are present
     expect_true(all(expected_snp_cols %in% colnames(snp_info)))
     # Verify all expected sample info columns are present
@@ -340,75 +360,90 @@ test_that("merge_cell_annotations works without VDJ info", {
     expect_equal(cell1_row$donor, "donor1")
 })
 
-test_that("import_cellsnp works without vdj_file", {
-    # Setup - Get example data file paths without VDJ
+# Shared fixture for the "import without vdj_file" tests below
+import_snpdata_without_vdj <- function() {
     cellsnp_dir <- system.file("extdata/example_snpdata", package = "snplet")
     gene_anno_file <- system.file("extdata/example_gene_anno.tsv", package = "snplet")
-    vireo_file <- system.file("extdata/example_snpdata/donor_ids.tsv", package = "snplet")
+    vireo_folder <- system.file("extdata/example_snpdata", package = "snplet")
 
-    required_files <- c(cellsnp_dir, gene_anno_file, vireo_file)
+    required_files <- c(cellsnp_dir, gene_anno_file, file.path(vireo_folder, "donor_ids.tsv"))
     skip_if_not(all(file.exists(required_files)), "Example data files not found")
 
-    # Load gene annotation
     gene_annotation <- readr::read_tsv(gene_anno_file, show_col_types = FALSE)
 
-    # Execute import without VDJ file
-    # Verify import completes without error
-    snp_data <- expect_no_error(import_cellsnp(
+    import_cellsnp(
         cellsnp_dir = cellsnp_dir,
         gene_annotation = gene_annotation,
-        vireo_file = vireo_file
-    ))
+        vireo_folder = vireo_folder
+    )
+}
 
-    # Test return object
+test_that("import_cellsnp without vdj_file completes without error and returns a populated SNPData object", {
+    # Verify import completes without error
+    snp_data <- expect_no_error(import_snpdata_without_vdj())
+
     # Verify import_cellsnp returns a valid SNPData object without VDJ
     expect_s4_class(snp_data, "SNPData")
     # Verify imported data has SNPs (rows > 0)
     expect_true(nrow(snp_data) > 0)
     # Verify imported data has samples (columns > 0)
     expect_true(ncol(snp_data) > 0)
+})
 
-    # Test metadata structure
-    barcode_info <- get_barcode_info(snp_data)
+test_that("import_cellsnp without vdj_file leaves clonotype as NA", {
+    snp_data <- import_snpdata_without_vdj()
+
+    barcode_info <- barcode_info(snp_data)
+
     # Verify clonotype column exists
     expect_true("clonotype" %in% colnames(barcode_info))
     # Verify all clonotype values are NA when no VDJ file provided
     expect_true(all(is.na(barcode_info$clonotype)))
+})
 
-    # Test required columns
+test_that("import_cellsnp without vdj_file includes expected sample columns", {
+    snp_data <- import_snpdata_without_vdj()
+
+    barcode_info <- barcode_info(snp_data)
     expected_sample_cols <- c("cell_id", "donor")
+
     # Verify expected sample info columns are present
     expect_true(all(expected_sample_cols %in% colnames(barcode_info)))
 })
 
-test_that("import_cellsnp works without vdj_file or vireo_file", {
-    # Setup - Get example data file paths with minimal inputs
+# Shared fixture for the "import without vdj_file or vireo_folder" tests below
+import_snpdata_without_vdj_or_vireo <- function() {
     cellsnp_dir <- system.file("extdata/example_snpdata", package = "snplet")
     gene_anno_file <- system.file("extdata/example_gene_anno.tsv", package = "snplet")
 
     required_files <- c(cellsnp_dir, gene_anno_file)
     skip_if_not(all(file.exists(required_files)), "Example data files not found")
 
-    # Load gene annotation
     gene_annotation <- readr::read_tsv(gene_anno_file, show_col_types = FALSE)
 
-    # Execute import without VDJ or Vireo files
-    # Verify import completes without error
-    snp_data <- expect_no_error(import_cellsnp(
+    import_cellsnp(
         cellsnp_dir = cellsnp_dir,
         gene_annotation = gene_annotation
-    ))
+    )
+}
 
-    # Test return object
+test_that("import_cellsnp without vdj_file or vireo_folder completes without error and returns a populated SNPData object", {
+    # Verify import completes without error
+    snp_data <- expect_no_error(import_snpdata_without_vdj_or_vireo())
+
     # Verify import_cellsnp returns a valid SNPData object with minimal inputs
     expect_s4_class(snp_data, "SNPData")
     # Verify imported data has SNPs (rows > 0)
     expect_true(nrow(snp_data) > 0)
     # Verify imported data has samples (columns > 0)
     expect_true(ncol(snp_data) > 0)
+})
 
-    # Test metadata structure
-    barcode_info <- get_barcode_info(snp_data)
+test_that("import_cellsnp without vdj_file or vireo_folder defaults clonotype and donor columns", {
+    snp_data <- import_snpdata_without_vdj_or_vireo()
+
+    barcode_info <- barcode_info(snp_data)
+
     # Verify clonotype column exists even without VDJ
     expect_true("clonotype" %in% colnames(barcode_info))
     # Verify donor column exists even without Vireo
@@ -417,6 +452,29 @@ test_that("import_cellsnp works without vdj_file or vireo_file", {
     expect_true(all(is.na(barcode_info$clonotype)))
     # Verify all donor values are "donor0" when no Vireo file provided
     expect_true(all(barcode_info$donor == "donor0"))
+})
+
+test_that("import_cellsnp(vireo_folder=) reads donor assignments when the folder has no genotype VCF", {
+    cellsnp_dir <- system.file("extdata/example_snpdata", package = "snplet")
+    gene_anno_file <- system.file("extdata/example_gene_anno.tsv", package = "snplet")
+    vireo_folder <- system.file("extdata/example_snpdata", package = "snplet")
+
+    required_files <- c(cellsnp_dir, gene_anno_file, file.path(vireo_folder, "donor_ids.tsv"))
+    skip_if_not(all(file.exists(required_files)), "Example data files not found")
+    # This folder is expected to have no GT_donors.vireo.vcf.gz -- that's the case under test
+    skip_if(file.exists(file.path(vireo_folder, "GT_donors.vireo.vcf.gz")), "Unexpectedly found a genotype VCF")
+
+    gene_annotation <- readr::read_tsv(gene_anno_file, show_col_types = FALSE)
+    snp_data <- import_cellsnp(
+        cellsnp_dir = cellsnp_dir,
+        gene_annotation = gene_annotation,
+        vireo_folder = vireo_folder
+    )
+
+    # Verify donor assignments were still read from donor_ids.tsv
+    expect_true("donor" %in% colnames(barcode_info(snp_data)))
+    # Verify donor_snp_info stays empty since there was no genotype VCF to parse
+    expect_equal(nrow(donor_snp_info(snp_data)), 0)
 })
 
 test_that("export_cellsnp creates output files", {
@@ -438,12 +496,17 @@ test_that("export_cellsnp creates output files", {
         "filtered_contig_annotations.csv"
     )
 
-    # Verify all expected output files were created
+    # Verify AD matrix file was created
     expect_true(file.exists(file.path(out_dir, "cellSNP.tag.AD.mtx")))
+    # Verify DP matrix file was created
     expect_true(file.exists(file.path(out_dir, "cellSNP.tag.DP.mtx")))
+    # Verify OTH matrix file was created
     expect_true(file.exists(file.path(out_dir, "cellSNP.tag.OTH.mtx")))
+    # Verify base VCF file was created
     expect_true(file.exists(file.path(out_dir, "cellSNP.base.vcf.gz")))
+    # Verify donor IDs file was created
     expect_true(file.exists(file.path(out_dir, "donor_ids.tsv")))
+    # Verify VDJ contig annotations file was created
     expect_true(file.exists(file.path(out_dir, "filtered_contig_annotations.csv")))
 })
 
@@ -472,11 +535,15 @@ test_that("export_cellsnp skips VDJ export when clonotype missing", {
     # Verify VDJ file is not created when clonotype info missing
     expect_false(file.exists(vdj_file))
 
-    # Verify other expected output files were created
+    # Verify AD matrix file was created
     expect_true(file.exists(file.path(out_dir, "cellSNP.tag.AD.mtx")))
+    # Verify DP matrix file was created
     expect_true(file.exists(file.path(out_dir, "cellSNP.tag.DP.mtx")))
+    # Verify OTH matrix file was created
     expect_true(file.exists(file.path(out_dir, "cellSNP.tag.OTH.mtx")))
+    # Verify base VCF file was created
     expect_true(file.exists(file.path(out_dir, "cellSNP.base.vcf.gz")))
+    # Verify donor IDs file was created
     expect_true(file.exists(file.path(out_dir, "donor_ids.tsv")))
 })
 
@@ -488,9 +555,9 @@ test_that("complete workflow: import without VDJ then add clonotype data", {
     # Setup - Get example data file paths
     cellsnp_dir <- system.file("extdata/example_snpdata", package = "snplet")
     gene_anno_file <- system.file("extdata/example_gene_anno.tsv", package = "snplet")
-    vireo_file <- system.file("extdata/example_snpdata/donor_ids.tsv", package = "snplet")
+    vireo_folder <- system.file("extdata/example_snpdata", package = "snplet")
 
-    required_files <- c(cellsnp_dir, gene_anno_file, vireo_file)
+    required_files <- c(cellsnp_dir, gene_anno_file, file.path(vireo_folder, "donor_ids.tsv"))
     skip_if_not(all(file.exists(required_files)), "Example data files not found")
 
     # Step 1: Import without VDJ
@@ -498,11 +565,11 @@ test_that("complete workflow: import without VDJ then add clonotype data", {
     snp_data <- import_cellsnp(
         cellsnp_dir = cellsnp_dir,
         gene_annotation = gene_annotation,
-        vireo_file = vireo_file
+        vireo_folder = vireo_folder
     )
 
     # Verify initial state - clonotype exists but all NA
-    barcode_info <- get_barcode_info(snp_data)
+    barcode_info <- barcode_info(snp_data)
     # Verify clonotype column exists
     expect_true("clonotype" %in% colnames(barcode_info))
     # Verify all clonotype values are initially NA
@@ -531,7 +598,7 @@ test_that("complete workflow: import without VDJ then add clonotype data", {
     )
 
     # Verify clonotype data was added
-    barcode_info_updated <- get_barcode_info(snp_data_with_clonotype)
+    barcode_info_updated <- barcode_info(snp_data_with_clonotype)
     # Verify clonotype column still exists
     expect_true("clonotype" %in% colnames(barcode_info_updated))
     # Verify not all clonotypes are NA anymore
@@ -571,9 +638,9 @@ test_that("import with VDJ then export and re-import preserves clonotype", {
     cellsnp_dir <- system.file("extdata/example_snpdata", package = "snplet")
     vdj_file <- system.file("extdata/example_snpdata/filtered_contig_annotations.csv", package = "snplet")
     gene_anno_file <- system.file("extdata/example_gene_anno.tsv", package = "snplet")
-    vireo_file <- system.file("extdata/example_snpdata/donor_ids.tsv", package = "snplet")
+    vireo_folder <- system.file("extdata/example_snpdata", package = "snplet")
 
-    required_files <- c(cellsnp_dir, vdj_file, gene_anno_file, vireo_file)
+    required_files <- c(cellsnp_dir, vdj_file, gene_anno_file, file.path(vireo_folder, "donor_ids.tsv"))
     skip_if_not(all(file.exists(required_files)), "Example data files not found")
 
     gene_annotation <- readr::read_tsv(gene_anno_file, show_col_types = FALSE)
@@ -583,11 +650,11 @@ test_that("import with VDJ then export and re-import preserves clonotype", {
         cellsnp_dir = cellsnp_dir,
         gene_annotation = gene_annotation,
         vdj_file = vdj_file,
-        vireo_file = vireo_file
+        vireo_folder = vireo_folder
     )
 
     # Verify clonotype data present
-    barcode_info_original <- get_barcode_info(snp_data_original)
+    barcode_info_original <- barcode_info(snp_data_original)
     # Verify clonotype column exists in imported data
     expect_true("clonotype" %in% colnames(barcode_info_original))
     clonotypes_with_data <- sum(!is.na(barcode_info_original$clonotype))
@@ -609,11 +676,11 @@ test_that("import with VDJ then export and re-import preserves clonotype", {
         cellsnp_dir = out_dir,
         gene_annotation = gene_annotation,
         vdj_file = vdj_exported,
-        vireo_file = file.path(out_dir, "donor_ids.tsv")
+        vireo_folder = out_dir
     )
 
     # Verify clonotype data preserved
-    barcode_info_reimported <- get_barcode_info(snp_data_reimported)
+    barcode_info_reimported <- barcode_info(snp_data_reimported)
     # Verify clonotype column exists after re-import
     expect_true("clonotype" %in% colnames(barcode_info_reimported))
 
@@ -640,7 +707,7 @@ test_that("import without VDJ, export, re-import maintains no clonotype state", 
     )
 
     # Verify all clonotypes are NA
-    barcode_info_original <- get_barcode_info(snp_data_original)
+    barcode_info_original <- barcode_info(snp_data_original)
     # Verify all clonotype values are NA when no VDJ imported
     expect_true(all(is.na(barcode_info_original$clonotype)))
 
@@ -658,11 +725,11 @@ test_that("import without VDJ, export, re-import maintains no clonotype state", 
     snp_data_reimported <- import_cellsnp(
         cellsnp_dir = out_dir,
         gene_annotation = gene_annotation,
-        vireo_file = file.path(out_dir, "donor_ids.tsv")
+        vireo_folder = out_dir
     )
 
     # Verify all clonotypes still NA
-    barcode_info_reimported <- get_barcode_info(snp_data_reimported)
+    barcode_info_reimported <- barcode_info(snp_data_reimported)
     # Verify clonotype column exists after re-import
     expect_true("clonotype" %in% colnames(barcode_info_reimported))
     # Verify all clonotype values remain NA after roundtrip
@@ -790,4 +857,110 @@ test_that("merge_cell_annotations handles empty vdj_info data frame", {
     expect_true(all(is.na(result$clonotype)))
     # Verify donors are assigned correctly
     expect_equal(result$donor[result$barcode == "CELL1"], "donor1")
+})
+
+# ==============================================================================
+# Test Suite: Vireo genotype ingestion
+# Description: .read_vireo_gt() parses a Vireo GT VCF into per-(SNP, donor)
+#              zygosity calls, and import_cellsnp(vireo_folder=) wires it in.
+# ==============================================================================
+
+# A small multi-sample GT VCF matching Vireo's GT_donors.vireo.vcf.gz layout
+# (FORMAT = GT:AD:DP:PL, one sample column per donor).
+#   snp1: donor0 het (0/1), donor1 hom-ref (0/0)
+#   snp2: donor0 hom-alt (1/1) with a confident PL, donor1 missing PL
+#   snp3: not present in snp_info, so it must be filtered out
+write_test_vireo_gt_vcf <- function(path) {
+    header_lines <- c("##fileformat=VCFv4.2", "##source=snplet-test")
+    col_line <- "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\tdonor0\tdonor1"
+    data_lines <- c(
+        "chr1\t100\t.\tA\tG\t.\tPASS\t.\tGT:AD:DP:PL\t0/1:5:10:50,0,50\t0/0:0:10:0,30,300",
+        "chr1\t200\t.\tC\tT\t.\tPASS\t.\tGT:AD:DP:PL\t1/1:10:10:300,30,0\t1/1:.:.:.",
+        "chr1\t300\t.\tG\tA\t.\tPASS\t.\tGT:AD:DP:PL\t0/1:5:10:50,0,50\t0/1:5:10:50,0,50"
+    )
+    writeLines(c(header_lines, col_line, data_lines), path)
+}
+
+test_that(".read_vireo_gt() classifies zygosity from the GT field per donor", {
+    gt_file <- withr::local_tempfile(fileext = ".vcf")
+    write_test_vireo_gt_vcf(gt_file)
+    snp_info <- data.frame(snp_id = c("chr1:100:A:G", "chr1:200:C:T"))
+
+    calls <- snplet:::.read_vireo_gt(gt_file, snp_info)
+
+    snp1_d0 <- dplyr::filter(calls, snp_id == "chr1:100:A:G", donor == "donor0")
+    snp1_d1 <- dplyr::filter(calls, snp_id == "chr1:100:A:G", donor == "donor1")
+    # Verify a 0/1 call is classified heterozygous
+    expect_equal(snp1_d0$zygosity, "het")
+    # Verify a 0/0 call is classified homozygous
+    expect_equal(snp1_d1$zygosity, "hom")
+    # Verify the source is stamped for every call
+    expect_true(all(calls$zygosity_source == "vireo_gt"))
+})
+
+test_that(".read_vireo_gt() derives zygosity_gt_prob as the normalised posterior of the called genotype", {
+    gt_file <- withr::local_tempfile(fileext = ".vcf")
+    write_test_vireo_gt_vcf(gt_file)
+    snp_info <- data.frame(snp_id = c("chr1:100:A:G", "chr1:200:C:T"))
+
+    calls <- snplet:::.read_vireo_gt(gt_file, snp_info)
+    snp2_d0 <- dplyr::filter(calls, snp_id == "chr1:200:C:T", donor == "donor0")
+
+    # PL = 300,30,0 for genotypes 0/0, 0/1, 1/1; the called 1/1 genotype's
+    # posterior is 10^0 / (10^-30 + 10^-3 + 10^0)
+    expect_equal(snp2_d0$zygosity_gt_prob, 0.999000999, tolerance = 1e-6)
+})
+
+test_that(".read_vireo_gt() leaves zygosity_gt_prob NA when the PL field is missing", {
+    gt_file <- withr::local_tempfile(fileext = ".vcf")
+    write_test_vireo_gt_vcf(gt_file)
+    snp_info <- data.frame(snp_id = c("chr1:100:A:G", "chr1:200:C:T"))
+
+    calls <- snplet:::.read_vireo_gt(gt_file, snp_info)
+    snp2_d1 <- dplyr::filter(calls, snp_id == "chr1:200:C:T", donor == "donor1")
+
+    # donor1's PL field for snp2 is "." (missing)
+    expect_true(is.na(snp2_d1$zygosity_gt_prob))
+})
+
+test_that(".read_vireo_gt() restricts calls to SNPs present in snp_info", {
+    gt_file <- withr::local_tempfile(fileext = ".vcf")
+    write_test_vireo_gt_vcf(gt_file)
+    snp_info <- data.frame(snp_id = c("chr1:100:A:G", "chr1:200:C:T"))
+
+    calls <- snplet:::.read_vireo_gt(gt_file, snp_info)
+
+    # chr1:300:G:A is in the VCF but absent from snp_info, so it must be dropped
+    expect_false("chr1:300:G:A" %in% calls$snp_id)
+})
+
+test_that("import_cellsnp(vireo_folder=) populates donor_snp_info from real Vireo genotypes", {
+    cellsnp_dir <- testthat::test_path("..", "..", "example_data", "village", "cell_snp", "cellsnp_HealthyVillage")
+    vireo_folder <- testthat::test_path("..", "..", "example_data", "village", "vireo", "vireo_HealthyVillage")
+    skip_if_not(
+        all(file.exists(
+            cellsnp_dir,
+            file.path(vireo_folder, "donor_ids.tsv"),
+            file.path(vireo_folder, "GT_donors.vireo.vcf.gz")
+        )),
+        "Village example dataset not found (not part of the installed package)"
+    )
+
+    gene_annotation <- data.frame(chrom = "chr1", start = 1, end = 1e9, gene_name = "dummy")
+    snp_data <- import_cellsnp(
+        cellsnp_dir = cellsnp_dir,
+        gene_annotation = gene_annotation,
+        vireo_folder = vireo_folder
+    )
+
+    donor_snp_info <- donor_snp_info(snp_data)
+    # Verify zygosity calls were populated from the real GT VCF
+    expect_true(nrow(donor_snp_info) > 0)
+    # Verify every call is sourced from Vireo genotypes
+    expect_true(all(donor_snp_info$zygosity_source == "vireo_gt"))
+    # Verify every call's snp_id matches a SNP actually present in the object
+    expect_true(all(donor_snp_info$snp_id %in% snp_info(snp_data)$snp_id))
+    # Verify the object's active zygosity source was set automatically from
+    # the imported Vireo calls
+    expect_equal(zygosity_source(snp_data), "vireo_gt")
 })
