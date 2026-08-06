@@ -115,4 +115,3 @@ escape_result <- hap_by_gene \%>\%
     dplyr::ungroup()
 }
 }
-\keyword{internal}

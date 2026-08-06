@@ -20,7 +20,7 @@ A tibble with columns \code{donor} and \code{xci_rho}. A donor with
 Estimates \code{rho} at the same aggregation level \code{\link{test_escape}}
 operates at (donor-pooled gene counts), rather than reusing the EM's
 per-cell \code{rho}. Restricts to genes that passed
-\code{\link{.filter_uninformative_genes}} (the trusted, genuinely
+\code{.filter_uninformative_genes()} (the trusted, genuinely
 non-escaping population, same population \code{xci_median_pi_g} summarises)
 and fits a single scalar \code{rho} per donor via exact beta-binomial MLE
 against that donor's \code{xci_median_pi_g} as a fixed null probability --

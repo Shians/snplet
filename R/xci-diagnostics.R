@@ -85,7 +85,7 @@ setMethod("xci_haplotypes", signature(x = "SNPData"), function(x) {
 #' for barcode annotation.
 #'
 #' \code{xci_rho} is \emph{not} the EM's per-cell beta-binomial overdispersion
-#' (\code{xci_result$rho} inside \code{\link{.infer_xci}}) -- that value is fit
+#' (\code{xci_result$rho} inside \code{.infer_xci()}) -- that value is fit
 #' from individual cells' small read counts and, applied directly to
 #' donor-pooled counts (as \code{\link{test_escape}} needs), implicitly assumes
 #' complete correlation across all of a donor's cells, which is far too
@@ -99,6 +99,7 @@ setMethod("xci_haplotypes", signature(x = "SNPData"), function(x) {
 #' @keywords internal
 .store_xci_fit <- function(x, fit) {
     donor_fits <- purrr::keep(fit, ~ !is.null(.x))
+    logger::log_info("Storing XCI diagnostics for {length(donor_fits)} donor(s)")
 
     barcode_diag <- purrr::map(donor_fits, function(f) {
         assignments <- if (!is.null(f$cell_assignments)) f$cell_assignments else f$assignments
@@ -145,10 +146,12 @@ setMethod("xci_haplotypes", signature(x = "SNPData"), function(x) {
 
     # xci_rho depends on xci_median_pi_g and haplotype_expression(), both of
     # which require the diagnostics just written above, so this must run last.
+    logger::log_info("Fitting donor-pooled overdispersion (xci_rho)")
     pooled_rho <- .fit_pooled_rho_by_donor(x)
     if (nrow(pooled_rho) > 0) {
         x <- add_donor_metadata(x, pooled_rho, join_by = "donor", overwrite = TRUE)
     }
+    logger::log_info("XCI diagnostics stored")
 
     x
 }
@@ -158,7 +161,7 @@ setMethod("xci_haplotypes", signature(x = "SNPData"), function(x) {
 #' Estimates \code{rho} at the same aggregation level \code{\link{test_escape}}
 #' operates at (donor-pooled gene counts), rather than reusing the EM's
 #' per-cell \code{rho}. Restricts to genes that passed
-#' \code{\link{.filter_uninformative_genes}} (the trusted, genuinely
+#' \code{.filter_uninformative_genes()} (the trusted, genuinely
 #' non-escaping population, same population \code{xci_median_pi_g} summarises)
 #' and fits a single scalar \code{rho} per donor via exact beta-binomial MLE
 #' against that donor's \code{xci_median_pi_g} as a fixed null probability --
@@ -179,6 +182,7 @@ setMethod("xci_haplotypes", signature(x = "SNPData"), function(x) {
         return(tibble::tibble(donor = character(0), xci_rho = double(0)))
     }
 
+    logger::log_info("Aggregating haplotype expression for pooled rho fitting")
     hap_by_gene <- haplotype_expression(x, xci_informative_only = TRUE) %>%
         dplyr::summarise(
             active_count = sum(active_count),
@@ -192,6 +196,7 @@ setMethod("xci_haplotypes", signature(x = "SNPData"), function(x) {
         return(tibble::tibble(donor = character(0), xci_rho = double(0)))
     }
 
+    logger::log_info("Fitting pooled rho for {dplyr::n_distinct(hap_by_gene$donor)} donor(s)")
     hap_by_gene %>%
         dplyr::summarise(
             xci_rho = if (dplyr::n() >= 2) {
