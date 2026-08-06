@@ -46,6 +46,11 @@ snp_data_vireo <- import_cellsnp(cellsnp_dir, gene_annotation, vireo_folder = vi
 snp_data_vireo <- infer_zygosity(snp_data_vireo)
 vireo_calls <- donor_snp_info(snp_data_vireo, source = "vireo_gt")
 binomial_calls <- donor_snp_info(snp_data_vireo, source = "binomial")
-dplyr::inner_join(vireo_calls, binomial_calls, by = c("snp_id", "donor"), suffix = c("_vireo", "_binomial"))
+dplyr::inner_join(
+    vireo_calls,
+    binomial_calls,
+    by = c("snp_id", "donor"),
+    suffix = c("_vireo", "_binomial")
+)
 }
 }

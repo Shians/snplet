@@ -85,7 +85,7 @@ setMethod("xci_haplotypes", signature(x = "SNPData"), function(x) {
 #' for barcode annotation.
 #'
 #' \code{xci_rho} is \emph{not} the EM's per-cell beta-binomial overdispersion
-#' (\code{xci_result$rho} inside \code{\link{.infer_xci}}) -- that value is fit
+#' (\code{xci_result$rho} inside \code{.infer_xci()}) -- that value is fit
 #' from individual cells' small read counts and, applied directly to
 #' donor-pooled counts (as \code{\link{test_escape}} needs), implicitly assumes
 #' complete correlation across all of a donor's cells, which is far too
@@ -158,7 +158,7 @@ setMethod("xci_haplotypes", signature(x = "SNPData"), function(x) {
 #' Estimates \code{rho} at the same aggregation level \code{\link{test_escape}}
 #' operates at (donor-pooled gene counts), rather than reusing the EM's
 #' per-cell \code{rho}. Restricts to genes that passed
-#' \code{\link{.filter_uninformative_genes}} (the trusted, genuinely
+#' \code{.filter_uninformative_genes()} (the trusted, genuinely
 #' non-escaping population, same population \code{xci_median_pi_g} summarises)
 #' and fits a single scalar \code{rho} per donor via exact beta-binomial MLE
 #' against that donor's \code{xci_median_pi_g} as a fixed null probability --

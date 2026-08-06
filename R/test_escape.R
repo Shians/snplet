@@ -61,7 +61,7 @@
 #'     \item{\code{adj_p_val}}{Benjamini-Hochberg (BH) adjusted p-value.}
 #'   }
 #'
-#' @keywords internal
+#' @export
 #' @examples
 #' df <- tibble::tibble(
 #'     donor = c("donor0", "donor0", "donor1"),

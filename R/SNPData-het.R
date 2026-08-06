@@ -156,7 +156,12 @@ setMethod(
 #' snp_data_vireo <- infer_zygosity(snp_data_vireo)
 #' vireo_calls <- donor_snp_info(snp_data_vireo, source = "vireo_gt")
 #' binomial_calls <- donor_snp_info(snp_data_vireo, source = "binomial")
-#' dplyr::inner_join(vireo_calls, binomial_calls, by = c("snp_id", "donor"), suffix = c("_vireo", "_binomial"))
+#' dplyr::inner_join(
+#'     vireo_calls,
+#'     binomial_calls,
+#'     by = c("snp_id", "donor"),
+#'     suffix = c("_vireo", "_binomial")
+#' )
 #' }
 infer_zygosity <- function(x, min_total_count = 10, p_value_threshold = 0.05, minor_allele_prop = 0.1) {
     old_threshold <- logger::log_threshold()

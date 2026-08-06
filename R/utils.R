@@ -91,7 +91,16 @@ utils::globalVariables(c(
     "haplotype",
     "molecules",
     "dominant_molecules",
-    "n_stranded_molecules"
+    "n_stranded_molecules",
+    "ambiguous",
+    "gene_strand",
+    "group_key",
+    "n_genes_same_strand",
+    "n_reads",
+    "snps",
+    "strand",
+    "transcript_strand",
+    "xci_median_pi_g"
 ))
 
 percentile_summary <- function(x, percentiles = c(0.1, 0.25, 0.75, 0.9, 0.95, 0.99)) {
