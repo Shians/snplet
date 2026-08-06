@@ -241,15 +241,15 @@
     )
 }
 
-.recompute_snp_stats <- function(snp_info, ref_count, alt_count) {
-    snp_info$coverage <- Matrix::rowSums(alt_count + ref_count)
-    snp_info$non_zero_samples <- Matrix::rowSums(alt_count + ref_count > 0)
+.recompute_snp_stats <- function(snp_info, total_count) {
+    snp_info$coverage <- Matrix::rowSums(total_count)
+    snp_info$non_zero_samples <- Matrix::rowSums(total_count > 0)
     snp_info
 }
 
-.recompute_barcode_stats <- function(barcode_info, ref_count, alt_count) {
-    barcode_info$library_size <- Matrix::colSums(alt_count + ref_count)
-    barcode_info$non_zero_snps <- Matrix::colSums(alt_count + ref_count > 0)
+.recompute_barcode_stats <- function(barcode_info, total_count) {
+    barcode_info$library_size <- Matrix::colSums(total_count)
+    barcode_info$non_zero_snps <- Matrix::colSums(total_count > 0)
     barcode_info
 }
 
@@ -271,9 +271,10 @@
 }
 
 .recompute_metrics <- function(snp_info, barcode_info, donor_info, ref_count, alt_count) {
+    total_count <- alt_count + ref_count
     list(
-        snp_info = .recompute_snp_stats(snp_info, ref_count, alt_count),
-        barcode_info = .recompute_barcode_stats(barcode_info, ref_count, alt_count),
+        snp_info = .recompute_snp_stats(snp_info, total_count),
+        barcode_info = .recompute_barcode_stats(barcode_info, total_count),
         donor_info = .recompute_donor_stats(donor_info, barcode_info)
     )
 }
