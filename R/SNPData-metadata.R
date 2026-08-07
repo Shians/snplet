@@ -148,6 +148,38 @@ NULL
     updated_info
 }
 
+#' Rebuild a SNPData object with updated metadata table(s) only
+#'
+#' The \code{add_*_metadata()} family only ever changes annotation columns
+#' (and, for \code{donor_snp_info}, adds rows for new (snp_id, donor,
+#' zygosity_source) triples) -- the count matrices and the identity/order of
+#' SNPs and cells never change. Routing that through \code{new("SNPData",
+#' ...)} would re-run \code{.recompute_metrics()}, which adds the full
+#' \code{ref_count}/\code{alt_count} sparse matrices and takes
+#' \code{rowSums}/\code{colSums} across the entire dataset, purely to
+#' recompute stats that are unaffected by a metadata-only change. This
+#' instead patches the requested slot(s) directly and revalidates, skipping
+#' that recomputation entirely.
+#'
+#' @keywords internal
+.clone_with_metadata <- function(x, snp_info = NULL, barcode_info = NULL, donor_info = NULL, donor_snp_info = NULL) {
+    result <- x
+    if (!is.null(snp_info)) {
+        result@snp_info <- tibble::as_tibble(snp_info)
+    }
+    if (!is.null(barcode_info)) {
+        result@barcode_info <- tibble::as_tibble(barcode_info)
+    }
+    if (!is.null(donor_info)) {
+        result@donor_info <- tibble::as_tibble(donor_info)
+    }
+    if (!is.null(donor_snp_info)) {
+        result@donor_snp_info <- tibble::as_tibble(donor_snp_info)
+    }
+    methods::validObject(result)
+    result
+}
+
 #' @rdname add_metadata
 #' @export
 add_barcode_metadata <- function(x, metadata, join_by = "cell_id", overwrite = FALSE) {
@@ -174,17 +206,7 @@ add_barcode_metadata <- function(x, metadata, join_by = "cell_id", overwrite = F
         info_name = "barcode_info"
     )
 
-    # Create new SNPData object
-    result <- new(
-        "SNPData",
-        ref_count = x@ref_count,
-        alt_count = x@alt_count,
-        oth_count = x@oth_count,
-        snp_info = x@snp_info,
-        barcode_info = updated_barcode_info,
-        donor_info = donor_info(x),
-        donor_snp_info = donor_snp_info(x, source = "all")
-    )
+    result <- .clone_with_metadata(x, barcode_info = updated_barcode_info)
     .propagate_zygosity_source(result, x)
 }
 
@@ -214,17 +236,7 @@ add_snp_metadata <- function(x, metadata, join_by = "snp_id", overwrite = FALSE)
         info_name = "snp_info"
     )
 
-    # Create new SNPData object
-    result <- new(
-        "SNPData",
-        ref_count = x@ref_count,
-        alt_count = x@alt_count,
-        oth_count = x@oth_count,
-        snp_info = updated_snp_info,
-        barcode_info = x@barcode_info,
-        donor_info = donor_info(x),
-        donor_snp_info = donor_snp_info(x, source = "all")
-    )
+    result <- .clone_with_metadata(x, snp_info = updated_snp_info)
     .propagate_zygosity_source(result, x)
 }
 
@@ -254,17 +266,7 @@ add_donor_metadata <- function(x, metadata, join_by = "donor", overwrite = FALSE
         info_name = "donor_info"
     )
 
-    # Create new SNPData object
-    result <- new(
-        "SNPData",
-        ref_count = x@ref_count,
-        alt_count = x@alt_count,
-        oth_count = x@oth_count,
-        snp_info = x@snp_info,
-        barcode_info = x@barcode_info,
-        donor_info = updated_donor_info,
-        donor_snp_info = donor_snp_info(x, source = "all")
-    )
+    result <- .clone_with_metadata(x, donor_info = updated_donor_info)
     .propagate_zygosity_source(result, x)
 }
 
@@ -295,16 +297,6 @@ add_donor_snp_metadata <- function(x, metadata, join_by = c("snp_id", "donor", "
         join_type = "full"
     )
 
-    # Create new SNPData object
-    result <- new(
-        "SNPData",
-        ref_count = x@ref_count,
-        alt_count = x@alt_count,
-        oth_count = x@oth_count,
-        snp_info = x@snp_info,
-        barcode_info = x@barcode_info,
-        donor_info = donor_info(x),
-        donor_snp_info = updated_donor_snp_info
-    )
+    result <- .clone_with_metadata(x, donor_snp_info = updated_donor_snp_info)
     .propagate_zygosity_source(result, x)
 }
