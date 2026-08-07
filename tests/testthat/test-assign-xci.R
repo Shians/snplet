@@ -739,9 +739,14 @@ test_that("haplotype_expression() surfaces an escapee gene that assign_xci exclu
     # Verify the default (inclusive) call reports the escapee gene at all
     hap_default <- haplotype_expression(stored)
     expect_true(escapee_snp %in% hap_default$snp_id)
-    # Confirm the escapee's rows read as biologically impossible under clean XCI
+    # Confirm the escapee still reads as elevated inactive-haplotype expression
+    # in at least one active-X group, even though assign_xci excluded it from
+    # calling. A full phase reversal (escape_fraction > 0.5) on the other group
+    # is excluded as a likely quantification artefact rather than reported as
+    # escaping (gene20 is not XIST, the one gene that legitimately exceeds it).
     escapee_rows <- dplyr::filter(hap_default, snp_id == escapee_snp)
-    expect_true(any(escapee_rows$same_allele_dominant))
+    expect_true(any(escapee_rows$escapes))
+    expect_true(all(escapee_rows$escape_fraction <= 0.5))
 
     # Verify xci_informative_only = TRUE restricts back to the calling-informative set
     hap_informative_only <- haplotype_expression(stored, xci_informative_only = TRUE)

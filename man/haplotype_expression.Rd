@@ -33,7 +33,9 @@ A tibble with one row per donor, phased SNP, and active-X
   uncovered), \code{escape_fraction} (\code{inactive_count / coverage}),
   \code{escapes} (\code{escape_fraction >= escape_threshold}), and
   \code{same_allele_dominant} (per SNP; \code{TRUE} when both covered groups
-  favour the same physical allele).
+  favour the same physical allele). Groups with \code{escape_fraction > 0.5}
+  (a phase contradiction, see Details) are dropped before this tibble is
+  returned, except for \code{XIST}.
 }
 \description{
 Splits each phased SNP's ALT/REF counts into active- and
@@ -64,6 +66,16 @@ cleanly inactivated SNP — \code{same_allele_dominant} is \code{TRUE},
 identifying escaping or XCI-independent allelic imbalance rather than
 flattening it. The \code{escape_fraction} column quantifies the magnitude:
 the fraction of reads coming from the haplotype that should be silenced.
+
+A group whose \code{escape_fraction} exceeds 0.5 -- the "inactive"
+haplotype outnumbering the "active" one -- is a phase contradiction
+rather than partial leakage, and is far more likely to reflect a
+quantification artefact (reference-mapping bias, ambient RNA, low-coverage
+noise) than genuine escape or imprinting. Such groups are excluded from
+the returned tibble for now, rather than reported as escaping -- with one
+exception: \code{XIST} is transcribed almost exclusively from the
+\emph{inactive} X by design, so both its groups legitimately read with
+\code{escape_fraction} near 1 and are kept regardless.
 }
 \examples{
 \dontrun{

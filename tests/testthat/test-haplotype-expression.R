@@ -135,25 +135,36 @@ test_that("haplotype_expression() reports a clean XCI SNP as flipping alleles", 
     expect_false(unique(c(x1$same_allele_dominant, x2$same_allele_dominant)))
 })
 
-test_that("haplotype_expression() flags an escaper where the same allele dominates both groups", {
+test_that("haplotype_expression() excludes a group whose inactive haplotype reverses the phase", {
     fixture <- make_hap_fixture()
     snp2 <- fixture$snp_ids[2]
 
     res <- haplotype_expression(fixture$obj)
     x1 <- hap_row(res, "donor0", snp2, "X1")
+
+    # X1-active group has modest leakage (escape_fraction 0.2 <= 0.5), so it's kept
+    expect_equal(x1$dominant_allele, "REF")
+    expect_equal(x1$escape_fraction, 0.2)
+    # X2-active group's inactive (X1) haplotype outnumbers its active (X2) one --
+    # escape_fraction would read 0.7 there, a phase contradiction rather than
+    # partial leakage, so that group (not XIST) is dropped entirely
+    expect_equal(nrow(dplyr::filter(res, donor == "donor0", snp_id == snp2, active_x == "X2")), 0L)
+    # With only one covered group left for this SNP, the flip can no longer be assessed
+    expect_false(x1$same_allele_dominant)
+})
+
+test_that("haplotype_expression() keeps a reversed group when the gene is XIST", {
+    fixture <- make_hap_fixture()
+    snp2 <- fixture$snp_ids[2]
+    snp_info(fixture$obj)$gene_name[snp_info(fixture$obj)$snp_id == snp2] <- "XIST"
+
+    res <- haplotype_expression(fixture$obj)
     x2 <- hap_row(res, "donor0", snp2, "X2")
 
-    # REF dominates in both active-X groups
-    expect_equal(x1$dominant_allele, "REF")
-    expect_equal(x2$dominant_allele, "REF")
-    # Elevated inactive-haplotype fraction quantifies the escape. X1 carries REF,
-    # so the X1-active group reads 4/20 from the silenced X2 and the X2-active
-    # group reads 14/20 from the silenced X1.
-    expect_equal(x1$escape_fraction, 0.2)
+    # XIST is transcribed from the inactive X by design, so its reversed group is
+    # reported rather than excluded
+    expect_equal(nrow(x2), 1L)
     expect_equal(x2$escape_fraction, 0.7)
-    # Confirm the biologically impossible same-allele dominance is flagged
-    expect_true(x1$same_allele_dominant)
-    expect_true(x2$same_allele_dominant)
 })
 
 test_that("haplotype_expression() splits active/inactive counts by the stored phase", {
@@ -161,13 +172,13 @@ test_that("haplotype_expression() splits active/inactive counts by the stored ph
     snp2 <- fixture$snp_ids[2]
 
     res <- haplotype_expression(fixture$obj)
-    x2 <- hap_row(res, "donor0", snp2, "X2")
+    x1 <- hap_row(res, "donor0", snp2, "X1")
 
-    # X1 carries REF; in X2-active cells REF is the silenced (inactive) allele:
-    # pooled ref = 14 (inactive), pooled alt = 6 (active X2 haplotype)
-    expect_equal(x2$inactive_count, 14)
-    expect_equal(x2$active_count, 6)
-    expect_equal(x2$coverage, 20)
+    # X1 carries REF; in X1-active cells REF is the active haplotype:
+    # pooled ref = 16 (active), pooled alt = 4 (inactive X2 haplotype)
+    expect_equal(x1$active_count, 16)
+    expect_equal(x1$inactive_count, 4)
+    expect_equal(x1$coverage, 20)
 })
 
 test_that("haplotype_expression() applies each donor's own phase, not the flattened scalar", {
