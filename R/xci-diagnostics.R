@@ -5,6 +5,8 @@
 #' \code{\link{assign_xci}} or \code{\link{assign_xci_by_clonotype}}
 #' has been run first; errors otherwise.
 #'
+#' @inheritSection assign_xci Phase is inferred from expression, not genotyped
+#'
 #' @param x A SNPData object that had XCI diagnostics stored by
 #'   \code{\link{assign_xci}} or
 #'   \code{\link{assign_xci_by_clonotype}}.
@@ -37,6 +39,12 @@ setMethod("xci_assignments", signature(x = "SNPData"), function(x) {
 #' several donors carries a distinct X1-allele in each — so the result has one
 #' row per SNP and donor rather than flattening to a single value.
 #'
+#' Despite the name, these are not genotyped haplotypes: they are the model's
+#' expression-derived assignment of alleles to two clusters. See the section
+#' below before treating \code{allele_on_x1} as chromosomal phase.
+#'
+#' @inheritSection assign_xci Phase is inferred from expression, not genotyped
+#'
 #' @param x A SNPData object that had XCI diagnostics stored by
 #'   \code{\link{assign_xci}} or
 #'   \code{\link{assign_xci_by_clonotype}}.
@@ -44,9 +52,11 @@ setMethod("xci_assignments", signature(x = "SNPData"), function(x) {
 #' @return A tibble with one row per informative SNP and donor, with columns
 #'   \code{snp_id} (character), \code{gene_name} (character; present only when
 #'   the object carries gene annotation), \code{donor} (character),
-#'   \code{allele_on_x1} (character, "REF" or "ALT" — the allele carried by the
-#'   X1 haplotype in that donor's model), and \code{escape_fraction} (numeric
-#'   estimated fraction of reads from the inactive allele in that donor).
+#'   \code{allele_on_x1} (character, "REF" or "ALT" — the allele the model
+#'   assigned to the X1 cluster in that donor, i.e. the one expressed by
+#'   X1-active cells, not a genotyped haplotype), and \code{escape_fraction}
+#'   (numeric estimated fraction of reads from the minority allele in that
+#'   donor, bounded below 0.5 — see the section below).
 #'
 #' @family X-chromosome inactivation functions
 #' @importFrom tidyr separate_longer_delim
@@ -183,6 +193,12 @@ setMethod("xci_haplotypes", signature(x = "SNPData"), function(x) {
     }
 
     logger::log_info("Aggregating haplotype expression for pooled rho fitting")
+    # The default grain elects one representative SNP per gene rather than
+    # summing across them: a read spanning several of a gene's het SNPs would
+    # otherwise be counted once per SNP, inflating well-covered multi-SNP genes
+    # and skewing the spread rho is fitted to. The summarise below is still
+    # needed, but only pools the two active-X groups -- disjoint cell sets, so no
+    # double-counting -- into a single row per gene.
     hap_by_gene <- haplotype_expression(x, xci_informative_only = TRUE) %>%
         dplyr::summarise(
             active_count = sum(active_count),

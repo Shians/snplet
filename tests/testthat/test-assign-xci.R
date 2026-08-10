@@ -701,10 +701,17 @@ test_that("test_escape recommended pipeline flags an injected escapee gene again
     # haplotype_expression()'s SNP x active-X-group rows to one row per
     # (donor, gene), attach the donor's empirical null, then BH-correct
     # per donor via group_modify.
+    #
+    # by_snp = TRUE is required here, not incidental: the injected escapee is
+    # near-complete, so its dominant allele does not flip and no gene-level
+    # election can pick it. The default grain would therefore never present it to
+    # test_escape at all -- which is the escape-detection blind spot this test
+    # exists to guard. Each gene here carries a single SNP, so summing the rows
+    # pools only the two active-X groups and cannot over-count a molecule.
     fixture <- make_xci_snpdata(escapee = TRUE)
     stored <- assign_xci(fixture$snpdata, n_inits = 3)
 
-    hap_by_gene <- haplotype_expression(stored) %>%
+    hap_by_gene <- haplotype_expression(stored, by_snp = TRUE) %>%
         dplyr::summarise(
             active_count = sum(active_count),
             inactive_count = sum(inactive_count),
@@ -736,20 +743,33 @@ test_that("haplotype_expression() surfaces an escapee gene that assign_xci exclu
     snp_info <- snp_info(stored)
     escapee_snp <- snp_info$snp_id[snp_info$gene_name == paste0("gene", 20)]
 
-    # Verify the default (inclusive) call reports the escapee gene at all
-    hap_default <- haplotype_expression(stored)
+    # Verify the per-SNP grain reports the escapee at all, even though assign_xci
+    # excluded it from calling and no gene-level election can pick it
+    hap_default <- haplotype_expression(stored, by_snp = TRUE)
     expect_true(escapee_snp %in% hap_default$snp_id)
     # Confirm the escapee still reads as elevated inactive-haplotype expression
     # in at least one active-X group, even though assign_xci excluded it from
-    # calling. A full phase reversal (escape_fraction > 0.5) on the other group
-    # is excluded as a likely quantification artefact rather than reported as
-    # escaping (gene20 is not XIST, the one gene that legitimately exceeds it).
+    # calling
     escapee_rows <- dplyr::filter(hap_default, snp_id == escapee_snp)
     expect_true(any(escapee_rows$escapes))
-    expect_true(all(escapee_rows$escape_fraction <= 0.5))
+
+    # Both groups are reported, including one that reverses the phase. This gene
+    # escapes nearly completely, so its two groups straddle 0.5 by noise and which
+    # side each lands on depends on the EM's arbitrary X1/X2 labelling; dropping
+    # the reversed group would let that coin flip decide whether a real escapee is
+    # visible at all, so it is flagged instead.
+    expect_equal(nrow(escapee_rows), 2L)
+    expect_true(any(escapee_rows$phase_contradiction))
+    # This escapee's two groups fall on OPPOSITE sides of 0.5 (one reversed, one
+    # not), which is what breaks the flip and sets same_allele_dominant -- not the
+    # magnitude of its escape. A gene escaping heavily but symmetrically would
+    # still flip and still be elected. The consequence here is that this
+    # particular escapee is absent from the default gene-level grain entirely.
+    expect_true(all(escapee_rows$same_allele_dominant))
+    expect_false(paste0("gene", 20) %in% haplotype_expression(stored)$gene_name)
 
     # Verify xci_informative_only = TRUE restricts back to the calling-informative set
-    hap_informative_only <- haplotype_expression(stored, xci_informative_only = TRUE)
+    hap_informative_only <- haplotype_expression(stored, xci_informative_only = TRUE, by_snp = TRUE)
     expect_false(escapee_snp %in% hap_informative_only$snp_id)
 })
 

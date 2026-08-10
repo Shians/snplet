@@ -1510,7 +1510,7 @@ test_that("merge_snpdata union/union retains all SNPs and cells", {
     x <- data$x
     y <- data$y
 
-    merged <- merge_snpdata(x, y, snp_join = "union", cell_join = "union")
+    merged <- merge_snpdata(x, y, snp_join = "union", cell_join = "union", cell_collision = "sum")
 
     # Verify all SNPs from both objects are retained
     expect_equal(rownames(merged), c("snpA", "snpB", "snpC"))
@@ -1574,7 +1574,7 @@ test_that("merge_snpdata merges by barcode when barcode column exists", {
     x <- data$x
     y <- data$y
 
-    merged <- merge_snpdata(x, y, snp_join = "union", cell_join = "union")
+    merged <- merge_snpdata(x, y, snp_join = "union", cell_join = "union", cell_collision = "sum")
     merged_barcode_info <- barcode_info(merged)
 
     # Verify barcode-based merge retains union of barcodes in order
@@ -1640,7 +1640,7 @@ test_that("merge_snpdata handles barcode merge with no overlapping barcodes", {
         barcode_info = barcode_info_y
     )
 
-    merged <- merge_snpdata(x, y, snp_join = "union", cell_join = "right")
+    merged <- merge_snpdata(x, y, snp_join = "union", cell_join = "right", cell_collision = "sum")
 
     # Verify merged object keeps only y barcodes
     merged_barcode_info <- barcode_info(merged)
@@ -1649,6 +1649,113 @@ test_that("merge_snpdata handles barcode merge with no overlapping barcodes", {
     expect_equal(unname(as.matrix(ref_count(merged))), unname(as.matrix(ref_count(y))))
     # Verify alt counts match y when x has no matching barcodes
     expect_equal(unname(as.matrix(alt_count(merged))), unname(as.matrix(alt_count(y))))
+})
+
+# Two objects sharing the barcode "bc_shared" between different donors, as
+# happens when independently barcoded libraries draw the same whitelist barcode
+# for two unrelated cells. Depth at the shared barcode is controlled by
+# `x_depth`/`y_depth` so each resolution rule can be exercised directly.
+create_collision_test_data <- function(x_depth = 1, y_depth = 5) {
+    snps <- c("snpA", "snpB")
+    build <- function(barcodes, donor, shared_depth) {
+        counts <- function() {
+            m <- Matrix::Matrix(
+                matrix(
+                    c(shared_depth, shared_depth, 2, 2),
+                    nrow = 2,
+                    dimnames = list(snps, barcodes)
+                ),
+                sparse = TRUE
+            )
+            m
+        }
+        SNPData(
+            ref_count = counts(),
+            alt_count = counts(),
+            snp_info = tibble::tibble(snp_id = snps, chrom = "chrX", pos = c(10, 20)),
+            barcode_info = tibble::tibble(
+                cell_id = paste0("cell_", seq_along(barcodes)),
+                barcode = barcodes,
+                donor = donor
+            )
+        )
+    }
+
+    list(
+        x = build(c("bc_shared", "bc_only_x"), "donorX", x_depth),
+        y = build(c("bc_shared", "bc_only_y"), "donorY", y_depth)
+    )
+}
+
+test_that("merge_snpdata keeps the deeper copy of a collided cell rather than summing it", {
+    data <- create_collision_test_data(x_depth = 1, y_depth = 5)
+
+    merged <- merge_snpdata(data$x, data$y, snp_join = "union", cell_join = "union")
+
+    shared <- barcode_info(merged)$library_size[barcode_info(merged)$barcode == "bc_shared"]
+    # Verify the surviving cell carries only y's counts (2 SNPs x 5 ref + 5 alt)
+    expect_equal(unname(shared), 20)
+    # Ensure the two cells were not fused, which would have given 4 + 20
+    expect_false(unname(shared) == 24)
+})
+
+test_that("merge_snpdata resolves a collided cell's metadata to the same object as its counts", {
+    data <- create_collision_test_data(x_depth = 1, y_depth = 5)
+
+    merged <- merge_snpdata(data$x, data$y, snp_join = "union", cell_join = "union")
+
+    shared_donor <- barcode_info(merged)$donor[barcode_info(merged)$barcode == "bc_shared"]
+    # Verify the donor label follows the retained cell rather than defaulting to x
+    expect_equal(shared_donor, "donorY")
+})
+
+test_that("merge_snpdata breaks an exact coverage tie in favour of the left object", {
+    data <- create_collision_test_data(x_depth = 3, y_depth = 3)
+
+    merged <- merge_snpdata(data$x, data$y, snp_join = "union", cell_join = "union")
+
+    shared <- barcode_info(merged)[barcode_info(merged)$barcode == "bc_shared", ]
+    # Verify x wins the tie, so the donor label is x's
+    expect_equal(shared$donor, "donorX")
+    # Check only one copy survived rather than both being added together
+    expect_equal(unname(shared$library_size), 12)
+})
+
+test_that("merge_snpdata leaves cells unique to one object untouched by collision resolution", {
+    data <- create_collision_test_data(x_depth = 1, y_depth = 5)
+
+    merged <- merge_snpdata(data$x, data$y, snp_join = "union", cell_join = "union")
+
+    merged_barcode_info <- barcode_info(merged)
+    # Verify no cell was dropped: three distinct barcodes across the two objects
+    expect_setequal(merged_barcode_info$barcode, c("bc_shared", "bc_only_x", "bc_only_y"))
+    # Confirm a non-collided cell keeps its own donor
+    expect_equal(merged_barcode_info$donor[merged_barcode_info$barcode == "bc_only_x"], "donorX")
+})
+
+test_that("merge_snpdata sums a collided cell when cell_collision is 'sum'", {
+    data <- create_collision_test_data(x_depth = 1, y_depth = 5)
+
+    merged <- merge_snpdata(
+        data$x,
+        data$y,
+        snp_join = "union",
+        cell_join = "union",
+        cell_collision = "sum"
+    )
+
+    shared <- barcode_info(merged)[barcode_info(merged)$barcode == "bc_shared", ]
+    # Verify both copies' counts are added, the behaviour of earlier versions
+    expect_equal(unname(shared$library_size), 24)
+    # Confirm metadata still resolves x-first under the summing path
+    expect_equal(shared$donor, "donorX")
+})
+
+test_that("merge_snpdata rejects an unknown cell_collision value", {
+    data <- create_collision_test_data()
+
+    # Verify the argument is validated rather than silently ignored
+    expect_error(merge_snpdata(data$x, data$y, cell_collision = "average"))
 })
 
 test_that("merge_snpdata errors when no SNPs or cells are retained", {
@@ -1695,7 +1802,7 @@ test_that("merge_snpdata union/union merges metadata correctly", {
     x <- data$x
     y <- data$y
 
-    merged <- merge_snpdata(x, y, snp_join = "union", cell_join = "union")
+    merged <- merge_snpdata(x, y, snp_join = "union", cell_join = "union", cell_collision = "sum")
 
     merged_snp_info <- snp_info(merged)
     merged_barcode_info <- barcode_info(merged)
@@ -1724,7 +1831,7 @@ test_that("merge_snpdata intersect/intersect retains only overlapping SNPs and c
     x <- data$x
     y <- data$y
 
-    merged <- merge_snpdata(x, y, snp_join = "intersect", cell_join = "intersect")
+    merged <- merge_snpdata(x, y, snp_join = "intersect", cell_join = "intersect", cell_collision = "sum")
 
     # Verify only overlapping SNP (snpB) is retained
     expect_equal(rownames(merged), "snpB")
@@ -1745,7 +1852,7 @@ test_that("merge_snpdata intersect/intersect merges metadata correctly", {
     x <- data$x
     y <- data$y
 
-    merged <- merge_snpdata(x, y, snp_join = "intersect", cell_join = "intersect")
+    merged <- merge_snpdata(x, y, snp_join = "intersect", cell_join = "intersect", cell_collision = "sum")
 
     merged_snp_info <- snp_info(merged)
     merged_barcode_info <- barcode_info(merged)
@@ -1770,7 +1877,7 @@ test_that("merge_snpdata left/left retains all SNPs and cells from x only", {
     x <- data$x
     y <- data$y
 
-    merged <- merge_snpdata(x, y, snp_join = "left", cell_join = "left")
+    merged <- merge_snpdata(x, y, snp_join = "left", cell_join = "left", cell_collision = "sum")
 
     # Verify only SNPs from x are retained (snpA, snpB)
     expect_equal(rownames(merged), c("snpA", "snpB"))
@@ -1820,7 +1927,7 @@ test_that("merge_snpdata left/left merges metadata correctly", {
     x <- data$x
     y <- data$y
 
-    merged <- merge_snpdata(x, y, snp_join = "left", cell_join = "left")
+    merged <- merge_snpdata(x, y, snp_join = "left", cell_join = "left", cell_collision = "sum")
 
     merged_snp_info <- snp_info(merged)
     merged_barcode_info <- barcode_info(merged)
@@ -1841,7 +1948,7 @@ test_that("merge_snpdata right/right retains all SNPs and cells from y only", {
     x <- data$x
     y <- data$y
 
-    merged <- merge_snpdata(x, y, snp_join = "right", cell_join = "right")
+    merged <- merge_snpdata(x, y, snp_join = "right", cell_join = "right", cell_collision = "sum")
 
     # Verify only SNPs from y are retained (snpB, snpC)
     expect_equal(rownames(merged), c("snpB", "snpC"))
@@ -1892,7 +1999,7 @@ test_that("merge_snpdata right/right merges metadata correctly", {
     x <- data$x
     y <- data$y
 
-    merged <- merge_snpdata(x, y, snp_join = "right", cell_join = "right")
+    merged <- merge_snpdata(x, y, snp_join = "right", cell_join = "right", cell_collision = "sum")
 
     merged_snp_info <- snp_info(merged)
     merged_barcode_info <- barcode_info(merged)
@@ -1913,7 +2020,7 @@ test_that("merge_snpdata union/intersect retains all SNPs but only overlapping c
     x <- data$x
     y <- data$y
 
-    merged <- merge_snpdata(x, y, snp_join = "union", cell_join = "intersect")
+    merged <- merge_snpdata(x, y, snp_join = "union", cell_join = "intersect", cell_collision = "sum")
 
     # Verify all SNPs are retained
     expect_equal(rownames(merged), c("snpA", "snpB", "snpC"))
@@ -1933,7 +2040,7 @@ test_that("merge_snpdata intersect/union retains only overlapping SNPs but all c
     x <- data$x
     y <- data$y
 
-    merged <- merge_snpdata(x, y, snp_join = "intersect", cell_join = "union")
+    merged <- merge_snpdata(x, y, snp_join = "intersect", cell_join = "union", cell_collision = "sum")
 
     # Verify only overlapping SNP is retained
     expect_equal(rownames(merged), "snpB")
@@ -1954,7 +2061,7 @@ test_that("merge_snpdata left/intersect retains x SNPs but only overlapping cell
     x <- data$x
     y <- data$y
 
-    merged <- merge_snpdata(x, y, snp_join = "left", cell_join = "intersect")
+    merged <- merge_snpdata(x, y, snp_join = "left", cell_join = "intersect", cell_collision = "sum")
 
     # Verify only SNPs from x are retained
     expect_equal(rownames(merged), c("snpA", "snpB"))
@@ -1970,7 +2077,7 @@ test_that("merge_snpdata intersect/right retains only overlapping SNPs but y cel
     x <- data$x
     y <- data$y
 
-    merged <- merge_snpdata(x, y, snp_join = "intersect", cell_join = "right")
+    merged <- merge_snpdata(x, y, snp_join = "intersect", cell_join = "right", cell_collision = "sum")
 
     # Verify only overlapping SNP is retained
     expect_equal(rownames(merged), "snpB")
@@ -1992,7 +2099,7 @@ test_that("merge_snpdata unions donor_info and donor_snp_info across non-overlap
         data.frame(snp_id = "snpC", donor = "d3", zygosity = "hom", zygosity_source = "vireo_gt")
     )
 
-    merged <- merge_snpdata(x, y, snp_join = "union", cell_join = "union")
+    merged <- merge_snpdata(x, y, snp_join = "union", cell_join = "union", cell_collision = "sum")
 
     # Verify both donors' stored calls survived the merge
     donor_snp_info <- donor_snp_info(merged)
@@ -2016,7 +2123,7 @@ test_that("merge_snpdata preserves multiple zygosity_source rows for the same (s
     )
     expect_equal(zygosity_source(x), "vireo_gt")
 
-    merged <- merge_snpdata(x, data$y, snp_join = "union", cell_join = "union")
+    merged <- merge_snpdata(x, data$y, snp_join = "union", cell_join = "union", cell_collision = "sum")
     all_calls <- donor_snp_info(merged, source = "all") %>%
         dplyr::filter(snp_id == "snpA", donor == "d1")
 
@@ -2035,7 +2142,7 @@ test_that("merge_snpdata coalesces the active zygosity_source when only one side
     # y has no zygosity information at all
     y <- data$y
 
-    merged <- merge_snpdata(x, y, snp_join = "union", cell_join = "union")
+    merged <- merge_snpdata(x, y, snp_join = "union", cell_join = "union", cell_collision = "sum")
 
     # Verify x's active source carries over when y has none
     expect_equal(zygosity_source(merged), "vireo_gt")

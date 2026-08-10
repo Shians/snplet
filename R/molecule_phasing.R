@@ -636,15 +636,26 @@ assign_snp_genes <- function(snp_info, gene_anno) {
 # Orienting read-backed phase blocks to X1/X2
 #
 # phase_snps() assigns each block an arbitrary local label (H1 = whichever
-# allele is REF at that block's first-visited SNP). Orienting H1 to the
-# biologically meaningful X1/X2 used elsewhere in the package requires an
-# external reference: a phase block's own molecules cannot supply this,
-# because a true escapee's expression doesn't track XCI state by definition
-# -- correlating a block against active_x would fail on exactly the genes
-# this feature exists to rescue, the same way assign_xci()'s own keep_llr
-# filter does. Anchors -- SNPs assign_xci() already phased via the EM -- are
-# used instead: whether H1 matches X1 or X2 is read off any anchor reachable
-# in the same connected component, and propagated to the rest of the block.
+# allele is REF at that block's first-visited SNP). Orienting H1 to the X1/X2
+# labels used elsewhere in the package requires an external reference: a phase
+# block's own molecules cannot supply this, because a true escapee's expression
+# doesn't track XCI state by definition -- correlating a block against active_x
+# would fail on exactly the genes this feature exists to rescue, the same way
+# assign_xci()'s own keep_llr filter does. Anchors -- SNPs assign_xci() already
+# phased via the EM -- are used instead: whether H1 matches X1 or X2 is read off
+# any anchor reachable in the same connected component, and propagated to the
+# rest of the block.
+#
+# Note what this does and does not buy. The *relative* phase within a block is
+# genuinely physical: two SNPs seen on one molecule are on one chromosome, and
+# that is observed, not inferred. The *absolute* orientation to X1/X2 is not --
+# it is inherited wholesale from the EM anchors, which are expression-derived
+# (see assign_xci()'s "Phase is inferred from expression, not genotyped"). A
+# gene whose EM phase is inverted therefore has its whole read-backed block
+# oriented to match that inversion, silently and without conflict, since every
+# anchor in the block agrees. Molecules are single transcripts, so blocks never
+# span genes and no cross-gene linkage exists to expose it. Read-backed phasing
+# refines phase within a gene; it does not replace DNA-based phasing.
 # ==============================================================================
 
 #' Orient read-backed phase blocks to X1/X2 using assign_xci()'s EM phase
@@ -653,11 +664,16 @@ assign_snp_genes <- function(snp_info, gene_anno) {
 #' block; this maps it onto the same X1/X2 convention `assign_xci()` and
 #' `haplotype_expression()` use, by finding SNPs in the block already phased
 #' by the EM ("anchors") and reading off whether H1 agrees with X1 or X2 at
-#' each. Since physical phase is a genotype fact, independently derived
-#' anchors within one component should never legitimately disagree; where
-#' they do, this is treated as a signal to investigate (most likely a
-#' low-power or noisy per-gene EM fit, occasionally a spurious `phase_snps()`
-#' edge), not as evidence to average away.
+#' each. The chromosome the anchors are estimating is a single physical object,
+#' so independently derived anchors within one component should never
+#' legitimately disagree; where they do, this is treated as a signal to
+#' investigate (most likely a low-power or noisy per-gene EM fit, occasionally a
+#' spurious `phase_snps()` edge), not as evidence to average away.
+#'
+#' Agreement among anchors is therefore evidence of a consistent fit, not of a
+#' correct one: the anchors are expression-derived, so a systematically inverted
+#' gene yields unanimous anchors pointing the wrong way. See the note above
+#' `.orient_phase_blocks()` in the source.
 #'
 #' @param phase A tibble as returned by `phase_snps()`, with columns
 #'   `snp_id`, `block`, `allele_on_h1`, for a single donor.
@@ -791,6 +807,8 @@ assign_snp_genes <- function(snp_info, gene_anno) {
 #' `assign_xci()`'s own phase calls are never replaced, and
 #' `haplotype_expression()` is unaffected unless it is told to read the new
 #' columns.
+#'
+#' @inheritSection assign_xci Phase is inferred from expression, not genotyped
 #'
 #' @param x A SNPData object that has already been fit by `assign_xci()` or
 #'   `assign_xci_by_clonotype()` (see `.has_xci_diagnostics()`), with a

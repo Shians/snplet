@@ -12,6 +12,8 @@
 #' are present they are further isolated into their own column slice, separated
 #' from the scored units by a gap.
 #'
+#' @inheritSection assign_xci Phase is inferred from expression, not genotyped
+#'
 #' @param x A SNPData object that had XCI diagnostics stored by
 #'   \code{\link{assign_xci}} or
 #'   \code{\link{assign_xci_by_clonotype}}.

@@ -53,6 +53,44 @@ The algorithm works as follows:
 Cells that do not meet \code{confidence_threshold} receive \code{NA} in
 the \code{active_x} column.
 }
+\section{Phase is inferred from expression, not genotyped}{
+
+snplet infers phase from scRNA-seq allelic counts alone. No DNA-based
+haplotype is ever observed, and that limitation propagates into every
+downstream result.
+
+\code{"X1"} and \code{"X2"} name two expression-defined haplotype clusters,
+not identified physical chromosomes. They are exchangeable labels, fixed only
+by the convention that X1 is the larger active-X group, and they are not
+comparable across donors. \code{allele_on_x1} records which allele the model
+assigned to the X1 cluster in one donor -- not a genotyped haplotype.
+
+The active allele is consequently \emph{defined} as the majority-expressed
+one. The EM's phase step picks whichever orientation makes the silenced
+allele the minority, and the per-gene escape fraction is bounded below 0.5,
+so:
+\itemize{
+  \item escape above 0.5 cannot be represented. The measurable range runs
+    from 0 (strict inactivation) to 0.5 (complete escape, both alleles
+    equal), and 0.5 is the maximum rather than the midpoint.
+  \item a gene transcribed mainly from the inactive X is stored with inverted
+    phase and surfaces as an unusually \emph{clean} inactivated gene rather
+    than as an escapee. \code{XIST} is the textbook case.
+  \item "active" and "inactive" counts are majority/minority labels. They
+    coincide with the true active and inactive X only where canonical
+    inactivation holds, which is precisely what an escape analysis is
+    questioning.
+}
+
+Separating these cases needs phase from a source independent of expression --
+DNA-based genotyping, or trio/population phasing -- which this package does
+not have. \code{\link{add_molecule_phase}} supplies true physical linkage
+between SNPs co-observed on one molecule, but a molecule is a single
+transcript: it cannot link across genes, and its blocks are still oriented to
+X1/X2 using the expression-derived fit. It therefore refines phase within a
+gene without escaping this constraint.
+}
+
 \examples{
 \dontrun{
 # Assign the active X chromosome to cells

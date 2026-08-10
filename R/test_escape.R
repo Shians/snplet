@@ -35,6 +35,8 @@
 #' deliberately rather than defaulting to whichever grouping the input happens
 #' to arrive in.
 #'
+#' @inheritSection assign_xci Phase is inferred from expression, not genotyped
+#'
 #' @param x A data.frame (or tibble) with one row per observation, containing the
 #'   integer columns \code{active_count} and \code{inactive_count}. Typically
 #'   \code{\link{haplotype_expression}} output collapsed to one row per (donor,
