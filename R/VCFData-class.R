@@ -4,13 +4,13 @@
 #' This class stores variant information, sample metadata, and VCF header information
 #' to support genomic variant analysis workflows.
 #'
-#' @param header A character vector containing VCF header lines
-#' @param samples A character vector of sample names from the VCF file
-#' @param variants A data.frame containing variant information with standard VCF columns
-#' @param object A VCFData object for show method
-#' @param x A VCFData object
-#' @param i Numeric or logical vector for subsetting variants (rows)
-#' @param j Numeric or logical vector for subsetting columns
+#' @param header Character vector, required. VCF header lines.
+#' @param samples Character vector, required. Sample names from the VCF file.
+#' @param variants A data.frame, required, with standard VCF columns. Variant information.
+#' @param object A VCFData object, required. Passed to the show method.
+#' @param x A VCFData object, required.
+#' @param i Numeric or logical vector, optional. Subsets variants (rows).
+#' @param j Numeric or logical vector, optional. Subsets columns.
 #'
 #' @slot header A character vector containing VCF header lines
 #' @slot samples A character vector of sample names from the VCF file
@@ -139,7 +139,7 @@ setMethod("ncol", signature(x = "VCFData"), function(x) ncol(x@variants))
 
 #' Get dimensions of a VCFData object
 #'
-#' @param x A VCFData object
+#' @param x A VCFData object, required.
 #' @return A numeric vector of length 2 giving the number of variants and columns
 #' @rdname VCFData-class
 #' @exportMethod dim
@@ -173,9 +173,9 @@ setMethod("show", signature(object = "VCFData"), function(object) {
 # Subset method
 #' Subset a VCFData object
 #'
-#' @param x A VCFData object
-#' @param i Numeric or logical vector for subsetting variants (rows)
-#' @param j Numeric or logical vector for subsetting columns
+#' @param x A VCFData object, required.
+#' @param i Numeric or logical vector, optional. Subsets variants (rows).
+#' @param j Numeric or logical vector, optional. Subsets columns.
 #' @return A subsetted VCFData object
 #' @rdname VCFData-class
 #' @export
@@ -197,7 +197,7 @@ setMethod("[", signature(x = "VCFData", i = "ANY", j = "ANY"), function(x, i, j)
 #' Reads a VCF (Variant Call Format) file and parses it into a VCFData object.
 #' Handles header detection, sample extraction, and proper column naming.
 #'
-#' @param file Path to VCF file (can be gzipped)
+#' @param file Character scalar, required. Path to a VCF file (can be gzipped).
 #' @return A VCFData object containing header, samples, and variant data
 #' @export
 #'

@@ -16,9 +16,10 @@ filter_samples(.data, ...)
 \S4method{filter_samples}{SNPData}(.data, ...)
 }
 \arguments{
-\item{.data}{A SNPData object}
+\item{.data}{A SNPData object, required.}
 
-\item{...}{Logical expressions to filter by, based on barcode_info columns}
+\item{...}{Logical expressions, required. Filter conditions based on
+\code{barcode_info} columns.}
 }
 \value{
 A new filtered SNPData object

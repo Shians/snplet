@@ -12,13 +12,18 @@ infer_zygosity(
 )
 }
 \arguments{
-\item{x}{A SNPData object}
+\item{x}{A SNPData object, required.}
 
-\item{min_total_count}{Minimum total read depth (ref + alt) required per donor to test for heterozygosity (default: 10)}
+\item{min_total_count}{Numeric (default 10). Minimum total read depth
+(ref + alt) required per donor to test for heterozygosity.}
 
-\item{p_value_threshold}{P-value threshold for binomial test (default: 0.05). P-values are multiple-testing corrected and SNPs with p < threshold reject monoallelic expression.}
+\item{p_value_threshold}{Numeric, in \code{[0, 1]} (default 0.05).
+P-value threshold for the binomial test; p-values are multiple-testing
+corrected, and SNPs with p < threshold reject monoallelic expression.}
 
-\item{minor_allele_prop}{Minor allele proportion used as the null threshold for monoallelic expression testing (default: 0.1).}
+\item{minor_allele_prop}{Numeric, in \code{[0, 1]} (default 0.1). Minor
+allele proportion used as the null threshold for monoallelic expression
+testing.}
 }
 \value{
 A SNPData object with binomial-derived rows added to \code{donor_snp_info}.
@@ -29,7 +34,7 @@ monoallelic-expression binomial test (see \code{\link{test_maf}}) for every
 \code{(snp_id, donor)} pair meeting \code{min_total_count}, and writes the results into
 \code{donor_snp_info(x, source = "all")} tagged \code{zygosity_source = "binomial"}.
 Because \code{donor_snp_info} keys on \code{(snp_id, donor, zygosity_source)}, this can
-never touch a call from any other source (e.g. \code{"vireo_gt"}) for the same pair --
+never touch a call from any other source (e.g. \code{"vireo_gt"}) for the same pair;
 it is purely additive. If \code{x} has no active \code{\link{zygosity_source}} yet, it
 becomes \code{"binomial"}; otherwise the active source is left untouched, so calling
 this on an object that already has Vireo genotypes adds a second, independently

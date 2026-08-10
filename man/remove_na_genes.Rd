@@ -7,9 +7,10 @@
 remove_na_genes(x, gene_col = "gene_name")
 }
 \arguments{
-\item{x}{A SNPData object}
+\item{x}{A SNPData object, required.}
 
-\item{gene_col}{The column name in snp_info containing gene names (default: "gene_name")}
+\item{gene_col}{Character scalar (default \code{"gene_name"}). Column
+name in \code{snp_info} containing gene names.}
 }
 \value{
 A filtered SNPData object with NA gene SNPs removed

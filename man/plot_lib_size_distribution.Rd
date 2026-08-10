@@ -7,7 +7,7 @@
 plot_lib_size_distribution(snp_data)
 }
 \arguments{
-\item{snp_data}{A SNPData object containing sample information with library size data}
+\item{snp_data}{A SNPData object, required, with sample information and library size data.}
 }
 \value{
 A ggplot object showing the density distribution of library sizes

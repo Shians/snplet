@@ -3,8 +3,8 @@
 #' Writes the components of a SNPData object to an output folder in a format
 #' compatible with import_cellsnp.
 #'
-#' @param snpdata A SNPData object
-#' @param out_dir Output directory to write files
+#' @param snpdata A SNPData object, required.
+#' @param out_dir Character scalar, required. Output directory to write files to.
 #' @family import and export functions
 #' @export
 #'

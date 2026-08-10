@@ -7,11 +7,11 @@
 get_donor_het_snpdata(snp_data, donor, ...)
 }
 \arguments{
-\item{snp_data}{A SNPData object}
+\item{snp_data}{A SNPData object, required.}
 
-\item{donor}{Character string specifying the donor to filter for}
+\item{donor}{Character scalar, required. Donor to filter for.}
 
-\item{...}{Additional arguments passed to `donor_het_status_df`}
+\item{...}{Additional arguments passed to \code{donor_het_status_df}.}
 }
 \value{
 A filtered SNPData object containing only the specified donor and

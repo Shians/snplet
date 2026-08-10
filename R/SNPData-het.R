@@ -26,15 +26,20 @@
 #' A \code{(snp_id, donor)} pair with a zygosity call already stored in
 #' \code{donor_snp_info(x)} (e.g. from Vireo genotypes read at import, or from
 #' \code{\link{infer_zygosity}}) is returned as-is rather than recomputed, so the same
-#' pair's zygosity doesn't silently flip depending on which chromosomes happen to be
+#' pair's zygosity doesn't flip without warning depending on which chromosomes happen to be
 #' loaded alongside it. Pairs with no stored call fall back to the binomial test as
 #' before. Errors if \code{x} has no active zygosity source at all (see
-#' \code{\link{zygosity_source}}) -- call \code{\link{infer_zygosity}} first.
+#' \code{\link{zygosity_source}}); call \code{\link{infer_zygosity}} first.
 #'
-#' @param x A SNPData object
-#' @param min_total_count Minimum total read depth (ref + alt) required per donor to test for heterozygosity (default: 10)
-#' @param p_value_threshold P-value threshold for binomial test (default: 0.05). P-values are multiple-testing corrected and SNPs with p < threshold reject monoallelic expression.
-#' @param minor_allele_prop Minor allele proportion used as the null threshold for monoallelic expression testing (default: 0.1).
+#' @param x A SNPData object, required.
+#' @param min_total_count Numeric (default 10). Minimum total read depth
+#'   (ref + alt) required per donor to test for heterozygosity.
+#' @param p_value_threshold Numeric, in \code{[0, 1]} (default 0.05).
+#'   P-value threshold for the binomial test; p-values are multiple-testing
+#'   corrected, and SNPs with p < threshold reject monoallelic expression.
+#' @param minor_allele_prop Numeric, in \code{[0, 1]} (default 0.1). Minor
+#'   allele proportion used as the null threshold for monoallelic expression
+#'   testing.
 #' @return A tibble with columns: snp_id, gene_name, chrom, pos, strand (if available in
 #'   snp_info), donor, ref_count, alt_count, total_count, ref_ratio, maf,
 #'   minor_allele_count, p_val, adj_p_val, tested, zygosity, zygosity_source. For a pair
@@ -132,17 +137,22 @@ setMethod(
 #' \code{(snp_id, donor)} pair meeting \code{min_total_count}, and writes the results into
 #' \code{donor_snp_info(x, source = "all")} tagged \code{zygosity_source = "binomial"}.
 #' Because \code{donor_snp_info} keys on \code{(snp_id, donor, zygosity_source)}, this can
-#' never touch a call from any other source (e.g. \code{"vireo_gt"}) for the same pair --
+#' never touch a call from any other source (e.g. \code{"vireo_gt"}) for the same pair;
 #' it is purely additive. If \code{x} has no active \code{\link{zygosity_source}} yet, it
 #' becomes \code{"binomial"}; otherwise the active source is left untouched, so calling
 #' this on an object that already has Vireo genotypes adds a second, independently
 #' selectable source without changing what \code{donor_het_status_df()}/\code{assign_xci()}
 #' use by default. Switch to it with \code{zygosity_source(x) <- "binomial"}.
 #'
-#' @param x A SNPData object
-#' @param min_total_count Minimum total read depth (ref + alt) required per donor to test for heterozygosity (default: 10)
-#' @param p_value_threshold P-value threshold for binomial test (default: 0.05). P-values are multiple-testing corrected and SNPs with p < threshold reject monoallelic expression.
-#' @param minor_allele_prop Minor allele proportion used as the null threshold for monoallelic expression testing (default: 0.1).
+#' @param x A SNPData object, required.
+#' @param min_total_count Numeric (default 10). Minimum total read depth
+#'   (ref + alt) required per donor to test for heterozygosity.
+#' @param p_value_threshold Numeric, in \code{[0, 1]} (default 0.05).
+#'   P-value threshold for the binomial test; p-values are multiple-testing
+#'   corrected, and SNPs with p < threshold reject monoallelic expression.
+#' @param minor_allele_prop Numeric, in \code{[0, 1]} (default 0.1). Minor
+#'   allele proportion used as the null threshold for monoallelic expression
+#'   testing.
 #' @return A SNPData object with binomial-derived rows added to \code{donor_snp_info}.
 #' @export
 #'
@@ -205,9 +215,9 @@ infer_zygosity <- function(x, min_total_count = 10, p_value_threshold = 0.05, mi
 #' Filters a SNPData object to a specific donor and only includes SNPs that are
 #' heterozygous for that donor.
 #'
-#' @param snp_data A SNPData object
-#' @param donor Character string specifying the donor to filter for
-#' @param ... Additional arguments passed to `donor_het_status_df`
+#' @param snp_data A SNPData object, required.
+#' @param donor Character scalar, required. Donor to filter for.
+#' @param ... Additional arguments passed to \code{donor_het_status_df}.
 #' @return A filtered SNPData object containing only the specified donor and
 #'   their heterozygous SNPs
 #' @export

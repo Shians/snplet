@@ -15,7 +15,7 @@
 \description{
 The \code{add_*_metadata()} family only ever changes annotation columns
 (and, for \code{donor_snp_info}, adds rows for new (snp_id, donor,
-zygosity_source) triples) -- the count matrices and the identity/order of
+zygosity_source) triples); the count matrices and the identity/order of
 SNPs and cells never change. Routing that through \code{new("SNPData",
 ...)} would re-run \code{.recompute_metrics()}, which adds the full
 \code{ref_count}/\code{alt_count} sparse matrices and takes

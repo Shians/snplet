@@ -16,7 +16,7 @@ aggregate_count_df(x, group_by, test_maf = TRUE)
 more than one column is given, counts are aggregated over each unique combination of values
 across those columns, and each grouping column is retained in the output.}
 
-\item{test_maf}{Logical, whether to include a test_maf column (default TRUE)}
+\item{test_maf}{Logical (default \code{TRUE}). Whether to include a test_maf column.}
 }
 \value{
 A tibble with columns: snp_id, gene_name, chrom, pos, strand (if available in snp_info), [group_by], ref_count, alt_count, total_count, ref_ratio, maf, (optionally test_maf)

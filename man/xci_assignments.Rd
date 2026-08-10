@@ -10,9 +10,8 @@ xci_assignments(x)
 \S4method{xci_assignments}{SNPData}(x)
 }
 \arguments{
-\item{x}{A SNPData object that had XCI diagnostics stored by
-\code{\link{assign_xci}} or
-\code{\link{assign_xci_by_clonotype}}.}
+\item{x}{A SNPData object, required, that had XCI diagnostics stored by
+\code{\link{assign_xci}} or \code{\link{assign_xci_by_clonotype}}.}
 }
 \value{
 A tibble with one row per cell and columns \code{cell_id}
@@ -34,15 +33,16 @@ haplotype is ever observed, and that limitation propagates into every
 downstream result.
 
 \code{"X1"} and \code{"X2"} name two expression-defined haplotype clusters,
-not identified physical chromosomes. They are exchangeable labels, fixed only
-by the convention that X1 is the larger active-X group, and they are not
-comparable across donors. \code{allele_on_x1} records which allele the model
-assigned to the X1 cluster in one donor -- not a genotyped haplotype.
+not identified physical chromosomes: they are exchangeable labels, fixed
+only by the convention that X1 is the larger active-X group, and are not
+comparable across donors. \code{allele_on_x1} records which allele the
+model assigned to the X1 cluster in one donor; it is not a genotyped
+haplotype.
 
 The active allele is consequently \emph{defined} as the majority-expressed
-one. The EM's phase step picks whichever orientation makes the silenced
-allele the minority, and the per-gene escape fraction is bounded below 0.5,
-so:
+one: the EM's phase step picks whichever orientation makes the silenced
+allele the minority, and the per-gene escape fraction is bounded below
+0.5. This has three consequences:
 \itemize{
   \item escape above 0.5 cannot be represented. The measurable range runs
     from 0 (strict inactivation) to 0.5 (complete escape, both alleles
@@ -56,13 +56,13 @@ so:
     questioning.
 }
 
-Separating these cases needs phase from a source independent of expression --
-DNA-based genotyping, or trio/population phasing -- which this package does
-not have. \code{\link{add_molecule_phase}} supplies true physical linkage
-between SNPs co-observed on one molecule, but a molecule is a single
-transcript: it cannot link across genes, and its blocks are still oriented to
-X1/X2 using the expression-derived fit. It therefore refines phase within a
-gene without escaping this constraint.
+Separating these cases needs phase from a source independent of
+expression, such as DNA-based genotyping or trio/population phasing,
+which this package does not have. \code{\link{add_molecule_phase}}
+supplies true physical linkage between SNPs co-observed on one molecule,
+but a molecule is a single transcript: it cannot link across genes, and
+its blocks are still oriented to X1/X2 using the expression-derived fit.
+It therefore refines phase within a gene without escaping this constraint.
 }
 
 \seealso{

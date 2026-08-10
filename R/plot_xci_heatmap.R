@@ -14,43 +14,45 @@
 #'
 #' @inheritSection assign_xci Phase is inferred from expression, not genotyped
 #'
-#' @param x A SNPData object that had XCI diagnostics stored by
-#'   \code{\link{assign_xci}} or
-#'   \code{\link{assign_xci_by_clonotype}}.
-#' @param donor Character string specifying which donor to visualize
-#' @param min_coverage_cells Minimum number of cells that must cover a gene for
-#'   it to be shown. Genes covered in fewer cells carry little signal and are
-#'   dropped. Defaults to 1 (drop only genes with no coverage in this donor).
-#' @param max_genes Maximum number of genes (rows) to display. When set, only
-#'   the top \code{max_genes} most discriminative genes are shown. Defaults to
-#'   \code{NULL} (show all retained genes).
-#' @param show_gene_names Whether to draw gene names as row labels. Useful to
-#'   turn off when many genes are shown. Defaults to \code{TRUE}.
-#' @param show_posterior Whether to draw the "P(active = X1)" posterior
-#'   probability annotation row. Defaults to \code{TRUE}.
-#' @param mark_boundaries Whether to draw dotted vertical lines at the
-#'   transitions between assignment groups (X1 -> unassigned -> X2). Defaults to
-#'   \code{TRUE}.
-#' @param show_unassigned Whether to include low-confidence unassigned columns:
-#'   cells or clonotypes the model scored but could not confidently assign to X1
-#'   or X2. Defaults to \code{TRUE}.
-#' @param show_no_coverage Whether to include no-coverage columns: cells or
-#'   clonotypes with no covered informative SNPs, which the model never scored.
-#'   These carry no data (all-NA columns). Defaults to \code{FALSE}.
-#' @param cluster_rows Whether to cluster genes hierarchically instead of
-#'   ordering them by discriminative power. Defaults to \code{FALSE}.
-#' @param ref_fraction_palette Length-3 vector of colours for the REF fraction
-#'   heatmap body, mapped to fractions 0, 0.5, and 1. Defaults to a blue-red
-#'   diverging ramp.
-#' @param assignment_palette Named vector of colours for the assignment
-#'   annotation, with names \code{"X1"}, \code{"X2"}, and \code{"unassigned"}.
-#'   Defaults to green / purple.
-#' @param posterior_palette Length-3 vector of colours for the
-#'   posterior_X1_active annotation ramp, mapped to posteriors 0, 0.5, and 1. Defaults to a
-#'   brown-orange diverging ramp. The three scales use distinct hue families
-#'   (blue-red, green/purple, brown-orange) so viewers do not relate them.
-#' @param na_fill Colour for uncovered (missing) cells. Defaults to
-#'   \code{"grey90"}, chosen to read distinctly from a balanced REF fraction.
+#' @param x A SNPData object, required, that had XCI diagnostics stored by
+#'   \code{\link{assign_xci}} or \code{\link{assign_xci_by_clonotype}}.
+#' @param donor Character scalar, required. Donor to visualize.
+#' @param min_coverage_cells Integer (default 1, dropping only genes with no
+#'   coverage in this donor). Minimum number of cells that must cover a gene
+#'   for it to be shown; genes covered in fewer cells carry little signal and
+#'   are dropped.
+#' @param max_genes Integer, optional (default \code{NULL}, showing all
+#'   retained genes). Maximum number of genes (rows) to display; when set,
+#'   only the top \code{max_genes} most discriminative genes are shown.
+#' @param show_gene_names Logical (default \code{TRUE}). Whether to draw gene
+#'   names as row labels; useful to turn off when many genes are shown.
+#' @param show_posterior Logical (default \code{TRUE}). Whether to draw the
+#'   "P(active = X1)" posterior probability annotation row.
+#' @param mark_boundaries Logical (default \code{TRUE}). Whether to draw
+#'   dotted vertical lines at the transitions between assignment groups (X1
+#'   -> unassigned -> X2).
+#' @param show_unassigned Logical (default \code{TRUE}). Whether to include
+#'   low-confidence unassigned columns: cells or clonotypes the model scored
+#'   but could not confidently assign to X1 or X2.
+#' @param show_no_coverage Logical (default \code{FALSE}). Whether to include
+#'   no-coverage columns: cells or clonotypes with no covered informative
+#'   SNPs, which the model never scored. These carry no data (all-NA columns).
+#' @param cluster_rows Logical (default \code{FALSE}). Whether to cluster
+#'   genes hierarchically instead of ordering them by discriminative power.
+#' @param ref_fraction_palette Length-3 character vector of colours (default
+#'   a blue-red diverging ramp). REF fraction heatmap body colours, mapped to
+#'   fractions 0, 0.5, and 1.
+#' @param assignment_palette Named character vector of colours (default
+#'   green / purple), with names \code{"X1"}, \code{"X2"}, and
+#'   \code{"unassigned"}. Assignment annotation colours.
+#' @param posterior_palette Length-3 character vector of colours (default a
+#'   brown-orange diverging ramp). posterior_X1_active annotation ramp
+#'   colours, mapped to posteriors 0, 0.5, and 1. The three scales use
+#'   distinct hue families (blue-red, green/purple, brown-orange) so viewers
+#'   do not relate them.
+#' @param na_fill Character scalar, a colour (default \code{"grey90"}, chosen
+#'   to read distinctly from a balanced REF fraction). Fill for uncovered
+#'   (missing) cells.
 #'
 #' @return A drawn \code{HeatmapList} (the donor is the plot title and the
 #'   column axis is labelled with the modelling unit, "Cells" or "Clonotypes").

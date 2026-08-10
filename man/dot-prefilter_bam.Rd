@@ -19,14 +19,14 @@
 }
 \value{
 Path of an uncompressed temporary BAM, or `NULL` if `samtools` is
-  unavailable -- in which case the caller falls back to reading the
-  original BAM directly.
+  unavailable, in which case the calling function falls back to reading
+  the original BAM directly.
 }
 \description{
 Rsamtools decompresses every read in a window before R can discard it;
 `samtools` can apply the same barcode/UMI/quality criteria in threaded C
 first, which is where nearly all of the speed comes from. This is a pure
-accelerator -- the filters applied afterwards in R remain the definition of
+accelerator: the filters applied afterwards in R remain the definition of
 what is kept, so the two paths cannot diverge.
 }
 \keyword{internal}

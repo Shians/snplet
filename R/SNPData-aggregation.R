@@ -3,7 +3,7 @@
 #' Returns a long-format data frame of reference and alternate allele counts per SNP and cell/barcode.
 #'
 #' @param x A SNPData object
-#' @param test_maf Logical, whether to include a test_maf column (default TRUE)
+#' @param test_maf Logical (default \code{TRUE}). Whether to include a test_maf column.
 #' @return A tibble with columns: snp_id, gene_name, chrom, pos, strand (if available in snp_info), cell_id, ref_count, alt_count, total_count, ref_ratio, maf, (optionally test_maf)
 #' @export
 #'
@@ -185,7 +185,7 @@ setMethod(
 #' Returns a long-format data frame of reference and alternate allele counts per SNP and donor.
 #'
 #' @param x A SNPData object
-#' @param test_maf Logical, whether to include a test_maf column (default TRUE)
+#' @param test_maf Logical (default \code{TRUE}). Whether to include a test_maf column.
 #' @return A tibble with columns: snp_id, gene_name, chrom, pos, strand (if available in snp_info), donor, ref_count, alt_count, total_count, ref_ratio, maf, (optionally test_maf)
 #' @export
 #'
@@ -215,7 +215,7 @@ setMethod(
 #' Returns a long-format data frame of reference and alternate allele counts per SNP and clonotype, with most likely donor annotation.
 #'
 #' @param x A SNPData object
-#' @param test_maf Logical, whether to include a test_maf column (default TRUE)
+#' @param test_maf Logical (default \code{TRUE}). Whether to include a test_maf column.
 #' @return A tibble with columns: snp_id, gene_name, chrom, pos, strand (if available in snp_info), clonotype, ref_count, alt_count, total_count, ref_ratio, maf, donor, (optionally test_maf)
 #' @export
 #'
@@ -248,7 +248,7 @@ setMethod(
 #' @param group_by Character vector specifying the column name(s) in barcode_info to group by. When
 #'   more than one column is given, counts are aggregated over each unique combination of values
 #'   across those columns, and each grouping column is retained in the output.
-#' @param test_maf Logical, whether to include a test_maf column (default TRUE)
+#' @param test_maf Logical (default \code{TRUE}). Whether to include a test_maf column.
 #' @return A tibble with columns: snp_id, gene_name, chrom, pos, strand (if available in snp_info), [group_by], ref_count, alt_count, total_count, ref_ratio, maf, (optionally test_maf)
 #' @export
 #'

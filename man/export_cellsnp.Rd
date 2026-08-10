@@ -7,9 +7,9 @@
 export_cellsnp(snpdata, out_dir)
 }
 \arguments{
-\item{snpdata}{A SNPData object}
+\item{snpdata}{A SNPData object, required.}
 
-\item{out_dir}{Output directory to write files}
+\item{out_dir}{Character scalar, required. Output directory to write files to.}
 }
 \description{
 Writes the components of a SNPData object to an output folder in a format

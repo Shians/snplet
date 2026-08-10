@@ -7,12 +7,13 @@
 plot_maf_track(allele_count_df, facet, x_range)
 }
 \arguments{
-\item{allele_count_df}{A data frame containing SNP information with columns 'pos' (position),
-'maf' (minor allele frequency), and 'donor_id' for faceting}
+\item{allele_count_df}{A data.frame, required, with columns \code{pos}
+(position), \code{maf} (minor allele frequency), and \code{donor_id} for
+faceting. SNP information.}
 
-\item{facet}{A variable to use for faceting the plot}
+\item{facet}{Required. Variable to use for faceting the plot.}
 
-\item{x_range}{A numeric vector of length 2 specifying the genomic range limits to display}
+\item{x_range}{Numeric vector of length 2, required. Genomic range limits to display.}
 }
 \value{
 A ggplot object showing MAF values across the genomic region

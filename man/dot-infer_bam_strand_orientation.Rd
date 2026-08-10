@@ -27,15 +27,15 @@ sense/antisense to stop early. Default 0.95.}
 the whole file. Default 200000.}
 }
 \value{
-A list with `orientation` (`"sense"` or `"antisense"` --
+A list with `orientation` (`"sense"` or `"antisense"`,
   whichever a majority of `ts`-tagged reads support), `n_ts_reads`,
   `concordance` (fraction of those agreeing with `orientation`), and
   `n_scanned` (total reads read to reach the decision).
 }
 \description{
 Demultiplexing tools such as Flexiplex reorient reads before alignment,
-and 5' vs 3' protocol data end up flipped in opposite directions -- 5'
-reads sense to the transcript, 3' reads its reverse complement -- with no
+and 5' vs 3' protocol data end up flipped in opposite directions (5'
+reads sense to the transcript, 3' reads its reverse complement), with no
 record of which happened left in the BAM. A spliced read's `ts:A:+/-` tag
 (the transcript strand minimap2 calls from the GT-AG splice-junction
 signal) is independent of that flip, so comparing a read's own alignment

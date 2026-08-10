@@ -4,8 +4,9 @@
 #' Doublets are identified based on the 'donor' column in the barcode_info slot, where
 #' cells labeled as 'doublet' are removed.
 #'
-#' @param x A SNPData object
-#' @param drop_na Logical, whether to also remove cells with NA donor assignments (default TRUE)
+#' @param x A SNPData object, required.
+#' @param drop_na Logical (default \code{TRUE}). Whether to also remove
+#'   cells with NA donor assignments.
 #'
 #' @return A filtered SNPData object with doublets removed
 #' @family data cleaning functions
@@ -60,8 +61,9 @@ remove_doublets <- function(x, drop_na = TRUE) {
 #' of the snp_info slot. This is useful for focusing analysis on SNPs
 #' that are associated with known genes.
 #'
-#' @param x A SNPData object
-#' @param gene_col The column name in snp_info containing gene names (default: "gene_name")
+#' @param x A SNPData object, required.
+#' @param gene_col Character scalar (default \code{"gene_name"}). Column
+#'   name in \code{snp_info} containing gene names.
 #'
 #' @return A filtered SNPData object with NA gene SNPs removed
 #' @family data cleaning functions
@@ -107,8 +109,9 @@ remove_na_genes <- function(x, gene_col = "gene_name") {
 #' of the barcode_info slot. This is useful for analyses that require valid
 #' clonotype assignments for all barcodes.
 #'
-#' @param x A SNPData object
-#' @param clonotype_col The column name in barcode_info containing clonotype values (default: "clonotype")
+#' @param x A SNPData object, required.
+#' @param clonotype_col Character scalar (default \code{"clonotype"}).
+#'   Column name in \code{barcode_info} containing clonotype values.
 #'
 #' @return A filtered SNPData object with NA clonotype barcodes removed
 #' @family data cleaning functions

@@ -7,18 +7,19 @@
 phase_snps(per_snp, min_molecules = 5L, min_consistency = 0.9)
 }
 \arguments{
-\item{per_snp}{A tibble as returned by `molecule_snp_alleles()`, with
-columns `barcode`, `umi`, `snp_id`, `allele`.}
+\item{per_snp}{A tibble, required, as returned by `molecule_snp_alleles()`,
+with columns `barcode`, `umi`, `snp_id`, `allele`.}
 
-\item{min_molecules}{Molecules required to accept a SNP pair as an edge.
-Default 5.}
+\item{min_molecules}{Integer (default 5). Molecules required to accept a
+SNP pair as an edge.}
 
-\item{min_consistency}{Fraction of those molecules that must agree on the
-same/opposite relation for the edge to be accepted. Default 0.9.}
+\item{min_consistency}{Numeric, in `[0, 1]` (default 0.9). Fraction of
+those molecules that must agree on the same/opposite relation for the
+edge to be accepted.}
 }
 \value{
 A tibble with columns `snp_id`, `block` (integer phase-block id,
-  unique within this call), and `allele_on_h1` ("REF" or "ALT" -- the
+  unique within this call), and `allele_on_h1` ("REF" or "ALT", the
   allele carried by haplotype 1 at that SNP; H1 is an arbitrary label local
   to each block, not oriented to X1/X2). SNPs that could not be linked to
   any other SNP by an accepted edge are absent from the result.
@@ -35,7 +36,7 @@ Orientation propagates across accepted edges, flipping on "opposite"
 links; each connected component becomes a phase block. Blocks cannot be
 joined beyond the reach of a single molecule, so a fragmented result is
 expected rather than a failure. Phasing runs over every SNP regardless of
-gene assignment -- whether two SNPs share a haplotype is a property of the
+gene assignment: whether two SNPs share a haplotype is a property of the
 molecule, not of gene annotation, and an ambiguous (multi-gene) SNP can
 still serve as a valid bridge between two unambiguous ones.
 }

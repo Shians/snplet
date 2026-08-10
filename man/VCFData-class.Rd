@@ -60,19 +60,19 @@ get_variants(x)
 \S4method{[}{VCFData,ANY,ANY,ANY}(x, i, j)
 }
 \arguments{
-\item{header}{A character vector containing VCF header lines}
+\item{header}{Character vector, required. VCF header lines.}
 
-\item{samples}{A character vector of sample names from the VCF file}
+\item{samples}{Character vector, required. Sample names from the VCF file.}
 
-\item{variants}{A data.frame containing variant information with standard VCF columns}
+\item{variants}{A data.frame, required, with standard VCF columns. Variant information.}
 
-\item{x}{A VCFData object}
+\item{x}{A VCFData object, required.}
 
-\item{object}{A VCFData object for show method}
+\item{object}{A VCFData object, required. Passed to the show method.}
 
-\item{i}{Numeric or logical vector for subsetting variants (rows)}
+\item{i}{Numeric or logical vector, optional. Subsets variants (rows).}
 
-\item{j}{Numeric or logical vector for subsetting columns}
+\item{j}{Numeric or logical vector, optional. Subsets columns.}
 }
 \value{
 A numeric vector of length 2 giving the number of variants and columns

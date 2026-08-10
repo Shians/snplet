@@ -6,18 +6,20 @@
 #' ensure data integrity by validating dimensions and preserving automatically
 #' computed summary statistics.
 #'
-#' @param x A SNPData object
-#' @param metadata A data.frame containing new columns (and, for \code{add_donor_snp_metadata},
-#'   possibly new rows) to add
-#' @param join_by Character vector specifying the column(s) to join by.
-#'   For \code{barcode_info}: \code{"cell_id"} or \code{"barcode"}. For \code{snp_info}:
-#'   \code{"snp_id"}. For \code{donor_info}: \code{"donor"}. For \code{donor_snp_info}:
-#'   \code{c("snp_id", "donor")}.
-#' @param overwrite Logical, whether to overwrite existing columns (default \code{FALSE},
-#'   except for \code{add_donor_snp_metadata} where it defaults to \code{TRUE} since
-#'   \code{donor_snp_info}'s columns are fixed by its schema from construction, so treating
-#'   them as pre-existing and requiring \code{overwrite=FALSE} would reject on every call).
-#'   Set to \code{TRUE} to update existing columns.
+#' @param x A SNPData object, required.
+#' @param metadata A data.frame, required, with new columns (and, for
+#'   \code{add_donor_snp_metadata}, possibly new rows) to add.
+#' @param join_by Character vector; default varies by function. Column(s) to
+#'   join by: \code{"cell_id"} (default) or \code{"barcode"} for
+#'   \code{add_barcode_metadata}; \code{"snp_id"} (default) for
+#'   \code{add_snp_metadata}; \code{"donor"} (default) for
+#'   \code{add_donor_metadata}; \code{c("snp_id", "donor", "zygosity_source")}
+#'   (default) for \code{add_donor_snp_metadata}.
+#' @param overwrite Logical (default \code{FALSE}, except \code{TRUE} for
+#'   \code{add_donor_snp_metadata}, since \code{donor_snp_info}'s columns are
+#'   fixed by its schema from construction, so treating them as pre-existing
+#'   and requiring \code{overwrite = FALSE} would reject on every call).
+#'   Whether to overwrite existing columns.
 #'
 #' @return A SNPData object with the updated table
 #'
@@ -152,7 +154,7 @@ NULL
 #'
 #' The \code{add_*_metadata()} family only ever changes annotation columns
 #' (and, for \code{donor_snp_info}, adds rows for new (snp_id, donor,
-#' zygosity_source) triples) -- the count matrices and the identity/order of
+#' zygosity_source) triples); the count matrices and the identity/order of
 #' SNPs and cells never change. Routing that through \code{new("SNPData",
 #' ...)} would re-run \code{.recompute_metrics()}, which adds the full
 #' \code{ref_count}/\code{alt_count} sparse matrices and takes

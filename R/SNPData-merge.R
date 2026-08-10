@@ -17,9 +17,9 @@
 #'   \describe{
 #'     \item{\code{"union"}}{Keep all cells from both objects (default)}
 #'     \item{\code{"intersect"}}{Keep only cells present in both objects}
-#'     \item{\code{"left"}}{Keep the cells of x, drawing on y where it covers the
-#'       same cell (see \code{cell_collision} -- under the default a cell of x
-#'       that y also carries can be replaced by y's copy rather than added to)}
+#'     \item{\code{"left"}}{Keep the cells of x, drawing on y where it covers
+#'       the same cell: under the default \code{cell_collision}, a cell of x
+#'       that y also carries can be replaced by y's copy rather than added to}
 #'     \item{\code{"right"}}{Keep the cells of y, drawing on x on the same terms}
 #'   }
 #' @param cell_collision How to resolve a cell retained from both objects.
@@ -32,69 +32,38 @@
 #'       (default). Correct when a shared identifier is a coincidence rather than
 #'       a shared cell.}
 #'     \item{\code{"sum"}}{Add the two copies' counts together, the unconditional
-#'       behaviour of earlier versions. Correct only for technical replicates --
+#'       behaviour of earlier versions. Correct only for technical replicates,
 #'       the same physical cells sequenced twice.}
 #'   }
 #'
 #' @return A new SNPData object containing the merged data
 #'
 #' @details
-#' This function provides independent control over which SNPs (rows) and cells
-#' (columns) to retain when merging two SNPData objects. SNPs present in both
-#' objects have their counts summed element-wise; cells present in both are
-#' resolved according to \code{cell_collision}. For positions present in only one
-#' object (but retained by the join strategy), counts are kept with zero-filling
-#' for the missing dimension.
+#' This function provides independent control over which SNPs (rows) and
+#' cells (columns) to retain: SNPs present in both objects have their counts
+#' summed element-wise, cells present in both are resolved according to
+#' \code{cell_collision}, and positions present in only one object (but
+#' retained by the join strategy) are zero-filled for the missing dimension.
 #'
-#' **Cell Merging Strategy:**
-#' When both SNPData objects contain a \code{barcode} column in their
-#' \code{barcode_info}, cells are matched and merged by their cell barcodes
-#' rather than by \code{cell_id}. This allows proper merging of data from the
-#' same physical cells across datasets, even if they have different internal
-#' \code{cell_id} values. If the \code{barcode} column is absent from either
-#' object, the function falls back to merging by \code{cell_id}.
+#' Metadata is merged using the corresponding dplyr join function: for
+#' overlapping SNPs with conflicting metadata, values from x take priority.
+#' A collided cell's metadata instead follows whichever copy
+#' \code{cell_collision} retained, so its \code{donor} and other annotation
+#' describe the cell whose counts survived (falling back to x priority under
+#' \code{cell_collision = "sum"}). Auto-computed columns (\code{coverage},
+#' \code{non_zero_samples}, \code{library_size}, \code{non_zero_snps}) are
+#' recalculated for the merged object.
 #'
-#' @section Cells that collide rather than correspond:
-#' Matching cells by barcode assumes a shared barcode means a shared cell. That
-#' holds for technical replicates of one library, and it is why
-#' \code{cell_collision = "sum"} exists. It does \emph{not} hold across
-#' independently barcoded libraries: 10x barcodes are drawn from a fixed
-#' whitelist of roughly 737,000, so two runs of \code{n} cells each are expected
-#' to share about \code{n^2 / 737000} barcodes purely by chance -- around 34
-#' cells for two 5,000-cell runs. Those are two different cells, frequently from
-#' two different donors.
-#'
-#' Summing such a pair fabricates a cell carrying both donors' alleles. At a SNP
-#' where the donors' phase differs, the sum reads as biallelic expression, which
-#' for X-linked genes is indistinguishable from escape from X-chromosome
-#' inactivation -- so the artefact lands precisely on the signal
-#' \code{\link{assign_xci}} and \code{\link{test_escape}} exist to measure. The
-#' default \code{"keep_best"} therefore discards one member of the pair, which
-#' costs a real cell but never invents one.
-#'
-#' Neither option makes the merged object able to tell the two cases apart, and
-#' the loss under \code{"keep_best"} falls on whichever library was sequenced
-#' more shallowly. Where cells from different libraries must all be retained, give
-#' them identifiers that do not collide (for example by suffixing each object's
-#' barcodes with a batch label) before merging, so no resolution is needed.
-#'
-#' Metadata is merged using the corresponding dplyr join function. For overlapping
-#' SNPs with conflicting metadata, values from x take priority. A collided cell's
-#' metadata instead follows whichever copy \code{cell_collision} retained, so that
-#' its \code{donor} and other annotation describe the cell whose counts survived;
-#' under \code{cell_collision = "sum"} the cell falls back to x priority, as
-#' before. Auto-computed columns (coverage, non_zero_samples, library_size,
-#' non_zero_snps) are recalculated for the merged object.
-#'
-#' \code{donor_info} is merged the same way (x takes priority, \code{n_cells}
-#' recalculated). \code{donor_snp_info} instead \strong{errors} if x and y disagree on
-#' \code{zygosity}, \code{zygosity_source}, \code{allele_on_x1}, or
-#' \code{xci_informative} for the same (SNP, donor) pair, since a silent pick would hide
-#' a real reproducibility problem; numeric estimate columns (p-values, GT posteriors,
-#' escape fractions) still take x priority on conflict, since two independently fit or
-#' tested values can differ by floating point alone. A donor with no cells left after
-#' the \code{cell_join} has its \code{donor_info}/\code{donor_snp_info} rows dropped, same
-#' as subsetting.
+#' \code{donor_info} is merged the same way (x priority, \code{n_cells}
+#' recalculated). \code{donor_snp_info} instead \strong{errors} if x and y
+#' disagree on \code{zygosity}, \code{zygosity_source}, \code{allele_on_x1},
+#' or \code{xci_informative} for the same (SNP, donor) pair, since silently
+#' picking one would hide a real reproducibility problem; numeric estimate
+#' columns (p-values, GT posteriors, escape fractions) still take x priority
+#' on conflict, since two independently fit or tested values can differ by
+#' floating point alone. A donor with no cells left after \code{cell_join}
+#' has its \code{donor_info}/\code{donor_snp_info} rows dropped, as when
+#' subsetting.
 #'
 #' The independent join parameters enable fine-grained control:
 #' \itemize{
@@ -104,6 +73,24 @@
 #'   \item \code{snp_join="intersect", cell_join="union"}: Track consensus SNPs across more cells
 #'   \item \code{snp_join="left", cell_join="left"}: Augment primary dataset
 #' }
+#'
+#' @section Cell merging strategy:
+#' Cells are matched and merged by barcode, not \code{cell_id}, when both
+#' SNPData objects carry a \code{barcode} column in \code{barcode_info}; this
+#' correctly merges the same physical cell across datasets even when its
+#' internal \code{cell_id} differs between them. If \code{barcode} is absent
+#' from either object, the function falls back to merging by \code{cell_id}.
+#'
+#' @section Cells that collide rather than correspond:
+#' A shared barcode across independently barcoded libraries is often pure
+#' chance, not a shared cell (10x's ~737,000-barcode whitelist gives two
+#' 5,000-cell runs ~34 chance collisions). Summing such a pair fabricates a
+#' cell carrying both donors' alleles, indistinguishable for X-linked genes
+#' from XCI escape. The default \code{cell_collision = "keep_best"} avoids
+#' this by discarding one member of the pair rather than summing;
+#' \code{"sum"} is correct only for true technical replicates. To retain all
+#' cells from independent libraries safely, suffix each object's barcodes
+#' with a batch label before merging so they cannot collide.
 #'
 #' @examples
 #' \dontrun{

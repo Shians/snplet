@@ -7,10 +7,10 @@
 plot_gene_anno_track(gene_anno, x_range)
 }
 \arguments{
-\item{gene_anno}{A data frame containing gene annotation information with columns 'pos' (position)
-and 'gene_name'}
+\item{gene_anno}{A data.frame, required, with columns \code{pos}
+(position) and \code{gene_name}. Gene annotation information.}
 
-\item{x_range}{A numeric vector of length 2 specifying the genomic range limits to display}
+\item{x_range}{Numeric vector of length 2, required. Genomic range limits to display.}
 }
 \value{
 A ggplot object representing the gene annotation track

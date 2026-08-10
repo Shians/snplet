@@ -15,27 +15,36 @@ import_cellsnp(
 )
 }
 \arguments{
-\item{cellsnp_dir}{Directory containing cellSNP-lite output files}
+\item{cellsnp_dir}{Character scalar, required. Directory containing
+cellSNP-lite output files.}
 
-\item{gene_annotation}{Data frame with gene annotations (must contain chrom, start, end, gene_name)}
+\item{gene_annotation}{A data.frame, required, with columns \code{chrom},
+\code{start}, \code{end}, \code{gene_name}. Gene annotations.}
 
-\item{vdj_file}{Path to filtered_contig_annotations.csv from cellranger VDJ (optional, default: NULL)}
+\item{vdj_file}{Character scalar, optional (default \code{NULL}). Path to
+\code{filtered_contig_annotations.csv} from cellranger VDJ.}
 
-\item{vireo_folder}{Path to a Vireo output directory, optional (default: NULL). Donor
-assignments are read from \code{donor_ids.tsv} inside it. If it also contains a
-genotype VCF (\code{GT_donors.vireo.vcf.gz}, one sample column per donor), that is
-used to populate per-(SNP, donor) zygosity calls at construction time; if the
-genotype VCF is absent, only donor assignments are read.}
+\item{vireo_folder}{Character scalar, optional (default \code{NULL}).
+Path to a Vireo output directory. Donor assignments are read from
+\code{donor_ids.tsv} inside it. If it also contains a genotype VCF
+(\code{GT_donors.vireo.vcf.gz}, one sample column per donor), that is
+used to populate per-(SNP, donor) zygosity calls at construction time;
+if the genotype VCF is absent, only donor assignments are read.}
 
-\item{donor_map}{A named character vector, \code{c(new_label = old_label, ...)} (the same
-\code{new = old} convention as \code{dplyr::rename()}), optional.
-Relabels donors at import time -- useful since Vireo assigns arbitrary labels
-(\code{donor0}, \code{donor1}, ...), so applying the map here keeps every
-donor-keyed table consistent from the start (default: NULL)}
+\item{donor_map}{A named character vector, \code{c(new_label = old_label, ...)}
+(the same \code{new = old} convention as \code{dplyr::rename()}),
+optional (default \code{NULL}). Relabels donors at import time, useful
+since Vireo assigns arbitrary labels (\code{donor0}, \code{donor1}, ...),
+so applying the map here keeps every donor-keyed table consistent from
+the start.}
 
-\item{barcode_column}{Name of the column in vdj_file that contains cell barcodes (only used if vdj_file provided)}
+\item{barcode_column}{Character scalar (default \code{"barcode"}). Name
+of the column in \code{vdj_file} containing cell barcodes (only used if
+\code{vdj_file} is provided).}
 
-\item{clonotype_column}{Name of the column in vdj_file that contains clonotype information (only used if vdj_file provided)}
+\item{clonotype_column}{Character scalar (default \code{"raw_clonotype_id"}).
+Name of the column in \code{vdj_file} containing clonotype information
+(only used if \code{vdj_file} is provided).}
 }
 \value{
 A SNPData object

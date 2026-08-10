@@ -16,21 +16,25 @@ add_molecule_phase(
 )
 }
 \arguments{
-\item{x}{A SNPData object that has already been fit by `assign_xci()` or
-`assign_xci_by_clonotype()` (see `.has_xci_diagnostics()`), with a
-`donor` column in `barcode_info`.}
+\item{x}{A SNPData object, required, that has already been fit by
+`assign_xci()` or `assign_xci_by_clonotype()` (see
+`.has_xci_diagnostics()`), with a `donor` column in `barcode_info`.}
 
-\item{bam_files}{A named character vector or list, `donor = path`, one
-indexed BAM per donor. Names must match `barcode_info(x)$donor`. Any
-entry named `"doublet"` or `"unassigned"` is dropped with a warning --
-neither is a real donor with its own genotype to phase against.}
+\item{bam_files}{A named character vector or list, required,
+`donor = path`, one indexed BAM per donor. Names must match
+`barcode_info(x)$donor`. Any entry named `"doublet"` or `"unassigned"`
+is dropped with a warning, since neither is a real donor with its own
+genotype to phase against.}
 
-\item{target_chrom}{Canonical chromosome to restrict het-SNP selection to.
-Default `"chrX"`, matching `assign_xci()`'s own restriction.}
+\item{target_chrom}{Character scalar (default `"chrX"`, matching
+`assign_xci()`'s own restriction). Canonical chromosome to restrict
+het-SNP selection to.}
 
-\item{min_mapq, min_baseq, threads}{Passed to `extract_snp_calls()`.}
+\item{min_mapq, min_baseq, threads}{Integer (defaults 20, 10, 4). Passed to
+`extract_snp_calls()`.}
 
-\item{min_molecules, min_consistency}{Passed to `phase_snps()`.}
+\item{min_molecules, min_consistency}{Integer/numeric (defaults 5, 0.9).
+Passed to `phase_snps()`.}
 }
 \value{
 A SNPData object with `donor_snp_info` gaining the columns
@@ -42,8 +46,8 @@ A SNPData object with `donor_snp_info` gaining the columns
   else `NA` where `phase_conflict` is `TRUE`. Also carries a
   `"molecule_calls"` attribute (a tibble with columns `donor`, `barcode`,
   `umi`, `snp_id`, `allele`, `transcript_strand` (`"+"`/`"-"`/`NA`, the
-  molecule's inferred transcript strand -- see
-  `.infer_bam_strand_orientation()` and `molecule_read_strand()` -- used by
+  molecule's inferred transcript strand, see
+  `.infer_bam_strand_orientation()` and `molecule_read_strand()`, used by
   `haplotype_expression_by_molecule()` to resolve SNPs `assign_snp_genes()`
   flagged `ambiguous`), the per-donor `molecule_snp_alleles()` output
   already computed here) so `haplotype_expression_by_molecule()` does not
@@ -65,15 +69,16 @@ haplotype is ever observed, and that limitation propagates into every
 downstream result.
 
 \code{"X1"} and \code{"X2"} name two expression-defined haplotype clusters,
-not identified physical chromosomes. They are exchangeable labels, fixed only
-by the convention that X1 is the larger active-X group, and they are not
-comparable across donors. \code{allele_on_x1} records which allele the model
-assigned to the X1 cluster in one donor -- not a genotyped haplotype.
+not identified physical chromosomes: they are exchangeable labels, fixed
+only by the convention that X1 is the larger active-X group, and are not
+comparable across donors. \code{allele_on_x1} records which allele the
+model assigned to the X1 cluster in one donor; it is not a genotyped
+haplotype.
 
 The active allele is consequently \emph{defined} as the majority-expressed
-one. The EM's phase step picks whichever orientation makes the silenced
-allele the minority, and the per-gene escape fraction is bounded below 0.5,
-so:
+one: the EM's phase step picks whichever orientation makes the silenced
+allele the minority, and the per-gene escape fraction is bounded below
+0.5. This has three consequences:
 \itemize{
   \item escape above 0.5 cannot be represented. The measurable range runs
     from 0 (strict inactivation) to 0.5 (complete escape, both alleles
@@ -87,13 +92,13 @@ so:
     questioning.
 }
 
-Separating these cases needs phase from a source independent of expression --
-DNA-based genotyping, or trio/population phasing -- which this package does
-not have. \code{\link{add_molecule_phase}} supplies true physical linkage
-between SNPs co-observed on one molecule, but a molecule is a single
-transcript: it cannot link across genes, and its blocks are still oriented to
-X1/X2 using the expression-derived fit. It therefore refines phase within a
-gene without escaping this constraint.
+Separating these cases needs phase from a source independent of
+expression, such as DNA-based genotyping or trio/population phasing,
+which this package does not have. \code{\link{add_molecule_phase}}
+supplies true physical linkage between SNPs co-observed on one molecule,
+but a molecule is a single transcript: it cannot link across genes, and
+its blocks are still oriented to X1/X2 using the expression-derived fit.
+It therefore refines phase within a gene without escaping this constraint.
 }
 
 \seealso{

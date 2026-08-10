@@ -3,7 +3,7 @@
 #' This function visualizes the distribution of library sizes (total read counts)
 #' across all samples in the SNP data object using a density plot.
 #'
-#' @param snp_data A SNPData object containing sample information with library size data
+#' @param snp_data A SNPData object, required, with sample information and library size data.
 #' @return A ggplot object showing the density distribution of library sizes
 #' @family distribution plotting functions
 #' @export
@@ -31,7 +31,7 @@ plot_lib_size_distribution <- function(snp_data) {
 #' This function visualizes the distribution of coverage values across all SNPs
 #' in the SNP data object using a density plot with a log10-transformed x-axis.
 #'
-#' @param snp_data A SNPData object containing SNP information with coverage data
+#' @param snp_data A SNPData object, required, with SNP information and coverage data.
 #' @return A ggplot object showing the density distribution of SNP coverage on a log10 scale
 #' @family distribution plotting functions
 #' @export
@@ -60,7 +60,7 @@ plot_snp_cov_distribution <- function(snp_data) {
 #' This function visualizes the distribution of minor allele frequencies (MAF)
 #' in a given data frame using a density plot.
 #'
-#' @param df A data frame containing a column named 'maf' with MAF values
+#' @param df A data.frame, required, with a column named \code{maf} containing MAF values.
 #' @return A ggplot object showing the density distribution of MAF
 #' @family distribution plotting functions
 #' @export

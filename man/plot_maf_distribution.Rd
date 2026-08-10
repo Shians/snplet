@@ -7,7 +7,7 @@
 plot_maf_distribution(df)
 }
 \arguments{
-\item{df}{A data frame containing a column named 'maf' with MAF values}
+\item{df}{A data.frame, required, with a column named \code{maf} containing MAF values.}
 }
 \value{
 A ggplot object showing the density distribution of MAF

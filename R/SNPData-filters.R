@@ -58,8 +58,9 @@ check_filter_expr <- function(df, dots, df_name = "data.frame") {
 
 #' Filter SNPData object by SNP information
 #'
-#' @param .data A SNPData object
-#' @param ... Logical expressions to filter by, based on snp_info columns
+#' @param .data A SNPData object, required.
+#' @param ... Logical expressions, required. Filter conditions based on
+#'   \code{snp_info} columns.
 #' @return A new filtered SNPData object
 #' @export
 #'
@@ -110,8 +111,9 @@ setMethod(
 
 #' Filter SNPData object by sample/cell/barcode information
 #'
-#' @param .data A SNPData object
-#' @param ... Logical expressions to filter by, based on barcode_info columns
+#' @param .data A SNPData object, required.
+#' @param ... Logical expressions, required. Filter conditions based on
+#'   \code{barcode_info} columns.
 #' @return A new filtered SNPData object
 #' @export
 #'

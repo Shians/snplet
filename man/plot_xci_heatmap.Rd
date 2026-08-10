@@ -40,56 +40,58 @@ plot_xci_heatmap(
 )
 }
 \arguments{
-\item{x}{A SNPData object that had XCI diagnostics stored by
-\code{\link{assign_xci}} or
-\code{\link{assign_xci_by_clonotype}}.}
+\item{x}{A SNPData object, required, that had XCI diagnostics stored by
+\code{\link{assign_xci}} or \code{\link{assign_xci_by_clonotype}}.}
 
-\item{donor}{Character string specifying which donor to visualize}
+\item{donor}{Character scalar, required. Donor to visualize.}
 
-\item{min_coverage_cells}{Minimum number of cells that must cover a gene for
-it to be shown. Genes covered in fewer cells carry little signal and are
-dropped. Defaults to 1 (drop only genes with no coverage in this donor).}
+\item{min_coverage_cells}{Integer (default 1, dropping only genes with no
+coverage in this donor). Minimum number of cells that must cover a gene
+for it to be shown; genes covered in fewer cells carry little signal and
+are dropped.}
 
-\item{max_genes}{Maximum number of genes (rows) to display. When set, only
-the top \code{max_genes} most discriminative genes are shown. Defaults to
-\code{NULL} (show all retained genes).}
+\item{max_genes}{Integer, optional (default \code{NULL}, showing all
+retained genes). Maximum number of genes (rows) to display; when set,
+only the top \code{max_genes} most discriminative genes are shown.}
 
-\item{show_gene_names}{Whether to draw gene names as row labels. Useful to
-turn off when many genes are shown. Defaults to \code{TRUE}.}
+\item{show_gene_names}{Logical (default \code{TRUE}). Whether to draw gene
+names as row labels; useful to turn off when many genes are shown.}
 
-\item{show_posterior}{Whether to draw the "P(active = X1)" posterior
-probability annotation row. Defaults to \code{TRUE}.}
+\item{show_posterior}{Logical (default \code{TRUE}). Whether to draw the
+"P(active = X1)" posterior probability annotation row.}
 
-\item{mark_boundaries}{Whether to draw dotted vertical lines at the
-transitions between assignment groups (X1 -> unassigned -> X2). Defaults to
-\code{TRUE}.}
+\item{mark_boundaries}{Logical (default \code{TRUE}). Whether to draw
+dotted vertical lines at the transitions between assignment groups (X1
+-> unassigned -> X2).}
 
-\item{show_unassigned}{Whether to include low-confidence unassigned columns:
-cells or clonotypes the model scored but could not confidently assign to X1
-or X2. Defaults to \code{TRUE}.}
+\item{show_unassigned}{Logical (default \code{TRUE}). Whether to include
+low-confidence unassigned columns: cells or clonotypes the model scored
+but could not confidently assign to X1 or X2.}
 
-\item{show_no_coverage}{Whether to include no-coverage columns: cells or
-clonotypes with no covered informative SNPs, which the model never scored.
-These carry no data (all-NA columns). Defaults to \code{FALSE}.}
+\item{show_no_coverage}{Logical (default \code{FALSE}). Whether to include
+no-coverage columns: cells or clonotypes with no covered informative
+SNPs, which the model never scored. These carry no data (all-NA columns).}
 
-\item{cluster_rows}{Whether to cluster genes hierarchically instead of
-ordering them by discriminative power. Defaults to \code{FALSE}.}
+\item{cluster_rows}{Logical (default \code{FALSE}). Whether to cluster
+genes hierarchically instead of ordering them by discriminative power.}
 
-\item{ref_fraction_palette}{Length-3 vector of colours for the REF fraction
-heatmap body, mapped to fractions 0, 0.5, and 1. Defaults to a blue-red
-diverging ramp.}
+\item{ref_fraction_palette}{Length-3 character vector of colours (default
+a blue-red diverging ramp). REF fraction heatmap body colours, mapped to
+fractions 0, 0.5, and 1.}
 
-\item{assignment_palette}{Named vector of colours for the assignment
-annotation, with names \code{"X1"}, \code{"X2"}, and \code{"unassigned"}.
-Defaults to green / purple.}
+\item{assignment_palette}{Named character vector of colours (default
+green / purple), with names \code{"X1"}, \code{"X2"}, and
+\code{"unassigned"}. Assignment annotation colours.}
 
-\item{posterior_palette}{Length-3 vector of colours for the
-posterior_X1_active annotation ramp, mapped to posteriors 0, 0.5, and 1. Defaults to a
-brown-orange diverging ramp. The three scales use distinct hue families
-(blue-red, green/purple, brown-orange) so viewers do not relate them.}
+\item{posterior_palette}{Length-3 character vector of colours (default a
+brown-orange diverging ramp). posterior_X1_active annotation ramp
+colours, mapped to posteriors 0, 0.5, and 1. The three scales use
+distinct hue families (blue-red, green/purple, brown-orange) so viewers
+do not relate them.}
 
-\item{na_fill}{Colour for uncovered (missing) cells. Defaults to
-\code{"grey90"}, chosen to read distinctly from a balanced REF fraction.}
+\item{na_fill}{Character scalar, a colour (default \code{"grey90"}, chosen
+to read distinctly from a balanced REF fraction). Fill for uncovered
+(missing) cells.}
 }
 \value{
 A drawn \code{HeatmapList} (the donor is the plot title and the
@@ -116,15 +118,16 @@ haplotype is ever observed, and that limitation propagates into every
 downstream result.
 
 \code{"X1"} and \code{"X2"} name two expression-defined haplotype clusters,
-not identified physical chromosomes. They are exchangeable labels, fixed only
-by the convention that X1 is the larger active-X group, and they are not
-comparable across donors. \code{allele_on_x1} records which allele the model
-assigned to the X1 cluster in one donor -- not a genotyped haplotype.
+not identified physical chromosomes: they are exchangeable labels, fixed
+only by the convention that X1 is the larger active-X group, and are not
+comparable across donors. \code{allele_on_x1} records which allele the
+model assigned to the X1 cluster in one donor; it is not a genotyped
+haplotype.
 
 The active allele is consequently \emph{defined} as the majority-expressed
-one. The EM's phase step picks whichever orientation makes the silenced
-allele the minority, and the per-gene escape fraction is bounded below 0.5,
-so:
+one: the EM's phase step picks whichever orientation makes the silenced
+allele the minority, and the per-gene escape fraction is bounded below
+0.5. This has three consequences:
 \itemize{
   \item escape above 0.5 cannot be represented. The measurable range runs
     from 0 (strict inactivation) to 0.5 (complete escape, both alleles
@@ -138,13 +141,13 @@ so:
     questioning.
 }
 
-Separating these cases needs phase from a source independent of expression --
-DNA-based genotyping, or trio/population phasing -- which this package does
-not have. \code{\link{add_molecule_phase}} supplies true physical linkage
-between SNPs co-observed on one molecule, but a molecule is a single
-transcript: it cannot link across genes, and its blocks are still oriented to
-X1/X2 using the expression-derived fit. It therefore refines phase within a
-gene without escaping this constraint.
+Separating these cases needs phase from a source independent of
+expression, such as DNA-based genotyping or trio/population phasing,
+which this package does not have. \code{\link{add_molecule_phase}}
+supplies true physical linkage between SNPs co-observed on one molecule,
+but a molecule is a single transcript: it cannot link across genes, and
+its blocks are still oriented to X1/X2 using the expression-derived fit.
+It therefore refines phase within a gene without escaping this constraint.
 }
 
 \examples{

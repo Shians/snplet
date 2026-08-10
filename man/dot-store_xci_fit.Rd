@@ -19,7 +19,7 @@ for barcode annotation.
 }
 \details{
 \code{xci_rho} is \emph{not} the EM's per-cell beta-binomial overdispersion
-(\code{xci_result$rho} inside \code{.infer_xci()}) -- that value is fit
+(\code{xci_result$rho} inside \code{.infer_xci()}); that value is fit
 from individual cells' small read counts and, applied directly to
 donor-pooled counts (as \code{\link{test_escape}} needs), implicitly assumes
 complete correlation across all of a donor's cells, which is far too
@@ -27,7 +27,7 @@ conservative once thousands of cells are pooled (see
 \code{\link{.fit_pooled_rho_by_donor}}). \code{xci_rho} is instead refit
 directly at the donor-pooled level, against the population of informative
 (non-escaping) genes' pooled \code{active_count}/\code{inactive_count} from
-\code{\link{haplotype_expression}} -- the aggregation level \code{test_escape}
+\code{\link{haplotype_expression}}, the aggregation level \code{test_escape}
 actually operates at.
 }
 \keyword{internal}

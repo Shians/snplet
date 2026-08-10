@@ -7,9 +7,8 @@
 #'
 #' @inheritSection assign_xci Phase is inferred from expression, not genotyped
 #'
-#' @param x A SNPData object that had XCI diagnostics stored by
-#'   \code{\link{assign_xci}} or
-#'   \code{\link{assign_xci_by_clonotype}}.
+#' @param x A SNPData object, required, that had XCI diagnostics stored by
+#'   \code{\link{assign_xci}} or \code{\link{assign_xci_by_clonotype}}.
 #'
 #' @return A tibble with one row per cell and columns \code{cell_id}
 #'   (character), \code{donor} (character; present only when the object carries
@@ -35,9 +34,9 @@ setMethod("xci_assignments", signature(x = "SNPData"), function(x) {
 #' Extract SNP haplotypes from a SNPData object with stored XCI diagnostics
 #'
 #' Returns the inferred phase and escape fraction for each SNP in the final
-#' gene set used by the EM model. Phase is donor-specific — a SNP retained in
-#' several donors carries a distinct X1-allele in each — so the result has one
-#' row per SNP and donor rather than flattening to a single value.
+#' gene set used by the EM model. Phase is donor-specific (a SNP retained in
+#' several donors carries a distinct X1-allele in each), so the result has one
+#' row per SNP and donor rather than collapsing them to a single value.
 #'
 #' Despite the name, these are not genotyped haplotypes: they are the model's
 #' expression-derived assignment of alleles to two clusters. See the section
@@ -45,18 +44,17 @@ setMethod("xci_assignments", signature(x = "SNPData"), function(x) {
 #'
 #' @inheritSection assign_xci Phase is inferred from expression, not genotyped
 #'
-#' @param x A SNPData object that had XCI diagnostics stored by
-#'   \code{\link{assign_xci}} or
-#'   \code{\link{assign_xci_by_clonotype}}.
+#' @param x A SNPData object, required, that had XCI diagnostics stored by
+#'   \code{\link{assign_xci}} or \code{\link{assign_xci_by_clonotype}}.
 #'
 #' @return A tibble with one row per informative SNP and donor, with columns
 #'   \code{snp_id} (character), \code{gene_name} (character; present only when
 #'   the object carries gene annotation), \code{donor} (character),
-#'   \code{allele_on_x1} (character, "REF" or "ALT" — the allele the model
+#'   \code{allele_on_x1} (character, "REF" or "ALT": the allele the model
 #'   assigned to the X1 cluster in that donor, i.e. the one expressed by
 #'   X1-active cells, not a genotyped haplotype), and \code{escape_fraction}
 #'   (numeric estimated fraction of reads from the minority allele in that
-#'   donor, bounded below 0.5 — see the section below).
+#'   donor, bounded below 0.5; see the section below).
 #'
 #' @family X-chromosome inactivation functions
 #' @importFrom tidyr separate_longer_delim
@@ -95,7 +93,7 @@ setMethod("xci_haplotypes", signature(x = "SNPData"), function(x) {
 #' for barcode annotation.
 #'
 #' \code{xci_rho} is \emph{not} the EM's per-cell beta-binomial overdispersion
-#' (\code{xci_result$rho} inside \code{.infer_xci()}) -- that value is fit
+#' (\code{xci_result$rho} inside \code{.infer_xci()}); that value is fit
 #' from individual cells' small read counts and, applied directly to
 #' donor-pooled counts (as \code{\link{test_escape}} needs), implicitly assumes
 #' complete correlation across all of a donor's cells, which is far too
@@ -103,7 +101,7 @@ setMethod("xci_haplotypes", signature(x = "SNPData"), function(x) {
 #' \code{\link{.fit_pooled_rho_by_donor}}). \code{xci_rho} is instead refit
 #' directly at the donor-pooled level, against the population of informative
 #' (non-escaping) genes' pooled \code{active_count}/\code{inactive_count} from
-#' \code{\link{haplotype_expression}} -- the aggregation level \code{test_escape}
+#' \code{\link{haplotype_expression}}, the aggregation level \code{test_escape}
 #' actually operates at.
 #'
 #' @keywords internal
@@ -174,8 +172,8 @@ setMethod("xci_haplotypes", signature(x = "SNPData"), function(x) {
 #' \code{.filter_uninformative_genes()} (the trusted, genuinely
 #' non-escaping population, same population \code{xci_median_pi_g} summarises)
 #' and fits a single scalar \code{rho} per donor via exact beta-binomial MLE
-#' against that donor's \code{xci_median_pi_g} as a fixed null probability --
-#' i.e. how much do these genes' pooled inactive-read fractions actually vary
+#' against that donor's \code{xci_median_pi_g} as a fixed null probability:
+#' how much do these genes' pooled inactive-read fractions actually vary
 #' around the shared background rate, beyond binomial sampling.
 #'
 #' @param x A SNPData object with \code{active_x}, \code{allele_on_x1},

@@ -7,24 +7,19 @@
 test_escape(x, p = 0.1, rho = 0.05)
 }
 \arguments{
-\item{x}{A data.frame (or tibble) with one row per observation, containing the
-integer columns \code{active_count} and \code{inactive_count}. Typically
-\code{\link{haplotype_expression}} output collapsed to one row per (donor,
-gene) -- see Details.}
+\item{x}{A data.frame with integer columns \code{active_count} and
+\code{inactive_count}, one row per observation (required). Typically
+\code{\link{haplotype_expression}} output collapsed to one row per
+(donor, gene); see Details.}
 
-\item{p}{Numeric scalar or vector in \code{[0, 1]} giving the null hypothesis
-escape fraction (default: 0.10). Recycled against the rows of \code{x} if a
-vector, e.g. to supply a different, empirically estimated null per donor
-(such as \code{donor_info(x)$xci_median_pi_g}, the median escape fraction
-among that donor's informative genes -- a data-driven background/noise
-level rather than an assumed constant).}
+\item{p}{Numeric, in \code{[0, 1]} (default 0.10). Null hypothesis escape
+fraction; \code{donor_info(x)$xci_median_pi_g} can be used as a
+per-donor empirical null.}
 
-\item{rho}{Numeric scalar or vector in \code{[0, 1)} giving the beta-binomial
-overdispersion, typically \code{donor_info(x)$xci_rho} as fitted by
-\code{\link{assign_xci}} -- a donor-pooled estimate, deliberately not the
-EM's per-cell overdispersion (see \code{\link{.fit_pooled_rho_by_donor}}
-for why the two differ). Recycled against the rows of \code{x} if a
-vector, e.g. to supply a different \code{rho} per donor.}
+\item{rho}{Numeric, in \code{[0, 1)} (default 0.05). Beta-binomial
+overdispersion, typically \code{donor_info(x)$xci_rho} from
+\code{\link{assign_xci}} (a donor-pooled estimate, not the EM's per-cell
+overdispersion; see \code{\link{.fit_pooled_rho_by_donor}}).}
 }
 \value{
 The input \code{x} with three columns appended:
@@ -43,35 +38,34 @@ under a null escape fraction, modelling the overdispersion in single-cell alleli
 counts via a beta-binomial rather than binomial null.
 }
 \details{
-Unlike a MAF test on raw \code{ref_count}/\code{alt_count}, this operates on counts
-already reoriented to the inactive allele per cell (see
-\code{\link{haplotype_expression}}'s \code{active_count}/\code{inactive_count}).
-Pooling raw ref/alt across cells without that reorientation confounds escape with
-between-cell heterogeneity in which X is active: a gene under strict XCI in a
-population split between X1-active and X2-active cells pools to a MAF near 0.5,
+This operates on counts already reoriented to the inactive allele per cell
+(see \code{\link{haplotype_expression}}'s \code{active_count}/\code{inactive_count}),
+unlike a MAF test on raw \code{ref_count}/\code{alt_count}. Pooling raw ref/alt
+across cells without that reorientation confounds escape with between-cell
+heterogeneity in which X is active: a gene under strict XCI in a population
+split between X1-active and X2-active cells pools to a MAF near 0.5,
 indistinguishable from a gene that escapes in every cell. Reorienting to
 active/inactive before pooling removes that confound.
 
 
-\code{\link{haplotype_expression}} returns one row per (donor, phased SNP,
-active-X group) -- multiple rows per gene whenever it has more than one
-informative SNP, and always two rows per SNP (the X1-active and X2-active
-cell groups, both already reoriented to active/inactive terms). Testing that
-table directly over-counts: it multiplies the number of tests (inflating the
-BH correction) and splits a single gene's evidence across redundant rows
-instead of pooling it. Collapse to one row per (donor, gene) -- summing
-\code{active_count}/\code{inactive_count} -- before calling \code{test_escape()};
-see the second example.
+Testing \code{\link{haplotype_expression}}'s output directly over-counts:
+it returns one row per (donor, phased SNP, active-X group), i.e. multiple
+rows per gene whenever it has more than one informative SNP and always two
+rows per SNP, so testing that table as-is multiplies the number of tests
+(inflating the BH correction) and splits a single gene's evidence across
+redundant rows instead of pooling it. Collapse to one row per (donor,
+gene), summing \code{active_count}/\code{inactive_count}, before calling
+\code{test_escape()}; see the second example.
 
-The BH correction in \code{adj_p_val} is scoped to whatever rows are passed
-in a single call. Passing every donor's genes in one call corrects across the
-whole multi-donor table; calling once per donor (e.g. via
-\code{dplyr::group_by(donor) \%>\% dplyr::group_modify()}) corrects within each
-donor independently. Neither is more "correct" in general -- it depends
-whether donors should be treated as independent experiments or pooled -- but
-the two give different \code{adj_p_val} for the same gene, so pick
-deliberately rather than defaulting to whichever grouping the input happens
-to arrive in.
+The BH correction in \code{adj_p_val} is scoped to whatever rows are
+passed in a single call: passing every donor's genes in one call corrects
+across the whole multi-donor table, while calling once per donor (e.g. via
+\code{dplyr::group_by(donor) \%>\% dplyr::group_modify()}) corrects within
+each donor independently. Neither is more "correct" in general, since it
+depends whether donors should be treated as independent experiments or
+pooled, but the two give different \code{adj_p_val} for the same gene, so
+pick deliberately rather than defaulting to whichever grouping the input
+happens to arrive in.
 }
 \section{Phase is inferred from expression, not genotyped}{
 
@@ -80,15 +74,16 @@ haplotype is ever observed, and that limitation propagates into every
 downstream result.
 
 \code{"X1"} and \code{"X2"} name two expression-defined haplotype clusters,
-not identified physical chromosomes. They are exchangeable labels, fixed only
-by the convention that X1 is the larger active-X group, and they are not
-comparable across donors. \code{allele_on_x1} records which allele the model
-assigned to the X1 cluster in one donor -- not a genotyped haplotype.
+not identified physical chromosomes: they are exchangeable labels, fixed
+only by the convention that X1 is the larger active-X group, and are not
+comparable across donors. \code{allele_on_x1} records which allele the
+model assigned to the X1 cluster in one donor; it is not a genotyped
+haplotype.
 
 The active allele is consequently \emph{defined} as the majority-expressed
-one. The EM's phase step picks whichever orientation makes the silenced
-allele the minority, and the per-gene escape fraction is bounded below 0.5,
-so:
+one: the EM's phase step picks whichever orientation makes the silenced
+allele the minority, and the per-gene escape fraction is bounded below
+0.5. This has three consequences:
 \itemize{
   \item escape above 0.5 cannot be represented. The measurable range runs
     from 0 (strict inactivation) to 0.5 (complete escape, both alleles
@@ -102,13 +97,13 @@ so:
     questioning.
 }
 
-Separating these cases needs phase from a source independent of expression --
-DNA-based genotyping, or trio/population phasing -- which this package does
-not have. \code{\link{add_molecule_phase}} supplies true physical linkage
-between SNPs co-observed on one molecule, but a molecule is a single
-transcript: it cannot link across genes, and its blocks are still oriented to
-X1/X2 using the expression-derived fit. It therefore refines phase within a
-gene without escaping this constraint.
+Separating these cases needs phase from a source independent of
+expression, such as DNA-based genotyping or trio/population phasing,
+which this package does not have. \code{\link{add_molecule_phase}}
+supplies true physical linkage between SNPs co-observed on one molecule,
+but a molecule is a single transcript: it cannot link across genes, and
+its blocks are still oriented to X1/X2 using the expression-derived fit.
+It therefore refines phase within a gene without escaping this constraint.
 }
 
 \examples{

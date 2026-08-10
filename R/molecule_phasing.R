@@ -15,43 +15,44 @@
 #'
 #' Reads the region(s) spanned by `snp` from an indexed BAM and, for every
 #' alignment overlapping a target position, records the base and quality
-#' called there together with the read's identity -- the information needed
+#' called there together with the read's identity, the information needed
 #' to later group calls into molecules and phase blocks. Equivalent in
 #' principle to `GenomicAlignments::pileLettersAt()`, but retains the read of
 #' origin, which that function discards.
 #'
 #' A SNP falling in a deletion or an intron of a given read simply yields no
-#' row for that read -- a genuine no-call rather than a coerced base. Only
+#' row for that read: a genuine no-call rather than a coerced base. Only
 #' `M`/`=`/`X` CIGAR operations are treated as aligned to the reference.
 #'
-#' @param bam_file Path to an indexed BAM with `CB` and `UB` tags.
-#' @param snp_info A data.frame/tibble with one row per target SNP and columns
-#'   `snp_id`, `chrom`, `pos`, `ref` (reference allele), and `alt` (alternate
-#'   allele). Restrict to biallelic SNVs before calling -- there is no
-#'   unambiguous REF/ALT base to compare an aligned base against for a
+#' @param bam_file Character scalar, required. Path to an indexed BAM with
+#'   `CB` and `UB` tags.
+#' @param snp_info A data.frame/tibble, required, with one row per target SNP
+#'   and columns `snp_id`, `chrom`, `pos`, `ref` (reference allele), and `alt`
+#'   (alternate allele). Restrict to biallelic SNVs before calling: there is
+#'   no unambiguous REF/ALT base to compare an aligned base against for a
 #'   multi-allelic site or an indel.
-#' @param barcodes Character vector of cell barcodes to retain, or `NULL`
-#'   (default) to keep every barcode carrying a `CB` and `UB` tag. Typically
+#' @param barcodes Character vector, optional (default `NULL`, keeping every
+#'   barcode carrying a `CB` and `UB` tag). Cell barcodes to retain; typically
 #'   the barcodes of one donor, since a pooled sample dilutes the allele
 #'   fraction of any site heterozygous in only some donors.
-#' @param min_mapq Minimum mapping quality. Default 20.
-#' @param min_baseq Minimum base quality at the SNP position. Default 10.
-#' @param chunk_size Alignments processed per chunk, to bound memory when
-#'   expression is uneven across the region. Default 20000.
-#' @param merge_gap Alignments are fetched over SNP positions merged into
-#'   windows within this many bases of each other, rather than over each SNP
-#'   individually -- a `which` with many ranges would otherwise return a read
-#'   once per overlapping range, duplicating any read spanning several
-#'   nearby SNPs. Default 10000.
-#' @param threads Threads for the `samtools` pre-filter (see `prefilter_bam`
-#'   below); gains plateau at 4. Default 4.
+#' @param min_mapq Integer (default 20). Minimum mapping quality.
+#' @param min_baseq Integer (default 10). Minimum base quality at the SNP position.
+#' @param chunk_size Integer (default 20000). Alignments processed per chunk,
+#'   to bound memory when expression is uneven across the region.
+#' @param merge_gap Integer (default 10000). Alignments are fetched over SNP
+#'   positions merged into windows within this many bases of each other,
+#'   rather than over each SNP individually, since a `which` with many ranges
+#'   would otherwise return a read once per overlapping range, duplicating
+#'   any read spanning several nearby SNPs.
+#' @param threads Integer (default 4). Threads for the `samtools` pre-filter
+#'   (see `prefilter_bam` below); gains plateau at 4.
 #'
 #' @return A list of two tibbles:
 #'   \describe{
 #'     \item{tallies}{One row per (`barcode`, `umi`, `snp_id`, `allele`)
 #'       combination, with `n_calls` the number of reads of that molecule
 #'       agreeing on that allele ("REF", "ALT", or "OTH") at that SNP.}
-#'     \item{reads}{One row per (`barcode`, `umi`, `qname`) -- the distinct
+#'     \item{reads}{One row per (`barcode`, `umi`, `qname`), the distinct
 #'       reads behind each molecule, with each read's alignment `strand`
 #'       (`"+"`/`"-"`), for `molecule_read_strand()` to resolve into a single
 #'       strand per molecule.}
@@ -163,7 +164,7 @@ extract_snp_calls <- function(
 #' Map each SNP position into query coordinates for every overlapping read
 #'
 #' Inlines the logic of `GenomicAlignments:::.pileLettersOnSingleRefAt` so the
-#' read of origin survives -- precisely what is needed to group calls into
+#' read of origin survives, precisely what is needed to group calls into
 #' molecules.
 #'
 #' @param galn A GAlignments object.
@@ -245,7 +246,7 @@ extract_snp_calls <- function(
 #' Rsamtools decompresses every read in a window before R can discard it;
 #' `samtools` can apply the same barcode/UMI/quality criteria in threaded C
 #' first, which is where nearly all of the speed comes from. This is a pure
-#' accelerator -- the filters applied afterwards in R remain the definition of
+#' accelerator: the filters applied afterwards in R remain the definition of
 #' what is kept, so the two paths cannot diverge.
 #'
 #' @param bam_file Path to an indexed BAM.
@@ -255,8 +256,8 @@ extract_snp_calls <- function(
 #' @param threads Threads passed to `samtools view -@`.
 #'
 #' @return Path of an uncompressed temporary BAM, or `NULL` if `samtools` is
-#'   unavailable -- in which case the caller falls back to reading the
-#'   original BAM directly.
+#'   unavailable, in which case the calling function falls back to reading
+#'   the original BAM directly.
 #'
 #' @keywords internal
 .prefilter_bam <- function(bam_file, windows, barcodes, min_mapq, threads) {
@@ -305,8 +306,8 @@ extract_snp_calls <- function(
 #' Infer whether a BAM's reads are sense or antisense to their transcript
 #'
 #' Demultiplexing tools such as Flexiplex reorient reads before alignment,
-#' and 5' vs 3' protocol data end up flipped in opposite directions -- 5'
-#' reads sense to the transcript, 3' reads its reverse complement -- with no
+#' and 5' vs 3' protocol data end up flipped in opposite directions (5'
+#' reads sense to the transcript, 3' reads its reverse complement), with no
 #' record of which happened left in the BAM. A spliced read's `ts:A:+/-` tag
 #' (the transcript strand minimap2 calls from the GT-AG splice-junction
 #' signal) is independent of that flip, so comparing a read's own alignment
@@ -325,7 +326,7 @@ extract_snp_calls <- function(
 #' @param max_reads Reads scanned before giving up rather than looping over
 #'   the whole file. Default 200000.
 #'
-#' @return A list with `orientation` (`"sense"` or `"antisense"` --
+#' @return A list with `orientation` (`"sense"` or `"antisense"`,
 #'   whichever a majority of `ts`-tagged reads support), `n_ts_reads`,
 #'   `concordance` (fraction of those agreeing with `orientation`), and
 #'   `n_scanned` (total reads read to reach the decision).
@@ -412,8 +413,9 @@ extract_snp_calls <- function(
 #' and ALT are retained; OTH is a sequencing error at a known biallelic site
 #' and carries no haplotype information.
 #'
-#' @param tallies A tibble as returned by `extract_snp_calls()$tallies`, with
-#'   columns `barcode`, `umi`, `snp_id`, `allele`, and `n_calls`.
+#' @param tallies A tibble, required, as returned by
+#'   `extract_snp_calls()$tallies`, with columns `barcode`, `umi`, `snp_id`,
+#'   `allele`, and `n_calls`.
 #'
 #' @return A tibble with one row per (`barcode`, `umi`, `snp_id`) and columns
 #'   `barcode`, `umi`, `snp_id`, `allele` (the majority call, "REF" or "ALT"),
@@ -431,15 +433,15 @@ molecule_snp_alleles <- function(tallies) {
 #'
 #' A molecule is one transcript, so every read behind it should agree on
 #' alignment strand; a majority vote absorbs the rare mismapped or chimeric
-#' read rather than letting one read decide. This is alignment strand only --
+#' read rather than letting one read decide. This is alignment strand only;
 #' converting it to the strand of the original transcript (needed to
 #' disambiguate a SNP overlapping genes on opposite strands) additionally
 #' requires the BAM's sense/antisense orientation, since some demultiplexing
 #' pipelines flip reads relative to the transcript (see
 #' `.infer_bam_strand_orientation()`).
 #'
-#' @param reads A tibble as returned by `extract_snp_calls()$reads`, with
-#'   columns `barcode`, `umi`, `qname`, `strand`.
+#' @param reads A tibble, required, as returned by `extract_snp_calls()$reads`,
+#'   with columns `barcode`, `umi`, `qname`, `strand`.
 #'
 #' @return A tibble with one row per (`barcode`, `umi`) and columns
 #'   `barcode`, `umi`, `strand` (the majority call, `"+"` or `"-"`).
@@ -465,19 +467,20 @@ molecule_read_strand <- function(reads) {
 #' links; each connected component becomes a phase block. Blocks cannot be
 #' joined beyond the reach of a single molecule, so a fragmented result is
 #' expected rather than a failure. Phasing runs over every SNP regardless of
-#' gene assignment -- whether two SNPs share a haplotype is a property of the
+#' gene assignment: whether two SNPs share a haplotype is a property of the
 #' molecule, not of gene annotation, and an ambiguous (multi-gene) SNP can
 #' still serve as a valid bridge between two unambiguous ones.
 #'
-#' @param per_snp A tibble as returned by `molecule_snp_alleles()`, with
-#'   columns `barcode`, `umi`, `snp_id`, `allele`.
-#' @param min_molecules Molecules required to accept a SNP pair as an edge.
-#'   Default 5.
-#' @param min_consistency Fraction of those molecules that must agree on the
-#'   same/opposite relation for the edge to be accepted. Default 0.9.
+#' @param per_snp A tibble, required, as returned by `molecule_snp_alleles()`,
+#'   with columns `barcode`, `umi`, `snp_id`, `allele`.
+#' @param min_molecules Integer (default 5). Molecules required to accept a
+#'   SNP pair as an edge.
+#' @param min_consistency Numeric, in `[0, 1]` (default 0.9). Fraction of
+#'   those molecules that must agree on the same/opposite relation for the
+#'   edge to be accepted.
 #'
 #' @return A tibble with columns `snp_id`, `block` (integer phase-block id,
-#'   unique within this call), and `allele_on_h1` ("REF" or "ALT" -- the
+#'   unique within this call), and `allele_on_h1` ("REF" or "ALT", the
 #'   allele carried by haplotype 1 at that SNP; H1 is an arbitrary label local
 #'   to each block, not oriented to X1/X2). SNPs that could not be linked to
 #'   any other SNP by an accepted edge are absent from the result.
@@ -584,9 +587,10 @@ phase_snps <- function(per_snp, min_molecules = 5L, min_consistency = 0.9) {
 #' Any SNP can still take part in `phase_snps()` regardless of its gene
 #' assignment here, since phasing does not depend on gene assignment.
 #'
-#' @param snp_info A data.frame/tibble with columns `snp_id`, `chrom`, `pos`.
-#' @param gene_anno A data.frame/tibble with columns `chrom`, `start`, `end`,
-#'   `gene_name`, `strand` (`"+"`/`"-"`), one row per gene body.
+#' @param snp_info A data.frame/tibble, required, with columns `snp_id`,
+#'   `chrom`, `pos`.
+#' @param gene_anno A data.frame/tibble, required, with columns `chrom`,
+#'   `start`, `end`, `gene_name`, `strand` (`"+"`/`"-"`), one row per gene body.
 #'
 #' @return A tibble with columns `snp_id`, `gene_name`, `gene_strand`, and
 #'   `ambiguous` (`TRUE` if the SNP overlaps more than one gene overall, so
@@ -686,16 +690,16 @@ assign_snp_genes <- function(snp_info, gene_anno) {
 #' Per connected component (`block`), every reachable anchor's vote on
 #' whether H1 corresponds to X1 or X2 is tallied:
 #' \itemize{
-#'   \item All anchors agree -- oriented confidently.
-#'   \item No anchors reachable -- left unoriented (`allele_on_x1_molecule`
+#'   \item All anchors agree: oriented confidently.
+#'   \item No anchors reachable: left unoriented (`allele_on_x1_molecule`
 #'     `NA`); a block's own molecules are not used to orient it, since that
 #'     reproduces the EM's own escapee blind spot.
 #'   \item >= 3 anchors, exactly one disagrees with an otherwise-unanimous
-#'     majority -- oriented from the majority; the outlier anchor's own row
+#'     majority: oriented from the majority; the outlier anchor's own row
 #'     is still flagged `phase_conflict = TRUE` for inspection (a repeat
 #'     offender across donors would point to a reference-bias locus).
 #'   \item Any other split (including exactly 2 anchors disagreeing, or >= 2
-#'     anchors dissenting from a majority) -- not resolved. Every SNP in the
+#'     anchors dissenting from a majority): not resolved. Every SNP in the
 #'     component gets `allele_on_x1_molecule = NA` and `phase_conflict =
 #'     TRUE`, since there is no principled way to tell which anchor is
 #'     wrong.
@@ -703,7 +707,7 @@ assign_snp_genes <- function(snp_info, gene_anno) {
 #'
 #' An anchor `phase_snps()` never linked to any other SNP (most commonly a
 #' gene with only one heterozygous SNP) still carries its own EM-derived
-#' phase; it becomes a singleton block of one (negative `phase_block`, to
+#' phase; it becomes its own block of one (negative `phase_block`, to
 #' stay visually distinct from `phase_snps()`'s positive block ids) rather
 #' than being left out entirely.
 #'
@@ -810,17 +814,21 @@ assign_snp_genes <- function(snp_info, gene_anno) {
 #'
 #' @inheritSection assign_xci Phase is inferred from expression, not genotyped
 #'
-#' @param x A SNPData object that has already been fit by `assign_xci()` or
-#'   `assign_xci_by_clonotype()` (see `.has_xci_diagnostics()`), with a
-#'   `donor` column in `barcode_info`.
-#' @param bam_files A named character vector or list, `donor = path`, one
-#'   indexed BAM per donor. Names must match `barcode_info(x)$donor`. Any
-#'   entry named `"doublet"` or `"unassigned"` is dropped with a warning --
-#'   neither is a real donor with its own genotype to phase against.
-#' @param target_chrom Canonical chromosome to restrict het-SNP selection to.
-#'   Default `"chrX"`, matching `assign_xci()`'s own restriction.
-#' @param min_mapq,min_baseq,threads Passed to `extract_snp_calls()`.
-#' @param min_molecules,min_consistency Passed to `phase_snps()`.
+#' @param x A SNPData object, required, that has already been fit by
+#'   `assign_xci()` or `assign_xci_by_clonotype()` (see
+#'   `.has_xci_diagnostics()`), with a `donor` column in `barcode_info`.
+#' @param bam_files A named character vector or list, required,
+#'   `donor = path`, one indexed BAM per donor. Names must match
+#'   `barcode_info(x)$donor`. Any entry named `"doublet"` or `"unassigned"`
+#'   is dropped with a warning, since neither is a real donor with its own
+#'   genotype to phase against.
+#' @param target_chrom Character scalar (default `"chrX"`, matching
+#'   `assign_xci()`'s own restriction). Canonical chromosome to restrict
+#'   het-SNP selection to.
+#' @param min_mapq,min_baseq,threads Integer (defaults 20, 10, 4). Passed to
+#'   `extract_snp_calls()`.
+#' @param min_molecules,min_consistency Integer/numeric (defaults 5, 0.9).
+#'   Passed to `phase_snps()`.
 #'
 #' @return A SNPData object with `donor_snp_info` gaining the columns
 #'   `allele_on_x1_em` (the EM's own phase, unchanged, given its own name for
@@ -831,8 +839,8 @@ assign_snp_genes <- function(snp_info, gene_anno) {
 #'   else `NA` where `phase_conflict` is `TRUE`. Also carries a
 #'   `"molecule_calls"` attribute (a tibble with columns `donor`, `barcode`,
 #'   `umi`, `snp_id`, `allele`, `transcript_strand` (`"+"`/`"-"`/`NA`, the
-#'   molecule's inferred transcript strand -- see
-#'   `.infer_bam_strand_orientation()` and `molecule_read_strand()` -- used by
+#'   molecule's inferred transcript strand, see
+#'   `.infer_bam_strand_orientation()` and `molecule_read_strand()`, used by
 #'   `haplotype_expression_by_molecule()` to resolve SNPs `assign_snp_genes()`
 #'   flagged `ambiguous`), the per-donor `molecule_snp_alleles()` output
 #'   already computed here) so `haplotype_expression_by_molecule()` does not

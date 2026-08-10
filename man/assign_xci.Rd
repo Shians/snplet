@@ -10,16 +10,17 @@ assign_xci(x, n_inits = 10, confidence_threshold = 0.95)
 \S4method{assign_xci}{SNPData}(x, n_inits = 10, confidence_threshold = 0.95)
 }
 \arguments{
-\item{x}{SNPData object containing X chromosome SNP data with donor
-assignments and heterozygosity information}
+\item{x}{A SNPData object, required, with donor assignments and
+heterozygosity information for the X chromosome.}
 
-\item{n_inits}{Number of random initialisations for the EM algorithm.
-The run with the highest log-likelihood is returned. Default 10.}
+\item{n_inits}{Integer (default 10). Number of random initialisations for
+the EM algorithm; the run with the highest log-likelihood is returned.}
 
-\item{confidence_threshold}{Posterior probability threshold for hard
-assignment. Cells whose posterior probability that a given X is the active
-one reaches \code{confidence_threshold} are assigned that X; cells where
-neither X reaches the threshold receive \code{NA}. Default 0.95.}
+\item{confidence_threshold}{Numeric, in \code{[0, 1]} (default 0.95).
+Posterior probability threshold for hard assignment: cells whose
+posterior probability that a given X is the active one reaches
+\code{confidence_threshold} are assigned that X; cells where neither X
+reaches the threshold receive \code{NA}.}
 }
 \value{
 SNPData object with an additional \code{active_x} column in
@@ -36,10 +37,11 @@ imbalance at heterozygous SNPs using an Expectation-Maximisation (EM)
 algorithm with a beta-binomial likelihood.
 }
 \details{
-X-chromosome inactivation (XCI) is a dosage compensation mechanism in female
-mammals where one of the two X chromosomes is randomly silenced in each cell.
-This function infers which X remains active by fitting an EM model to allelic
-read counts at heterozygous SNPs on the X chromosome.
+This function infers which X chromosome remains active in each cell by
+fitting an EM model to allelic read counts at heterozygous SNPs on the X
+chromosome. X-chromosome inactivation (XCI) is the dosage-compensation
+mechanism this reconstructs: in female mammals, one of the two X
+chromosomes is randomly silenced in each cell.
 
 The algorithm works as follows:
 \enumerate{
@@ -60,15 +62,16 @@ haplotype is ever observed, and that limitation propagates into every
 downstream result.
 
 \code{"X1"} and \code{"X2"} name two expression-defined haplotype clusters,
-not identified physical chromosomes. They are exchangeable labels, fixed only
-by the convention that X1 is the larger active-X group, and they are not
-comparable across donors. \code{allele_on_x1} records which allele the model
-assigned to the X1 cluster in one donor -- not a genotyped haplotype.
+not identified physical chromosomes: they are exchangeable labels, fixed
+only by the convention that X1 is the larger active-X group, and are not
+comparable across donors. \code{allele_on_x1} records which allele the
+model assigned to the X1 cluster in one donor; it is not a genotyped
+haplotype.
 
 The active allele is consequently \emph{defined} as the majority-expressed
-one. The EM's phase step picks whichever orientation makes the silenced
-allele the minority, and the per-gene escape fraction is bounded below 0.5,
-so:
+one: the EM's phase step picks whichever orientation makes the silenced
+allele the minority, and the per-gene escape fraction is bounded below
+0.5. This has three consequences:
 \itemize{
   \item escape above 0.5 cannot be represented. The measurable range runs
     from 0 (strict inactivation) to 0.5 (complete escape, both alleles
@@ -82,13 +85,13 @@ so:
     questioning.
 }
 
-Separating these cases needs phase from a source independent of expression --
-DNA-based genotyping, or trio/population phasing -- which this package does
-not have. \code{\link{add_molecule_phase}} supplies true physical linkage
-between SNPs co-observed on one molecule, but a molecule is a single
-transcript: it cannot link across genes, and its blocks are still oriented to
-X1/X2 using the expression-derived fit. It therefore refines phase within a
-gene without escaping this constraint.
+Separating these cases needs phase from a source independent of
+expression, such as DNA-based genotyping or trio/population phasing,
+which this package does not have. \code{\link{add_molecule_phase}}
+supplies true physical linkage between SNPs co-observed on one molecule,
+but a molecule is a single transcript: it cannot link across genes, and
+its blocks are still oriented to X1/X2 using the expression-derived fit.
+It therefore refines phase within a gene without escaping this constraint.
 }
 
 \examples{
