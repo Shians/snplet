@@ -2,7 +2,7 @@
 % Please edit documentation in R/haplotype_expression.R
 \name{.elect_gene_representative_snps}
 \alias{.elect_gene_representative_snps}
-\title{Elect one representative SNP per donor and gene}
+\title{Select one representative SNP per donor and gene}
 \usage{
 .elect_gene_representative_snps(result)
 }
@@ -12,15 +12,15 @@ still carrying its \code{donor}, \code{gene_name} and
 \code{same_allele_dominant} columns.}
 }
 \value{
-\code{result} restricted to the elected SNPs' rows, without
+\code{result} restricted to the selected SNPs' rows, without
   \code{same_allele_dominant}, ordered by donor, gene and active X.
 }
 \description{
 Collapses \code{\link{haplotype_expression}}'s per-SNP rows to the
 highest-coverage SNP whose dominant physical allele flips between the two
 active-X groups. Summing a gene's SNPs instead would count a read spanning
-several of them once per SNP; electing one keeps the output a genuine read
-count. See the \sQuote{Collapsing to the gene level} section of
+several of them once per SNP; selecting one keeps the output a genuine read
+count. See the \sQuote{Gene-level representative selection} section of
 \code{\link{haplotype_expression}} for why the flip is required.
 }
 \keyword{internal}
