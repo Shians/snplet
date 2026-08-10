@@ -53,6 +53,72 @@
     merged
 }
 
+# Decides, for every cell present in both x and y, which object's copy survives.
+#
+# Summing a collided cell's counts is right only when the two columns really are
+# the same physical cell sequenced twice. Across independently barcoded libraries
+# they are not: a shared barcode string is a coincidence between two different
+# cells, often from different donors, and summing them fabricates a cell that
+# expresses both donors' alleles (see merge_snpdata()'s `cell_collision`).
+#
+# The loser is suppressed by setting its column target to NA, which
+# .merge_count_matrix() already drops -- so no counts from the losing column
+# reach the merged matrix.
+#
+# Depth is the full-object library size (ref + alt over every SNP, the same
+# quantity as `barcode_info$library_size`), not just the retained SNPs: which of
+# two cells is better sequenced is a property of the cell, and making it depend
+# on `snp_join` would let the SNP-side join silently change which cells survive.
+#
+# @return A list with the two adjusted column-target vectors, plus `collided`
+#   and `winner_is_y` -- both logical, indexed by retained column position, for
+#   .merge_barcode_info() to resolve metadata to the same winner.
+.resolve_cell_collisions <- function(x, y, col_target_x, col_target_y, n_retained) {
+    collided <- rep(FALSE, n_retained)
+    winner_is_y <- rep(FALSE, n_retained)
+
+    in_x <- !is.na(col_target_x)
+    in_y <- !is.na(col_target_y)
+    collided[intersect(col_target_x[in_x], col_target_y[in_y])] <- TRUE
+
+    if (!any(collided)) {
+        return(list(
+            col_target_x = col_target_x,
+            col_target_y = col_target_y,
+            collided = collided,
+            winner_is_y = winner_is_y
+        ))
+    }
+
+    # Depth per retained position, NA where that object does not contribute.
+    depth_x <- rep(NA_real_, n_retained)
+    depth_y <- rep(NA_real_, n_retained)
+    depth_x[col_target_x[in_x]] <- (Matrix::colSums(x@ref_count) + Matrix::colSums(x@alt_count))[in_x]
+    depth_y[col_target_y[in_y]] <- (Matrix::colSums(y@ref_count) + Matrix::colSums(y@alt_count))[in_y]
+
+    # Strict `>` so an exact tie goes to x, the left-hand object.
+    winner_is_y <- collided & !is.na(depth_x) & !is.na(depth_y) & depth_y > depth_x
+
+    target_x <- col_target_x[in_x]
+    col_target_x[in_x] <- ifelse(winner_is_y[target_x], NA_integer_, target_x)
+    target_y <- col_target_y[in_y]
+    col_target_y[in_y] <- ifelse(collided[target_y] & !winner_is_y[target_y], NA_integer_, target_y)
+
+    logger::log_warn(
+        "{sum(collided)} cell(s) share an identifier between the two objects; ",
+        "keeping the higher-coverage copy ({sum(winner_is_y)} from y, ",
+        "{sum(collided) - sum(winner_is_y)} from x) and discarding the other. ",
+        "Pass cell_collision = 'sum' if these are technical replicates of the same cells."
+    )
+
+    list(
+        col_target_x = col_target_x,
+        col_target_y = col_target_y,
+        collided = collided,
+        winner_is_y = winner_is_y
+    )
+}
+
 .merge_snp_info <- function(x, y, snp_ids_retained, snp_join) {
     join_fun <- switch(
         snp_join,
@@ -201,7 +267,13 @@
     dplyr::coalesce(source_x, source_y)
 }
 
-.merge_barcode_info <- function(x, y, barcodes_retained, cell_join) {
+# `winner_is_y` is the per-retained-cell decision made by
+# .resolve_cell_collisions(), or NULL under cell_collision = "sum". When it is
+# supplied, a collided cell's metadata must follow the same winner as its
+# counts: coalescing x-first would otherwise label the surviving column with the
+# discarded cell's donor, which is the very mislabelling the resolution exists
+# to prevent.
+.merge_barcode_info <- function(x, y, barcodes_retained, cell_join, winner_is_y = NULL) {
     join_fun <- switch(
         cell_join,
         "union" = dplyr::full_join,
@@ -228,17 +300,10 @@
         suffix = c(".x", ".y")
     )
 
-    x_conflicts <- grep("\\.x$", colnames(merged), value = TRUE)
-    for (x_col in x_conflicts) {
-        base_col <- sub("\\.x$", "", x_col)
-        y_col <- paste0(base_col, ".y")
-        merged[[base_col]] <- dplyr::coalesce(merged[[x_col]], merged[[y_col]])
-        merged[[x_col]] <- NULL
-        merged[[y_col]] <- NULL
-    }
-
     # Filter and order by barcodes_retained
     # Use the appropriate column for filtering
+    # Ordering happens before the conflicting columns are resolved so that
+    # `winner_is_y`, which is indexed by retained position, lines up row-wise.
     filter_col <- if (join_by == "barcode") "barcode" else "cell_id"
     merged <- merged[merged[[filter_col]] %in% barcodes_retained, , drop = FALSE]
     order_idx <- match(barcodes_retained, merged[[filter_col]])
@@ -246,6 +311,22 @@
         stop(paste0("Some ", filter_col, "s could not be matched during merge_barcode_info()"))
     }
     merged <- merged[order_idx, , drop = FALSE]
+
+    x_conflicts <- grep("\\.x$", colnames(merged), value = TRUE)
+    for (x_col in x_conflicts) {
+        base_col <- sub("\\.x$", "", x_col)
+        y_col <- paste0(base_col, ".y")
+        merged[[base_col]] <- if (is.null(winner_is_y)) {
+            dplyr::coalesce(merged[[x_col]], merged[[y_col]])
+        } else {
+            # A non-collided cell contributes from one object only, so the
+            # coalesce is still what resolves it; a collided one takes its
+            # winner's value outright, with no fallback to the discarded copy.
+            dplyr::if_else(winner_is_y, merged[[y_col]], dplyr::coalesce(merged[[x_col]], merged[[y_col]]))
+        }
+        merged[[x_col]] <- NULL
+        merged[[y_col]] <- NULL
+    }
 
     # Regenerate cell_id as sequential identifiers if we joined by barcode
     if (join_by == "barcode") {
