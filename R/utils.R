@@ -29,6 +29,7 @@ utils::globalVariables(c(
     "xci_post_X1_active",
     "xci_fit_unit",
     "unit_id",
+    "library_id",
     "library_size",
     "maf",
     "minor_allele_count",

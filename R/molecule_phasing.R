@@ -816,7 +816,12 @@ assign_snp_genes <- function(snp_info, gene_anno) {
 #'
 #' @param x A SNPData object, required, that has already been fit by
 #'   `assign_xci()` or `assign_xci_by_clonotype()` (see
-#'   `.has_xci_diagnostics()`), with a `donor` column in `barcode_info`.
+#'   `.has_xci_diagnostics()`), with a `donor` column in `barcode_info`. Cells
+#'   are matched to BAM records by `barcode` alone, which is unambiguous only
+#'   within a single library, so every cell's `library_id` must be the same
+#'   (or all unlabelled); subset a multi-library object with
+#'   `filter_barcodes(x, library_id == ...)` and phase each library
+#'   separately.
 #' @param bam_files A named character vector or list, required,
 #'   `donor = path`, one indexed BAM per donor. Names must match
 #'   `barcode_info(x)$donor`. Any entry named `"doublet"` or `"unassigned"`
@@ -868,6 +873,21 @@ add_molecule_phase <- function(
     }
     if (is.null(names(bam_files)) || any(!nzchar(names(bam_files)))) {
         stop("bam_files must be named, donor = path, matching barcode_info(x)$donor.")
+    }
+    # Cells are matched to BAM records by barcode alone, which is only
+    # unambiguous within a single library: a merged multi-library object can
+    # carry the same barcode on two different cells, and one BAM covers only
+    # one of them, so the reads would be attributed to both.
+    libraries_present <- unique(stats::na.omit(barcode_info$library_id))
+    if (length(libraries_present) > 1) {
+        stop(
+            "add_molecule_phase() requires cells from a single library, but barcode_info$library_id has ",
+            length(libraries_present),
+            " values (",
+            paste(utils::head(libraries_present, 5), collapse = ", "),
+            "). Barcodes are only unique within a library; subset to one library with ",
+            "filter_barcodes(x, library_id == ...) and phase each separately."
+        )
     }
     unknown_donors <- setdiff(names(bam_files), unique(barcode_info$donor))
     if (length(unknown_donors) > 0) {

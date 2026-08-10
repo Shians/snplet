@@ -135,6 +135,65 @@ test_that("barcode_info() returns barcode metadata with computed library size me
     expect_equal(as.numeric(barcode_info$non_zero_snps), c(2, 2))
 })
 
+test_that("SNPData() adds an all-NA library_id column when none is supplied", {
+    snp_data <- create_test_snpdata()
+
+    barcode_info <- barcode_info(snp_data)
+
+    # Check that library_id is always present, so merging code can key on it
+    # without first testing whether the object carries the column
+    expect_true("library_id" %in% colnames(barcode_info))
+    # Verify unlabelled libraries are recorded as NA rather than a placeholder
+    expect_equal(barcode_info$library_id, rep(NA_character_, 2))
+})
+
+test_that("SNPData() preserves a caller-supplied library_id column", {
+    barcode_info_labelled <- test_barcode_info
+    barcode_info_labelled$library_id <- c("lib_A", "lib_A")
+
+    snp_data <- SNPData(
+        ref_count = test_ref_count,
+        alt_count = test_alt_count,
+        snp_info = test_snp_info,
+        barcode_info = barcode_info_labelled
+    )
+
+    # Verify an existing library_id is carried through untouched
+    expect_equal(barcode_info(snp_data)$library_id, c("lib_A", "lib_A"))
+})
+
+test_that("SNPData() coerces a non-character library_id to character", {
+    barcode_info_numeric <- test_barcode_info
+    barcode_info_numeric$library_id <- c(1L, 1L)
+
+    snp_data <- SNPData(
+        ref_count = test_ref_count,
+        alt_count = test_alt_count,
+        snp_info = test_snp_info,
+        barcode_info = barcode_info_numeric
+    )
+
+    # Ensure the column type is stable regardless of how the caller labelled
+    # libraries, since it is compared against NA_character_ during merges
+    expect_type(barcode_info(snp_data)$library_id, "character")
+})
+
+test_that("[() subsetting carries library_id through to the subset", {
+    barcode_info_labelled <- test_barcode_info
+    barcode_info_labelled$library_id <- c("lib_A", "lib_B")
+    snp_data <- SNPData(
+        ref_count = test_ref_count,
+        alt_count = test_alt_count,
+        snp_info = test_snp_info,
+        barcode_info = barcode_info_labelled
+    )
+
+    subset_data <- snp_data[, 2]
+
+    # Verify the retained cell keeps its own library label
+    expect_equal(barcode_info(subset_data)$library_id, "lib_B")
+})
+
 test_that("[() subsetting by numeric index returns SNPData object with correct dimensions", {
     snp_data <- create_test_snpdata()
 

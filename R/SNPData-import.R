@@ -27,6 +27,11 @@
 #' @param clonotype_column Character scalar (default \code{"raw_clonotype_id"}).
 #'   Name of the column in \code{vdj_file} containing clonotype information
 #'   (only used if \code{vdj_file} is provided).
+#' @param library_id Character scalar, required. Name of the sequencing
+#'   library this cellSNP-lite run came from, stored on every cell. A 10x
+#'   barcode is unique only within its library, so \code{\link{merge_snpdata}}
+#'   needs this label to tell a repeated cell from two different cells that
+#'   happened to draw the same barcode.
 #'
 #' @return A SNPData object
 #' @family import and export functions
@@ -39,13 +44,15 @@
 #'   cellsnp_dir = "path/to/cellsnp_output",
 #'   gene_annotation = gene_anno_df,
 #'   vdj_file = "path/to/filtered_contig_annotations.csv",
-#'   vireo_folder = "path/to/vireo_output"
+#'   vireo_folder = "path/to/vireo_output",
+#'   library_id = "run1"
 #' )
 #'
 #' # Import without VDJ data (no clonotype information)
 #' snp_data <- import_cellsnp(
 #'   cellsnp_dir = "path/to/cellsnp_output",
-#'   gene_annotation = gene_anno_df
+#'   gene_annotation = gene_anno_df,
+#'   library_id = "run1"
 #' )
 #'
 #' # A Vireo output folder containing GT_donors.vireo.vcf.gz alongside
@@ -53,7 +60,8 @@
 #' snp_data <- import_cellsnp(
 #'   cellsnp_dir = "path/to/cellsnp_output",
 #'   gene_annotation = gene_anno_df,
-#'   vireo_folder = "path/to/vireo_output"
+#'   vireo_folder = "path/to/vireo_output",
+#'   library_id = "run1"
 #' )
 #'
 #' # Relabel Vireo's arbitrary donor0/donor1 to real identities at import time
@@ -61,8 +69,15 @@
 #'   cellsnp_dir = "path/to/cellsnp_output",
 #'   gene_annotation = gene_anno_df,
 #'   vireo_folder = "path/to/vireo_output",
-#'   donor_map = c(PatientA = "donor0", PatientB = "donor1")
+#'   donor_map = c(PatientA = "donor0", PatientB = "donor1"),
+#'   library_id = "run1"
 #' )
+#'
+#' # Two libraries labelled distinctly, so merge_snpdata() keeps cells that
+#' # share a barcode by chance apart instead of fusing them
+#' run1 <- import_cellsnp("run1/", gene_anno_df, library_id = "run1")
+#' run2 <- import_cellsnp("run2/", gene_anno_df, library_id = "run2")
+#' combined <- merge_snpdata(run1, run2)
 #' }
 import_cellsnp <- function(
     cellsnp_dir,
@@ -71,7 +86,8 @@ import_cellsnp <- function(
     vireo_folder = NULL,
     donor_map = NULL,
     barcode_column = "barcode",
-    clonotype_column = "raw_clonotype_id"
+    clonotype_column = "raw_clonotype_id",
+    library_id
 ) {
     # Validate gene_annotation columns
     required_gene_cols <- c("chrom", "start", "end", "gene_name")
@@ -83,6 +99,21 @@ import_cellsnp <- function(
                 paste(missing_cols, collapse = ", ")
             )
         )
+    }
+
+    # Required rather than defaulted: merge_snpdata() distinguishes a barcode
+    # shared within a library from one shared across libraries, and nothing in
+    # the cellSNP output records which library a run came from, so a default
+    # would silently make every object unmergeable.
+    if (missing(library_id)) {
+        stop(
+            "library_id is required: name the sequencing library this cellSNP run came from, ",
+            "e.g. import_cellsnp(..., library_id = \"run1\"). ",
+            "merge_snpdata() needs it to tell a repeated cell from two cells sharing a barcode."
+        )
+    }
+    if (length(library_id) != 1 || is.na(library_id)) {
+        stop("library_id must be a single non-NA string naming the library this cellSNP run came from.")
     }
 
     # Check if required files exist
@@ -180,6 +211,9 @@ import_cellsnp <- function(
         barcode_column,
         clonotype_column
     )
+
+    # One cellSNP-lite run covers one library, so the label is constant across cells.
+    barcode_info$library_id <- as.character(library_id)
 
     # Read Vireo genotype calls, if provided, to populate per-(SNP, donor)
     # zygosity at construction time
@@ -425,6 +459,7 @@ get_example_snpdata <- function() {
             show_col_types = FALSE
         ),
         vdj_file = system.file("extdata/example_snpdata/filtered_contig_annotations.csv", package = "snplet"),
-        vireo_folder = system.file("extdata/example_snpdata", package = "snplet")
+        vireo_folder = system.file("extdata/example_snpdata", package = "snplet"),
+        library_id = "example"
     )
 }

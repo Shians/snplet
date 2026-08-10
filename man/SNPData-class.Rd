@@ -225,7 +225,12 @@ cell/barcode metadata to support allele-specific expression analysis workflows.
 
 \item{\code{snp_info}}{A data.frame containing SNP metadata with automatically computed coverage and non_zero_samples columns}
 
-\item{\code{barcode_info}}{A data.frame containing cell/barcode metadata with automatically computed library_size and non_zero_snps columns}
+\item{\code{barcode_info}}{A data.frame containing cell/barcode metadata with automatically
+computed library_size and non_zero_snps columns, and an automatically added
+\code{library_id} column (\code{NA} unless supplied) naming the sequencing library
+each cell came from. Because 10x barcodes are only unique within a library, a
+merged object may carry the same \code{barcode} on more than one cell; only
+\code{cell_id} is guaranteed unique.}
 
 \item{\code{chr_style}}{Character string indicating the chromosome naming style. One of: "numeric", "ucsc", "refseq_mouse", "genbank_mouse", "refseq_human", "genbank_human", or "unknown"}
 

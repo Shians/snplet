@@ -18,7 +18,12 @@ add_molecule_phase(
 \arguments{
 \item{x}{A SNPData object, required, that has already been fit by
 `assign_xci()` or `assign_xci_by_clonotype()` (see
-`.has_xci_diagnostics()`), with a `donor` column in `barcode_info`.}
+`.has_xci_diagnostics()`), with a `donor` column in `barcode_info`. Cells
+are matched to BAM records by `barcode` alone, which is unambiguous only
+within a single library, so every cell's `library_id` must be the same
+(or all unlabelled); subset a multi-library object with
+`filter_barcodes(x, library_id == ...)` and phase each library
+separately.}
 
 \item{bam_files}{A named character vector or list, required,
 `donor = path`, one indexed BAM per donor. Names must match

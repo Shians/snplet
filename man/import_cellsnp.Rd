@@ -11,7 +11,8 @@ import_cellsnp(
   vireo_folder = NULL,
   donor_map = NULL,
   barcode_column = "barcode",
-  clonotype_column = "raw_clonotype_id"
+  clonotype_column = "raw_clonotype_id",
+  library_id
 )
 }
 \arguments{
@@ -45,6 +46,12 @@ of the column in \code{vdj_file} containing cell barcodes (only used if
 \item{clonotype_column}{Character scalar (default \code{"raw_clonotype_id"}).
 Name of the column in \code{vdj_file} containing clonotype information
 (only used if \code{vdj_file} is provided).}
+
+\item{library_id}{Character scalar, required. Name of the sequencing
+library this cellSNP-lite run came from, stored on every cell. A 10x
+barcode is unique only within its library, so \code{\link{merge_snpdata}}
+needs this label to tell a repeated cell from two different cells that
+happened to draw the same barcode.}
 }
 \value{
 A SNPData object
@@ -60,13 +67,15 @@ snp_data <- import_cellsnp(
   cellsnp_dir = "path/to/cellsnp_output",
   gene_annotation = gene_anno_df,
   vdj_file = "path/to/filtered_contig_annotations.csv",
-  vireo_folder = "path/to/vireo_output"
+  vireo_folder = "path/to/vireo_output",
+  library_id = "run1"
 )
 
 # Import without VDJ data (no clonotype information)
 snp_data <- import_cellsnp(
   cellsnp_dir = "path/to/cellsnp_output",
-  gene_annotation = gene_anno_df
+  gene_annotation = gene_anno_df,
+  library_id = "run1"
 )
 
 # A Vireo output folder containing GT_donors.vireo.vcf.gz alongside
@@ -74,7 +83,8 @@ snp_data <- import_cellsnp(
 snp_data <- import_cellsnp(
   cellsnp_dir = "path/to/cellsnp_output",
   gene_annotation = gene_anno_df,
-  vireo_folder = "path/to/vireo_output"
+  vireo_folder = "path/to/vireo_output",
+  library_id = "run1"
 )
 
 # Relabel Vireo's arbitrary donor0/donor1 to real identities at import time
@@ -82,8 +92,15 @@ snp_data <- import_cellsnp(
   cellsnp_dir = "path/to/cellsnp_output",
   gene_annotation = gene_anno_df,
   vireo_folder = "path/to/vireo_output",
-  donor_map = c(PatientA = "donor0", PatientB = "donor1")
+  donor_map = c(PatientA = "donor0", PatientB = "donor1"),
+  library_id = "run1"
 )
+
+# Two libraries labelled distinctly, so merge_snpdata() keeps cells that
+# share a barcode by chance apart instead of fusing them
+run1 <- import_cellsnp("run1/", gene_anno_df, library_id = "run1")
+run2 <- import_cellsnp("run2/", gene_anno_df, library_id = "run2")
+combined <- merge_snpdata(run1, run2)
 }
 }
 \seealso{

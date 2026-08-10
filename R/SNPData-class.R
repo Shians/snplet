@@ -47,7 +47,12 @@
 #' @slot alt_count A sparse Matrix containing alternate allele counts (SNPs x cells)
 #' @slot oth_count A sparse Matrix containing other allele counts (SNPs x cells)
 #' @slot snp_info A data.frame containing SNP metadata with automatically computed coverage and non_zero_samples columns
-#' @slot barcode_info A data.frame containing cell/barcode metadata with automatically computed library_size and non_zero_snps columns
+#' @slot barcode_info A data.frame containing cell/barcode metadata with automatically
+#'   computed library_size and non_zero_snps columns, and an automatically added
+#'   \code{library_id} column (\code{NA} unless supplied) naming the sequencing library
+#'   each cell came from. Because 10x barcodes are only unique within a library, a
+#'   merged object may carry the same \code{barcode} on more than one cell; only
+#'   \code{cell_id} is guaranteed unique.
 #' @slot chr_style Character string indicating the chromosome naming style. One of: "numeric", "ucsc", "refseq_mouse", "genbank_mouse", "refseq_human", "genbank_human", or "unknown"
 #' @slot donor_info A tibble with one row per donor and an automatically computed
 #'   \code{n_cells} column. Rows are dropped when a donor loses all of its cells, via
@@ -165,6 +170,7 @@ setMethod(
 
         snp_info <- .assign_snp_ids(snp_info)
         barcode_info <- .assign_cell_ids(barcode_info)
+        barcode_info <- .assign_library_id(barcode_info)
 
         # Relabel donors (e.g. Vireo's arbitrary donor0..n) before donor_info
         # is derived, so barcode_info, donor_info, and any caller-supplied

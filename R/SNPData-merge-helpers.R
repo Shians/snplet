@@ -53,70 +53,58 @@
     merged
 }
 
-# Decides, for every cell present in both x and y, which object's copy survives.
+# The composite cell identity used throughout a merge: a barcode is unique only
+# within its own library, so (library_id, barcode) is what actually names a cell.
 #
-# Summing a collided cell's counts is right only when the two columns really are
-# the same physical cell sequenced twice. Across independently barcoded libraries
-# they are not: a shared barcode string is a coincidence between two different
-# cells, often from different donors, and summing them fabricates a cell that
-# expresses both donors' alleles (see merge_snpdata()'s `cell_collision`).
-#
-# The loser is suppressed by setting its column target to NA, which
-# .merge_count_matrix() already drops -- so no counts from the losing column
-# reach the merged matrix.
-#
-# Depth is the full-object library size (ref + alt over every SNP, the same
-# quantity as `barcode_info$library_size`), not just the retained SNPs: which of
-# two cells is better sequenced is a property of the cell, and making it depend
-# on `snp_join` would let the SNP-side join silently change which cells survive.
-#
-# @return A list with the two adjusted column-target vectors, plus `collided`
-#   and `winner_is_y` -- both logical, indexed by retained column position, for
-#   .merge_barcode_info() to resolve metadata to the same winner.
-.resolve_cell_collisions <- function(x, y, col_target_x, col_target_y, n_retained) {
-    collided <- rep(FALSE, n_retained)
-    winner_is_y <- rep(FALSE, n_retained)
+# Pasted into a single string rather than kept as a pair because the retained
+# cells are carried around as a character vector and looked up with match(). The
+# separator is the ASCII unit separator, which cannot occur in a 10x barcode and
+# is vanishingly unlikely in a library label, so two distinct pairs cannot
+# collapse onto one key.
+.CELL_KEY_SEP <- "\u001f"
 
-    in_x <- !is.na(col_target_x)
-    in_y <- !is.na(col_target_y)
-    collided[intersect(col_target_x[in_x], col_target_y[in_y])] <- TRUE
+.cell_keys <- function(barcode_info, id_col) {
+    paste(barcode_info$library_id, barcode_info[[id_col]], sep = .CELL_KEY_SEP)
+}
 
-    if (!any(collided)) {
-        return(list(
-            col_target_x = col_target_x,
-            col_target_y = col_target_y,
-            collided = collided,
-            winner_is_y = winner_is_y
-        ))
+# The identifier half of each retained key, recovered from the inputs rather
+# than by splitting the key, so a separator appearing inside a label cannot
+# corrupt the result.
+.key_identifiers <- function(keys_retained, all_keys, all_ids) {
+    all_ids[match(keys_retained, all_keys)]
+}
+
+# Every cell must carry a library label before it can be merged.
+#
+# Without one there is no way to tell a barcode shared *within* a library (the
+# same physical cell, whose counts should be summed) from one shared *across*
+# libraries (two different cells, often from different donors, whose counts must
+# not be). 10x barcodes come from a whitelist of roughly 737,000, so two runs of
+# n cells are expected to share about n^2 / 737000 barcodes by chance -- around
+# 34 for two 5,000-cell runs. Summing such a pair fabricates a cell carrying both
+# donors' alleles, which at a SNP where their phase differs reads as biallelic
+# expression: for X-linked genes that is indistinguishable from escape from
+# X-chromosome inactivation, so the artefact lands precisely on the signal
+# assign_xci() and test_escape() exist to measure. Guessing is not safe, so an
+# unlabelled object is refused outright.
+.check_library_ids <- function(x, y) {
+    n_missing_x <- sum(is.na(x@barcode_info$library_id))
+    n_missing_y <- sum(is.na(y@barcode_info$library_id))
+
+    if (n_missing_x == 0 && n_missing_y == 0) {
+        return(invisible(NULL))
     }
 
-    # Depth per retained position, NA where that object does not contribute.
-    depth_x <- rep(NA_real_, n_retained)
-    depth_y <- rep(NA_real_, n_retained)
-    depth_x[col_target_x[in_x]] <- (Matrix::colSums(x@ref_count) + Matrix::colSums(x@alt_count))[in_x]
-    depth_y[col_target_y[in_y]] <- (Matrix::colSums(y@ref_count) + Matrix::colSums(y@alt_count))[in_y]
-
-    # Strict `>` so an exact tie goes to x, the left-hand object.
-    winner_is_y <- collided & !is.na(depth_x) & !is.na(depth_y) & depth_y > depth_x
-
-    target_x <- col_target_x[in_x]
-    col_target_x[in_x] <- ifelse(winner_is_y[target_x], NA_integer_, target_x)
-    target_y <- col_target_y[in_y]
-    col_target_y[in_y] <- ifelse(collided[target_y] & !winner_is_y[target_y], NA_integer_, target_y)
-
-    logger::log_warn(
-        "{sum(collided)} cell(s) share an identifier between the two objects; ",
-        "keeping the higher-coverage copy ({sum(winner_is_y)} from y, ",
-        "{sum(collided) - sum(winner_is_y)} from x) and discarding the other. ",
-        "Pass cell_collision = 'sum' if these are technical replicates of the same cells."
-    )
-
-    list(
-        col_target_x = col_target_x,
-        col_target_y = col_target_y,
-        collided = collided,
-        winner_is_y = winner_is_y
-    )
+    stop(sprintf(
+        paste0(
+            "merge_snpdata() requires a library_id for every cell, but %d cell(s) in x and %d in y have none. ",
+            "Cells are matched on (library_id, barcode) because a barcode only identifies a cell within its own ",
+            "library. Set it at import with import_cellsnp(..., library_id = ) or afterwards with ",
+            "barcode_info(obj)$library_id <- ."
+        ),
+        n_missing_x,
+        n_missing_y
+    ))
 }
 
 .merge_snp_info <- function(x, y, snp_ids_retained, snp_join) {
@@ -267,13 +255,16 @@
     dplyr::coalesce(source_x, source_y)
 }
 
-# `winner_is_y` is the per-retained-cell decision made by
-# .resolve_cell_collisions(), or NULL under cell_collision = "sum". When it is
-# supplied, a collided cell's metadata must follow the same winner as its
-# counts: coalescing x-first would otherwise label the surviving column with the
-# discarded cell's donor, which is the very mislabelling the resolution exists
-# to prevent.
-.merge_barcode_info <- function(x, y, barcodes_retained, cell_join, winner_is_y = NULL) {
+# Metadata follows the same (library_id, `id_col`) identity the counts do, so a
+# row's annotation always describes the cell whose counts sit in that column. A
+# cell that both objects carry contributes one row and resolves conflicting
+# columns x-first; two cells that merely share a barcode across libraries never
+# meet, since the library halves of their keys differ.
+#
+# `cell_ids_retained` is decided by the caller (which knows whether the retained
+# identifiers stayed unique) rather than regenerated here, so barcode_info$cell_id
+# and the count matrices' column names cannot drift apart.
+.merge_barcode_info <- function(x, y, keys_retained, cell_join, id_col, cell_ids_retained) {
     join_fun <- switch(
         cell_join,
         "union" = dplyr::full_join,
@@ -286,29 +277,18 @@
     barcode_info_x <- x@barcode_info %>% dplyr::select(-dplyr::any_of(auto_cols))
     barcode_info_y <- y@barcode_info %>% dplyr::select(-dplyr::any_of(auto_cols))
 
-    # Check if barcode column exists in both objects
-    has_barcode_x <- "barcode" %in% colnames(barcode_info_x)
-    has_barcode_y <- "barcode" %in% colnames(barcode_info_y)
-
-    # Determine join key: use barcode if available, otherwise fall back to cell_id
-    join_by <- if (has_barcode_x && has_barcode_y) "barcode" else "cell_id"
-
     merged <- join_fun(
         barcode_info_x,
         barcode_info_y,
-        by = join_by,
+        by = c("library_id", id_col),
         suffix = c(".x", ".y")
     )
 
-    # Filter and order by barcodes_retained
-    # Use the appropriate column for filtering
-    # Ordering happens before the conflicting columns are resolved so that
-    # `winner_is_y`, which is indexed by retained position, lines up row-wise.
-    filter_col <- if (join_by == "barcode") "barcode" else "cell_id"
-    merged <- merged[merged[[filter_col]] %in% barcodes_retained, , drop = FALSE]
-    order_idx <- match(barcodes_retained, merged[[filter_col]])
+    merged_keys <- .cell_keys(merged, id_col)
+    merged <- merged[merged_keys %in% keys_retained, , drop = FALSE]
+    order_idx <- match(keys_retained, .cell_keys(merged, id_col))
     if (any(is.na(order_idx))) {
-        stop(paste0("Some ", filter_col, "s could not be matched during merge_barcode_info()"))
+        stop("Some cells could not be matched during merge_barcode_info()")
     }
     merged <- merged[order_idx, , drop = FALSE]
 
@@ -316,22 +296,12 @@
     for (x_col in x_conflicts) {
         base_col <- sub("\\.x$", "", x_col)
         y_col <- paste0(base_col, ".y")
-        merged[[base_col]] <- if (is.null(winner_is_y)) {
-            dplyr::coalesce(merged[[x_col]], merged[[y_col]])
-        } else {
-            # A non-collided cell contributes from one object only, so the
-            # coalesce is still what resolves it; a collided one takes its
-            # winner's value outright, with no fallback to the discarded copy.
-            dplyr::if_else(winner_is_y, merged[[y_col]], dplyr::coalesce(merged[[x_col]], merged[[y_col]]))
-        }
+        merged[[base_col]] <- dplyr::coalesce(merged[[x_col]], merged[[y_col]])
         merged[[x_col]] <- NULL
         merged[[y_col]] <- NULL
     }
 
-    # Regenerate cell_id as sequential identifiers if we joined by barcode
-    if (join_by == "barcode") {
-        merged$cell_id <- paste0("cell_", seq_len(nrow(merged)))
-    }
+    merged$cell_id <- cell_ids_retained
 
     tibble::as_tibble(merged)
 }

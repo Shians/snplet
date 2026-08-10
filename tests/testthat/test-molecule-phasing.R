@@ -934,6 +934,37 @@ test_that("add_molecule_phase() errors on unrecognised donor names in bam_files"
     )
 })
 
+test_that("add_molecule_phase() errors when cells span more than one library", {
+    fixture <- make_phase_fixture()
+    obj <- add_barcode_metadata(
+        fixture$obj,
+        data.frame(
+            cell_id = barcode_info(fixture$obj)$cell_id,
+            library_id = c("lib_A", "lib_A", "lib_B", "lib_B")
+        ),
+        join_by = "cell_id",
+        overwrite = TRUE
+    )
+
+    # Verify a multi-library object is rejected: barcodes are only unique
+    # within a library, so one BAM's reads could be attributed to two cells
+    expect_error(
+        add_molecule_phase(obj, bam_files = c(donor0 = "x.bam")),
+        "requires cells from a single library"
+    )
+})
+
+test_that("add_molecule_phase() accepts an object whose cells are all unlabelled", {
+    fixture <- make_phase_fixture()
+
+    # Confirm an all-NA library_id does not trip the single-library check,
+    # so objects imported without a library label still phase as before
+    expect_error(
+        add_molecule_phase(fixture$obj, bam_files = c(not_a_donor = "x.bam")),
+        "not found in barcode_info\\$donor"
+    )
+})
+
 test_that("add_molecule_phase() ignores 'doublet' and 'unassigned' entries in bam_files", {
     # A fixture where "doublet" is a real, valid donor label in barcode_info
     # (as Vireo emits it) -- so the unknown_donors check alone wouldn't catch

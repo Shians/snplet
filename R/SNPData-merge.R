@@ -1,8 +1,9 @@
 #' Merge two SNPData objects
 #'
 #' Combines two SNPData objects with flexible join strategies for SNPs and cells.
-#' Overlapping SNPs are summed, overlapping cells are resolved by
-#' \code{cell_collision}, and unique entries are retained based on join type.
+#' Overlapping SNPs are summed, cells are matched on
+#' \code{(library_id, barcode)}, and unique entries are retained based on join
+#' type.
 #'
 #' @param x A SNPData object
 #' @param y A SNPData object to merge with x
@@ -13,46 +14,39 @@
 #'     \item{\code{"left"}}{Keep all SNPs from x, add y data where available}
 #'     \item{\code{"right"}}{Keep all SNPs from y, add x data where available}
 #'   }
-#' @param cell_join Join type for cells (columns). One of:
+#' @param cell_join Join type for cells (columns). Two cells are "the same
+#'   cell" only when they share both a \code{library_id} and a
+#'   \code{barcode}; a cell in only one object is never merged into another,
+#'   regardless of this setting. One of:
 #'   \describe{
 #'     \item{\code{"union"}}{Keep all cells from both objects (default)}
 #'     \item{\code{"intersect"}}{Keep only cells present in both objects}
-#'     \item{\code{"left"}}{Keep the cells of x, drawing on y where it covers
-#'       the same cell: under the default \code{cell_collision}, a cell of x
-#'       that y also carries can be replaced by y's copy rather than added to}
-#'     \item{\code{"right"}}{Keep the cells of y, drawing on x on the same terms}
-#'   }
-#' @param cell_collision How to resolve a cell retained from both objects.
-#'   Applied independently of \code{cell_join}: depth alone decides, so a
-#'   \code{"left"} or \code{"right"} \code{cell_join} selects which cells appear
-#'   but grants neither object priority over the other's counts. One of:
-#'   \describe{
-#'     \item{\code{"keep_best"}}{Keep whichever object's copy has the greater
-#'       library size and discard the other, with an exact tie going to \code{x}
-#'       (default). Correct when a shared identifier is a coincidence rather than
-#'       a shared cell.}
-#'     \item{\code{"sum"}}{Add the two copies' counts together, the unconditional
-#'       behaviour of earlier versions. Correct only for technical replicates,
-#'       the same physical cells sequenced twice.}
+#'     \item{\code{"left"}}{Keep the cells of x, adding y's counts for
+#'       whichever of them y also carries}
+#'     \item{\code{"right"}}{Keep the cells of y, adding x's counts for
+#'       whichever of them x also carries}
 #'   }
 #'
 #' @return A new SNPData object containing the merged data
 #'
 #' @details
 #' This function provides independent control over which SNPs (rows) and
-#' cells (columns) to retain: SNPs present in both objects have their counts
-#' summed element-wise, cells present in both are resolved according to
-#' \code{cell_collision}, and positions present in only one object (but
-#' retained by the join strategy) are zero-filled for the missing dimension.
+#' cells (columns) to retain. A cell is identified by \code{(library_id,
+#' barcode)}, not by \code{barcode} alone, because a 10x barcode is unique
+#' only within the library it was drawn from (see \sQuote{Cells that collide
+#' rather than correspond} below); every cell in both \code{x} and \code{y}
+#' must therefore carry a non-\code{NA} \code{library_id}, or the function
+#' errors. SNPs present in both objects have their counts summed
+#' element-wise; cells present in both objects (identical \code{library_id}
+#' and \code{barcode}) likewise have their counts summed, since a shared key
+#' means the same physical cell. Positions present in only one object, but
+#' retained by the join strategy, are zero-filled for the missing dimension.
 #'
 #' Metadata is merged using the corresponding dplyr join function: for
-#' overlapping SNPs with conflicting metadata, values from x take priority.
-#' A collided cell's metadata instead follows whichever copy
-#' \code{cell_collision} retained, so its \code{donor} and other annotation
-#' describe the cell whose counts survived (falling back to x priority under
-#' \code{cell_collision = "sum"}). Auto-computed columns (\code{coverage},
-#' \code{non_zero_samples}, \code{library_size}, \code{non_zero_snps}) are
-#' recalculated for the merged object.
+#' overlapping SNPs or cells with conflicting metadata, values from x take
+#' priority. Auto-computed columns (\code{coverage}, \code{non_zero_samples},
+#' \code{library_size}, \code{non_zero_snps}) are recalculated for the merged
+#' object.
 #'
 #' \code{donor_info} is merged the same way (x priority, \code{n_cells}
 #' recalculated). \code{donor_snp_info} instead \strong{errors} if x and y
@@ -75,50 +69,58 @@
 #' }
 #'
 #' @section Cell merging strategy:
-#' Cells are matched and merged by barcode, not \code{cell_id}, when both
-#' SNPData objects carry a \code{barcode} column in \code{barcode_info}; this
-#' correctly merges the same physical cell across datasets even when its
-#' internal \code{cell_id} differs between them. If \code{barcode} is absent
-#' from either object, the function falls back to merging by \code{cell_id}.
+#' Cells are matched and merged by \code{(library_id, barcode)}, not
+#' \code{cell_id}, when both SNPData objects carry a \code{barcode} column in
+#' \code{barcode_info}; this correctly merges the same physical cell across
+#' datasets even when its internal \code{cell_id} differs between them. If
+#' \code{barcode} is absent from either object, the function falls back to
+#' matching on \code{(library_id, cell_id)}. A cell's \code{cell_id} is kept
+#' from the input where possible, and only renumbered (\code{"cell_1"},
+#' \code{"cell_2"}, ...) when the retained identifiers would otherwise
+#' collide, e.g. when two libraries happen to reuse the same \code{cell_id}.
 #'
 #' @section Cells that collide rather than correspond:
 #' A shared barcode across independently barcoded libraries is often pure
 #' chance, not a shared cell (10x's ~737,000-barcode whitelist gives two
 #' 5,000-cell runs ~34 chance collisions). Summing such a pair fabricates a
 #' cell carrying both donors' alleles, indistinguishable for X-linked genes
-#' from XCI escape. The default \code{cell_collision = "keep_best"} avoids
-#' this by discarding one member of the pair rather than summing;
-#' \code{"sum"} is correct only for true technical replicates. To retain all
-#' cells from independent libraries safely, suffix each object's barcodes
-#' with a batch label before merging so they cannot collide.
+#' from XCI escape. \code{library_id} is what prevents this: cells are
+#' matched on \code{(library_id, barcode)}, so a barcode shared across two
+#' different library labels is kept as two separate cells rather than
+#' summed. \code{merge_snpdata()} therefore requires every cell in both
+#' objects to carry a non-\code{NA} \code{library_id}; set it at import with
+#' \code{import_cellsnp(..., library_id = )} or afterwards via
+#' \code{barcode_info(obj)$library_id <- }.
 #'
 #' @examples
 #' \dontrun{
-#' # Technical replicates - sum depth for validated entries only
-#' rep1 <- import_cellsnp("replicate1/")
-#' rep2 <- import_cellsnp("replicate2/")
+#' # Two cellSNP runs over the SAME library (e.g. rerun against a wider SNP
+#' # panel): the shared library_id means a repeated barcode is the same cell,
+#' # so depth is pooled.
+#' rep1 <- import_cellsnp("replicate1/", gene_anno, library_id = "lib1")
+#' rep2 <- import_cellsnp("replicate2/", gene_anno, library_id = "lib1")
 #' combined <- merge_snpdata(rep1, rep2,
 #'                          snp_join = "intersect",
-#'                          cell_join = "intersect",
-#'                          cell_collision = "sum")
+#'                          cell_join = "intersect")
 #'
-#' # Batch integration - all cells, consensus SNPs only
-#' batch1 <- import_cellsnp("donor1/")
-#' batch2 <- import_cellsnp("donor2/")
+#' # Batch integration - two distinct libraries, so no cell is shared and
+#' # chance barcode collisions stay as separate cells
+#' batch1 <- import_cellsnp("donor1/", gene_anno, library_id = "batch1")
+#' batch2 <- import_cellsnp("donor2/", gene_anno, library_id = "batch2")
 #' integrated <- merge_snpdata(batch1, batch2,
 #'                             snp_join = "intersect",
 #'                             cell_join = "union")
 #'
-#' # SNP panel expansion - all SNPs, validated cells only
-#' common <- import_cellsnp("common_vars/")
-#' rare <- import_cellsnp("rare_vars/")
+#' # SNP panel expansion over one library - all SNPs, validated cells only
+#' common <- import_cellsnp("common_vars/", gene_anno, library_id = "lib1")
+#' rare <- import_cellsnp("rare_vars/", gene_anno, library_id = "lib1")
 #' expanded <- merge_snpdata(common, rare,
 #'                          snp_join = "union",
 #'                          cell_join = "intersect")
 #'
 #' # Default: maximum data retention
-#' dataset1 <- import_cellsnp("cohort_A/")
-#' dataset2 <- import_cellsnp("cohort_B/")
+#' dataset1 <- import_cellsnp("cohort_A/", gene_anno, library_id = "cohort_A")
+#' dataset2 <- import_cellsnp("cohort_B/", gene_anno, library_id = "cohort_B")
 #' combined <- merge_snpdata(dataset1, dataset2)
 #' }
 #'
@@ -127,13 +129,11 @@ merge_snpdata <- function(
     x,
     y,
     snp_join = c("union", "intersect", "left", "right"),
-    cell_join = c("union", "intersect", "left", "right"),
-    cell_collision = c("keep_best", "sum")
+    cell_join = c("union", "intersect", "left", "right")
 ) {
     # Match arguments
     snp_join <- match.arg(snp_join)
     cell_join <- match.arg(cell_join)
-    cell_collision <- match.arg(cell_collision)
 
     # Validate both inputs are SNPData objects
     stopifnot(methods::is(x, "SNPData"))
@@ -151,50 +151,34 @@ merge_snpdata <- function(
     cell_ids_x <- colnames(x@ref_count)
     cell_ids_y <- colnames(y@ref_count)
 
-    # Check if barcode column exists in both objects
-    has_barcode_x <- "barcode" %in% colnames(x@barcode_info)
-    has_barcode_y <- "barcode" %in% colnames(y@barcode_info)
+    # A cell is identified by (library_id, barcode), not by barcode alone: a 10x
+    # barcode is unique only within the library it was drawn from, so the pair is
+    # what distinguishes the same cell sequenced twice from two different cells
+    # that happened to draw the same barcode.
+    .check_library_ids(x, y)
 
-    # Use barcodes for merging if available, otherwise fall back to cell_ids
-    if (has_barcode_x && has_barcode_y) {
-        # Extract barcodes from barcode_info
-        barcodes_x <- x@barcode_info$barcode
-        barcodes_y <- y@barcode_info$barcode
-
-        # Create mapping from barcode to original cell_id (colnames)
-        barcode_to_colname_x <- setNames(cell_ids_x, barcodes_x)
-        barcode_to_colname_y <- setNames(cell_ids_y, barcodes_y)
-
-        # Determine which barcodes to retain based on cell_join strategy
-        barcodes_retained <- switch(
-            cell_join,
-            "union" = union(barcodes_x, barcodes_y),
-            "intersect" = intersect(barcodes_x, barcodes_y),
-            "left" = barcodes_x,
-            "right" = barcodes_y
-        )
-
-        # Create mapping from original column names to retained barcode positions
-        # This will be used to reorganize the matrices
-        col_mapping_x <- match(barcodes_x, barcodes_retained)
-        col_mapping_y <- match(barcodes_y, barcodes_retained)
-
-        # Create new cell_ids for the retained barcodes
-        cell_ids_retained <- paste0("cell_", seq_along(barcodes_retained))
+    # Barcodes are the real cell identity; cell_id is a positional label the
+    # constructor generates, so it is only a fallback for objects built without
+    # barcodes (see the class docs).
+    id_col <- if ("barcode" %in% colnames(x@barcode_info) && "barcode" %in% colnames(y@barcode_info)) {
+        "barcode"
     } else {
-        # Fall back to using cell_ids from column names
-        cell_ids_retained <- switch(
-            cell_join,
-            "union" = union(cell_ids_x, cell_ids_y),
-            "intersect" = intersect(cell_ids_x, cell_ids_y),
-            "left" = cell_ids_x,
-            "right" = cell_ids_y
-        )
-
-        barcodes_retained <- cell_ids_retained
-        col_mapping_x <- NULL
-        col_mapping_y <- NULL
+        "cell_id"
     }
+
+    keys_x <- .cell_keys(x@barcode_info, id_col)
+    keys_y <- .cell_keys(y@barcode_info, id_col)
+
+    keys_retained <- switch(
+        cell_join,
+        "union" = union(keys_x, keys_y),
+        "intersect" = intersect(keys_x, keys_y),
+        "left" = keys_x,
+        "right" = keys_y
+    )
+
+    col_mapping_x <- match(keys_x, keys_retained)
+    col_mapping_y <- match(keys_y, keys_retained)
 
     # Determine which SNPs to retain based on snp_join strategy
     snp_ids_retained <- switch(
@@ -205,39 +189,40 @@ merge_snpdata <- function(
         "right" = snp_ids_y
     )
 
-    # Handle edge case: empty result
+    # Handle edge case: empty result. Tested on the retained keys rather than on
+    # the cell_ids derived from them below, since paste0() over a zero-length
+    # index still yields one element and would mask an empty cell set.
     if (length(snp_ids_retained) == 0) {
         stop("No SNPs to retain after merge. Check your join strategy and input data.")
     }
-    if (length(cell_ids_retained) == 0) {
+    if (length(keys_retained) == 0) {
         stop("No cells to retain after merge. Check your join strategy and input data.")
     }
 
-    # Identify which entries need data from each object
-    snp_from_x <- intersect(snp_ids_retained, snp_ids_x)
-    snp_from_y <- intersect(snp_ids_retained, snp_ids_y)
-    cell_from_x <- intersect(cell_ids_retained, cell_ids_x)
-    cell_from_y <- intersect(cell_ids_retained, cell_ids_y)
+    # Column names come from the retained keys' own identifiers where those stay
+    # unique, so a merge that does not actually mix libraries keeps its cell_ids
+    # recognisable; two libraries sharing an identifier force a renumber, since
+    # column names and cell_id must stay unique.
+    ids_retained <- .key_identifiers(
+        keys_retained,
+        c(keys_x, keys_y),
+        c(x@barcode_info[[id_col]], y@barcode_info[[id_col]])
+    )
+    cell_ids_retained <- if (id_col == "cell_id" && !anyDuplicated(ids_retained)) {
+        ids_retained
+    } else {
+        paste0("cell_", seq_along(keys_retained))
+    }
 
-    # Retained-position lookup for each object's rows/columns (NA when not
-    # retained), computed once and shared across the ref/alt/oth channels
-    # since all three carry identical dimnames.
+    # Retained-position lookup for each object's rows (NA when not retained),
+    # computed once and shared across the ref/alt/oth channels since all three
+    # carry identical dimnames. The column equivalents are the key mappings
+    # built above, so a cell present in both objects lands on one column and
+    # .merge_count_matrix() sums its two contributions.
     row_target_x <- .retained_position(snp_ids_x, snp_ids_retained)
     row_target_y <- .retained_position(snp_ids_y, snp_ids_retained)
-    col_target_x <- col_mapping_x %||% .retained_position(cell_ids_x, cell_ids_retained)
-    col_target_y <- col_mapping_y %||% .retained_position(cell_ids_y, cell_ids_retained)
-
-    # A cell retained from both objects is summed only when the caller says the
-    # two columns are the same physical cell; otherwise the deeper copy is kept
-    # and the other discarded, so a barcode shared by chance between two
-    # independently barcoded libraries cannot fuse two cells into one.
-    winner_is_y <- NULL
-    if (cell_collision == "keep_best") {
-        resolution <- .resolve_cell_collisions(x, y, col_target_x, col_target_y, length(cell_ids_retained))
-        col_target_x <- resolution$col_target_x
-        col_target_y <- resolution$col_target_y
-        winner_is_y <- resolution$winner_is_y
-    }
+    col_target_x <- col_mapping_x
+    col_target_y <- col_mapping_y
 
     # Merge each allele channel directly from x's and y's triplets in one
     # pass, rather than expanding x and y to the merged dimensions separately
@@ -275,7 +260,7 @@ merge_snpdata <- function(
 
     # Merge metadata using helper functions
     snp_info_merged <- .merge_snp_info(x, y, snp_ids_retained, snp_join)
-    barcode_info_merged <- .merge_barcode_info(x, y, barcodes_retained, cell_join, winner_is_y)
+    barcode_info_merged <- .merge_barcode_info(x, y, keys_retained, cell_join, id_col, cell_ids_retained)
 
     # Donor genotypes are a property of the donor, not of the retained cells:
     # a donor with no surviving cells after the cell_join has its rows dropped

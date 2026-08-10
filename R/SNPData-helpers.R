@@ -179,6 +179,27 @@
     barcode_info
 }
 
+# Guarantees a `library_id` column on barcode_info, filled with NA where the
+# caller did not supply one.
+#
+# The column records which sequencing library each cell's barcode was drawn
+# from, which is what lets merge_snpdata() tell a barcode shared between two
+# libraries (two different cells that collided on a 737k-barcode whitelist)
+# from a barcode shared within one library (the same physical cell sequenced
+# twice). Always present rather than optional so that merging code can key on
+# (library_id, barcode) without first testing whether either object has the
+# column; an all-NA column simply means the libraries are unlabelled.
+.assign_library_id <- function(barcode_info) {
+    if (!"library_id" %in% colnames(barcode_info)) {
+        barcode_info$library_id <- NA_character_
+    }
+
+    barcode_info$library_id <- as.character(barcode_info$library_id)
+
+    anchor <- if ("barcode" %in% colnames(barcode_info)) "barcode" else "cell_id"
+    dplyr::relocate(barcode_info, "library_id", .after = dplyr::all_of(anchor))
+}
+
 .dedupe_snps <- function(ref_count, alt_count, oth_count, snp_info, donor_snp_info) {
     if (!any(duplicated(snp_info$snp_id))) {
         return(list(

@@ -96,6 +96,32 @@ NULL
         ))
     }
 
+    # The same check on the receiving side. Without it a key that repeats in
+    # `current_info` silently copies one metadata row onto every row sharing that
+    # key -- the row count is unchanged, so nothing downstream catches it. This
+    # bites on `barcode`, which merge_snpdata() only guarantees unique within a
+    # library, so a merged object can carry one barcode on two different cells.
+    if (any(duplicated(current_info[join_by]))) {
+        hint <- if ("barcode" %in% join_by) {
+            paste0(
+                " A barcode identifies a cell only within its own library, so a merged object may repeat one.",
+                " Join by 'cell_id', or by c(\"library_id\", \"barcode\")."
+            )
+        } else {
+            ""
+        }
+        stop(paste0(
+            "Duplicate values found in join ",
+            tolower(.column_word(join_by)),
+            " '",
+            paste(join_by, collapse = ", "),
+            "' of ",
+            info_name,
+            "; each row must match at most one metadata row.",
+            hint
+        ))
+    }
+
     if (!overwrite) {
         conflicting_cols <- intersect(
             setdiff(colnames(metadata), join_by),

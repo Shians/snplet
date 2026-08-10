@@ -236,7 +236,7 @@ test_that("merge_cell_annotations handles mixed column naming scenarios", {
 })
 
 # Shared fixture paths and import call for the "works with example data" tests below
-import_example_snpdata <- function() {
+import_example_snpdata <- function(library_id = "lib1") {
     cellsnp_dir <- system.file("extdata/example_snpdata", package = "snplet")
     vdj_file <- system.file("extdata/example_snpdata/filtered_contig_annotations.csv", package = "snplet")
     gene_anno_file <- system.file("extdata/example_gene_anno.tsv", package = "snplet")
@@ -251,9 +251,40 @@ import_example_snpdata <- function() {
         cellsnp_dir = cellsnp_dir,
         gene_annotation = gene_annotation,
         vdj_file = vdj_file,
-        vireo_folder = vireo_folder
+        vireo_folder = vireo_folder,
+        library_id = library_id
     )
 }
+
+test_that("import_cellsnp() labels every cell with the supplied library_id", {
+    snp_data <- import_example_snpdata(library_id = "lib_A")
+
+    # Verify one cellSNP run yields one library label across all its cells
+    expect_equal(unique(barcode_info(snp_data)$library_id), "lib_A")
+})
+
+test_that("import_cellsnp() errors when library_id is not supplied", {
+    cellsnp_dir <- system.file("extdata/example_snpdata", package = "snplet")
+    gene_annotation <- data.frame(chrom = "chr1", start = 1, end = 1e9, gene_name = "dummy")
+
+    # Verify the label is demanded up front rather than defaulted, since it
+    # cannot be recovered from the counts once the object exists
+    expect_error(
+        import_cellsnp(cellsnp_dir, gene_annotation),
+        "library_id is required"
+    )
+})
+
+test_that("import_cellsnp() rejects a library_id that is not a single string", {
+    cellsnp_dir <- system.file("extdata/example_snpdata", package = "snplet")
+    gene_annotation <- data.frame(chrom = "chr1", start = 1, end = 1e9, gene_name = "dummy")
+
+    # Check that a vector of labels is refused, since one run is one library
+    expect_error(
+        import_cellsnp(cellsnp_dir, gene_annotation, library_id = c("lib_A", "lib_B")),
+        "single non-NA string"
+    )
+})
 
 test_that("import_cellsnp completes without error and returns a populated SNPData object", {
     # Verify import completes without error
@@ -315,7 +346,8 @@ test_that("import_cellsnp validates gene_annotation input", {
         import_cellsnp(
             cellsnp_dir = "dummy",
             gene_annotation = invalid_gene_anno,
-            vdj_file = "dummy"
+            vdj_file = "dummy",
+            library_id = "lib1"
         ),
         "gene_annotation is missing required columns"
     )
@@ -374,7 +406,8 @@ import_snpdata_without_vdj <- function() {
     import_cellsnp(
         cellsnp_dir = cellsnp_dir,
         gene_annotation = gene_annotation,
-        vireo_folder = vireo_folder
+        vireo_folder = vireo_folder,
+        library_id = "lib1",
     )
 }
 
@@ -423,7 +456,8 @@ import_snpdata_without_vdj_or_vireo <- function() {
 
     import_cellsnp(
         cellsnp_dir = cellsnp_dir,
-        gene_annotation = gene_annotation
+        gene_annotation = gene_annotation,
+        library_id = "lib1",
     )
 }
 
@@ -468,7 +502,8 @@ test_that("import_cellsnp(vireo_folder=) reads donor assignments when the folder
     snp_data <- import_cellsnp(
         cellsnp_dir = cellsnp_dir,
         gene_annotation = gene_annotation,
-        vireo_folder = vireo_folder
+        vireo_folder = vireo_folder,
+        library_id = "lib1",
     )
 
     # Verify donor assignments were still read from donor_ids.tsv
@@ -521,7 +556,8 @@ test_that("export_cellsnp skips VDJ export when clonotype missing", {
     gene_annotation <- readr::read_tsv(gene_anno_file, show_col_types = FALSE)
     snp_data <- import_cellsnp(
         cellsnp_dir = cellsnp_dir,
-        gene_annotation = gene_annotation
+        gene_annotation = gene_annotation,
+        library_id = "lib1",
     )
 
     out_dir <- withr::local_tempdir()
@@ -565,7 +601,8 @@ test_that("complete workflow: import without VDJ then add clonotype data", {
     snp_data <- import_cellsnp(
         cellsnp_dir = cellsnp_dir,
         gene_annotation = gene_annotation,
-        vireo_folder = vireo_folder
+        vireo_folder = vireo_folder,
+        library_id = "lib1",
     )
 
     # Verify initial state - clonotype exists but all NA
@@ -650,7 +687,8 @@ test_that("import with VDJ then export and re-import preserves clonotype", {
         cellsnp_dir = cellsnp_dir,
         gene_annotation = gene_annotation,
         vdj_file = vdj_file,
-        vireo_folder = vireo_folder
+        vireo_folder = vireo_folder,
+        library_id = "lib1",
     )
 
     # Verify clonotype data present
@@ -676,7 +714,8 @@ test_that("import with VDJ then export and re-import preserves clonotype", {
         cellsnp_dir = out_dir,
         gene_annotation = gene_annotation,
         vdj_file = vdj_exported,
-        vireo_folder = out_dir
+        vireo_folder = out_dir,
+        library_id = "lib1",
     )
 
     # Verify clonotype data preserved
@@ -703,7 +742,8 @@ test_that("import without VDJ, export, re-import maintains no clonotype state", 
     # Import without VDJ
     snp_data_original <- import_cellsnp(
         cellsnp_dir = cellsnp_dir,
-        gene_annotation = gene_annotation
+        gene_annotation = gene_annotation,
+        library_id = "lib1",
     )
 
     # Verify all clonotypes are NA
@@ -725,7 +765,8 @@ test_that("import without VDJ, export, re-import maintains no clonotype state", 
     snp_data_reimported <- import_cellsnp(
         cellsnp_dir = out_dir,
         gene_annotation = gene_annotation,
-        vireo_folder = out_dir
+        vireo_folder = out_dir,
+        library_id = "lib1",
     )
 
     # Verify all clonotypes still NA
@@ -950,7 +991,8 @@ test_that("import_cellsnp(vireo_folder=) populates donor_snp_info from real Vire
     snp_data <- import_cellsnp(
         cellsnp_dir = cellsnp_dir,
         gene_annotation = gene_annotation,
-        vireo_folder = vireo_folder
+        vireo_folder = vireo_folder,
+        library_id = "lib1",
     )
 
     donor_snp_info <- donor_snp_info(snp_data)
