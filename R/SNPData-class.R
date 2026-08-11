@@ -4,60 +4,78 @@
 #' This class integrates reference/alternate allele count matrices, SNP information, and
 #' cell/barcode metadata to support allele-specific expression analysis workflows.
 #'
-#' @param ref_count A sparse Matrix containing reference allele counts (SNPs x cells)
-#' @param alt_count A sparse Matrix containing alternate allele counts (SNPs x cells)
-#' @param oth_count A sparse Matrix containing other allele counts (SNPs x cells), optional
-#' @param snp_info A data.frame containing SNP metadata
-#' @param barcode_info A data.frame containing cell/barcode metadata
-#' @param donor_info A data.frame with one row per donor, optional. Defaults to one row per
-#'   distinct value of \code{barcode_info$donor} (empty if \code{barcode_info} has no
-#'   \code{donor} column). Must contain a \code{donor} column; \code{n_cells} is computed
-#'   automatically.
-#' @param donor_snp_info A data.frame with one row per (\code{snp_id}, \code{donor},
-#'   \code{zygosity_source}) triple, optional -- a pair may carry more than one row when
-#'   more than one source has called it (e.g. a \code{"vireo_gt"} row and a
-#'   \code{"binomial"} row for the same pair). Defaults to an empty table. Must contain
-#'   \code{snp_id} and \code{donor} columns, both of which must already appear in
-#'   \code{snp_info}/\code{donor_info}; a row with a non-\code{NA} \code{zygosity} must
-#'   also carry a non-\code{NA} \code{zygosity_source}.
-#' @param source Character vector of \code{zygosity_source} value(s) to filter
-#'   \code{donor_snp_info(x)} to, or \code{"all"} to return every source unfiltered.
-#'   Defaults to \code{NULL}, meaning the object's active source (see
-#'   \code{\link{zygosity_source}}).
-#' @param donor_map A named character vector, \code{c(new_label = old_label, ...)} (the same
-#'   \code{new = old} convention as \code{dplyr::rename()}), optional. Applied to
-#'   \code{barcode_info$donor} and, if supplied, \code{donor_info$donor}/
-#'   \code{donor_snp_info$donor} before the object is built -- useful since Vireo assigns
-#'   arbitrary labels (\code{donor0}, \code{donor1}, ...) that this can relabel at import
-#'   time rather than after the fact via \code{\link{rename_donor}}.
-#' @param object A SNPData object for show method
-#' @param x A SNPData object
-#' @param i Numeric or logical vector for subsetting SNPs (rows)
-#' @param j Numeric or logical vector for subsetting samples (columns)
-#' @param value A data.frame for replacement methods (barcode_info<- or snp_info<-)
-#' @param ... Additional arguments (unused; required by the \code{updateObject} generic)
-#' @param verbose Logical, whether \code{updateObject} logs which legacy slots it migrated
-#'   (default \code{FALSE})
+#' @param ref_count A sparse Matrix (SNPs x cells), required. Reference allele counts.
+#' @param alt_count A sparse Matrix (SNPs x cells), required. Alternate allele counts.
+#' @param oth_count A sparse Matrix (SNPs x cells), optional (default \code{NULL}).
+#'   Other allele counts.
+#' @param snp_info A data.frame, required. SNP metadata.
+#' @param barcode_info A data.frame, required. Cell/barcode metadata.
+#' @param donor_info A data.frame, optional (default: one row per distinct
+#'   value of \code{barcode_info$donor}, empty if \code{barcode_info} has no
+#'   \code{donor} column). One row per donor; must contain a \code{donor}
+#'   column, and \code{n_cells} is computed automatically.
+#' @param donor_snp_info A data.frame, optional (default: an empty table).
+#'   One row per SNP measured in a donor by a particular zygosity-calling
+#'   source (keyed on \code{snp_id}, \code{donor}, \code{zygosity_source}). A
+#'   given (\code{snp_id}, \code{donor}) pair may have more than one row when
+#'   more than one source called it (e.g. a \code{"vireo_gt"} row and a
+#'   \code{"binomial"} row). \code{snp_id} and \code{donor} must already
+#'   appear in \code{snp_info}/\code{donor_info}, and a non-\code{NA}
+#'   \code{zygosity} must carry a non-\code{NA} \code{zygosity_source}.
+#' @param source Character vector, optional (default \code{NULL}, meaning
+#'   the object's active source; see \code{\link{zygosity_source}}).
+#'   \code{zygosity_source} value(s) to filter \code{donor_snp_info(x)} to,
+#'   or \code{"all"} to return every source unfiltered.
+#' @param donor_map A named character vector, \code{c(new_label = old_label, ...)}
+#'   (the same \code{new = old} convention as \code{dplyr::rename()}), optional
+#'   (default \code{NULL}). Applied to \code{barcode_info$donor} and, if
+#'   supplied, \code{donor_info$donor}/\code{donor_snp_info$donor} before the
+#'   object is built, useful since Vireo assigns arbitrary labels
+#'   (\code{donor0}, \code{donor1}, ...) that this can relabel at import time
+#'   rather than after the fact via \code{\link{rename_donor}}.
+#' @param object A SNPData object, required. Passed to the show method.
+#' @param x A SNPData object, required.
+#' @param i Numeric or logical vector, optional. Subsets SNPs (rows).
+#' @param j Numeric or logical vector, optional. Subsets samples (columns).
+#' @param value A data.frame, required. Replacement value for
+#'   \code{barcode_info<-} or \code{snp_info<-}.
+#' @param ... Unused; required by the \code{updateObject} generic.
+#' @param verbose Logical (default \code{FALSE}). Whether \code{updateObject}
+#'   logs which legacy slots it migrated.
 #'
 #' @slot ref_count A sparse Matrix containing reference allele counts (SNPs x cells)
 #' @slot alt_count A sparse Matrix containing alternate allele counts (SNPs x cells)
 #' @slot oth_count A sparse Matrix containing other allele counts (SNPs x cells)
 #' @slot snp_info A data.frame containing SNP metadata with automatically computed coverage and non_zero_samples columns
-#' @slot barcode_info A data.frame containing cell/barcode metadata with automatically computed library_size and non_zero_snps columns
+#' @slot barcode_info A data.frame containing cell/barcode metadata with automatically
+#'   computed library_size and non_zero_snps columns, and an automatically added
+#'   \code{library_id} column (\code{NA} unless supplied) naming the sequencing library
+#'   each cell came from. Because 10x barcodes are only unique within a library, a
+#'   merged object may carry the same \code{barcode} on more than one cell; only
+#'   \code{cell_id} is guaranteed unique.
 #' @slot chr_style Character string indicating the chromosome naming style. One of: "numeric", "ucsc", "refseq_mouse", "genbank_mouse", "refseq_human", "genbank_human", or "unknown"
 #' @slot donor_info A tibble with one row per donor and an automatically computed
 #'   \code{n_cells} column. Rows are dropped when a donor loses all of its cells, via
 #'   subsetting or \code{merge_snpdata()}.
-#' @slot donor_snp_info A tibble with one row per (\code{snp_id}, \code{donor},
-#'   \code{zygosity_source}) triple, carrying zygosity calls (\code{zygosity},
-#'   \code{zygosity_source} and per-source confidence columns) and XCI fit diagnostics
+#' @slot donor_snp_info A tibble with one row per SNP measured in a donor by
+#'   a particular zygosity-calling source (keyed on \code{snp_id},
+#'   \code{donor}, \code{zygosity_source}), carrying zygosity calls
+#'   (\code{zygosity}, \code{zygosity_source}, per-source confidence) and XCI fit diagnostics
 #'   (\code{xci_informative}, \code{allele_on_x1}, \code{xci_escape_fraction}) written by
-#'   \code{\link{assign_xci}} for whichever source was active when it ran. Rows are dropped
-#'   along with their donor, same as \code{donor_info}.
+#'   \code{\link{assign_xci}} for whichever source was active when it ran; rows are
+#'   dropped along with their donor, same as \code{donor_info}.
+#' @slot library_info A tibble with one row per sequencing library present in
+#'   \code{barcode_info$library_id}, with an automatically computed
+#'   \code{n_cells} column and a \code{bam_files} list-column holding the BAM
+#'   path(s) that library's reads came from (empty unless recorded with
+#'   \code{import_cellsnp(..., bam_files = )} or \code{\link{add_library_bams}}).
+#'   Never supplied at construction: which libraries an object holds is derived
+#'   from its cells. A library that loses all of its cells loses its row, and
+#'   its recorded paths with it.
 #' @slot zygosity_source Character string naming the \emph{active} zygosity-call source
 #'   (a value of \code{donor_snp_info$zygosity_source}), or \code{NA_character_} if none
-#'   has been established yet. \code{\link{donor_snp_info}}, \code{\link{assign_xci}}, and
-#'   other zygosity-dependent functions default to this source; switch it with
+#'   is established yet. \code{\link{donor_snp_info}}, \code{\link{assign_xci}}, and other
+#'   zygosity-dependent functions default to this source; switch it with
 #'   \code{zygosity_source<-()}. Set automatically at import (e.g. \code{"vireo_gt"} after
 #'   importing Vireo genotypes) or by \code{\link{infer_zygosity}}.
 #'
@@ -129,6 +147,7 @@ setClass(
         chr_style = "character",
         donor_info = "tbl_df",
         donor_snp_info = "tbl_df",
+        library_info = "tbl_df",
         zygosity_source = "character"
     )
 )
@@ -160,6 +179,7 @@ setMethod(
 
         snp_info <- .assign_snp_ids(snp_info)
         barcode_info <- .assign_cell_ids(barcode_info)
+        barcode_info <- .assign_library_id(barcode_info)
 
         # Relabel donors (e.g. Vireo's arbitrary donor0..n) before donor_info
         # is derived, so barcode_info, donor_info, and any caller-supplied
@@ -214,6 +234,7 @@ setMethod(
         .Object@barcode_info <- metrics$barcode_info
         .Object@donor_info <- metrics$donor_info
         .Object@donor_snp_info <- donor_snp_info
+        .Object@library_info <- .default_library_info(metrics$barcode_info)
         .Object@zygosity_source <- .derive_zygosity_source(donor_snp_info)
 
         methods::validObject(.Object)
@@ -223,9 +244,9 @@ setMethod(
 
 #' Subset a SNPData object
 #'
-#' @param x A SNPData object
-#' @param i Numeric or logical vector for subsetting SNPs (rows)
-#' @param j Numeric or logical vector for subsetting samples (columns)
+#' @param x A SNPData object, required.
+#' @param i Numeric or logical vector, optional. Subsets SNPs (rows).
+#' @param j Numeric or logical vector, optional. Subsets samples (columns).
 #' @return A subsetted SNPData object
 #' @rdname SNPData-class
 #' @export
@@ -281,6 +302,7 @@ setMethod(
             obj@chr_style <- x@chr_style
         }
         obj <- .propagate_zygosity_source(obj, x)
+        obj <- .propagate_library_info(obj, x)
         obj
     }
 )
@@ -408,6 +430,64 @@ setMethod("donor_info", signature(x = "SNPData"), function(x) {
 #' @export
 #' @rdname SNPData-class
 get_donor_info <- function(x) donor_info(x)
+
+#' @exportMethod library_info
+#' @rdname SNPData-class
+setGeneric("library_info", function(x) standardGeneric("library_info"))
+#' @exportMethod library_info
+#' @rdname SNPData-class
+setMethod("library_info", signature(x = "SNPData"), function(x) {
+    # Handle backwards compatibility with older SNPData objects
+    if (!methods::.hasSlot(x, "library_info")) {
+        return(.default_library_info(x@barcode_info))
+    }
+    x@library_info
+})
+
+#' @export
+#' @rdname SNPData-class
+get_library_info <- function(x) library_info(x)
+
+#' Record the BAM file(s) each library's reads came from
+#'
+#' Attaches BAM paths to an object's `library_info`, where
+#' `add_molecule_phase()` can find them without being told again. Paths are
+#' recorded per library rather than per donor because that is what they are a
+#' property of: one library's BAM holds all of its donors' cells.
+#'
+#' @param x A SNPData object, required.
+#' @param bam_files A named character vector or list, required,
+#'   `library_id = path(s)`. Each element may name several BAM files for one
+#'   library. Names must match `library_info(x)$library_id`.
+#' @param overwrite Logical (default `FALSE`). If `TRUE`, a named library's
+#'   stored paths are replaced; otherwise the new paths are unioned with any
+#'   already recorded, matching how `merge_snpdata()` combines them.
+#'
+#' @return The SNPData object with `library_info(x)$bam_files` updated.
+#'
+#' @family SNPData accessors
+#' @export
+add_library_bams <- function(x, bam_files, overwrite = FALSE) {
+    bam_files <- .as_library_bam_list(bam_files)
+    stored <- library_info(x)
+    unknown <- setdiff(names(bam_files), stored$library_id)
+    if (length(unknown) > 0) {
+        stop(
+            "bam_files names not found in library_info(x)$library_id: ",
+            paste(unknown, collapse = ", ")
+        )
+    }
+    for (lib in names(bam_files)) {
+        at <- match(lib, stored$library_id)
+        stored$bam_files[[at]] <- if (overwrite) {
+            unique(bam_files[[lib]])
+        } else {
+            union(stored$bam_files[[at]], bam_files[[lib]])
+        }
+    }
+    x@library_info <- stored
+    x
+}
 
 #' @exportMethod donor_snp_info
 #' @rdname SNPData-class
@@ -616,6 +696,7 @@ setReplaceMethod("barcode_info", signature(x = "SNPData", value = "data.frame"),
         }
     }
     x@barcode_info <- value
+    x <- .resync_library_info(x, value)
     x
 })
 
@@ -648,14 +729,15 @@ setReplaceMethod("snp_info", signature(x = "SNPData", value = "data.frame"), fun
 #' consistent. Every cell currently labelled with an old donor moves to its new label;
 #' individual cells cannot be reassigned between donors this way (\code{barcode_info<-}
 #' rejects any 'donor' column change once \code{donor_info} carries data, precisely to
-#' force donor-label changes through this single, atomic path).
+#' force donor-label changes through this single, all-or-nothing path).
 #'
-#' @param x A SNPData object
+#' @param x A SNPData object, required.
 #' @param donor_map A named character vector, \code{c(new_label = old_label, ...)},
-#'   following the same \code{new = old} convention as \code{dplyr::rename()}. Every value
-#'   must be an existing donor (see \code{donor_info(x)}); donors not mentioned keep
-#'   their current label. The resulting donor labels (renamed and unrenamed together) must
-#'   stay unique -- \code{rename_donor()} relabels, it does not merge donors.
+#'   required (following the same \code{new = old} convention as
+#'   \code{dplyr::rename()}). Every value must be an existing donor (see
+#'   \code{donor_info(x)}); donors not mentioned keep their current label.
+#'   The resulting donor labels (renamed and unrenamed together) must stay
+#'   unique: \code{rename_donor()} relabels, it does not merge donors.
 #'
 #' @return A SNPData object with the relabelled donors
 #' @export
@@ -711,7 +793,7 @@ rename_donor <- function(x, donor_map) {
 # Dimensions
 #' Get dimensions of a SNPData object
 #'
-#' @param x A SNPData object
+#' @param x A SNPData object, required.
 #' @return A numeric vector of length 2 giving the number of SNPs and samples
 #' @rdname SNPData-class
 #' @exportMethod dim

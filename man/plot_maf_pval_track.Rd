@@ -7,12 +7,13 @@
 plot_maf_pval_track(allele_counts_df, facet, x_range)
 }
 \arguments{
-\item{allele_counts_df}{A data frame containing SNP information with columns 'pos' (position),
-'adj_p_val' (adjusted p-value), and a column for faceting}
+\item{allele_counts_df}{A data.frame, required, with columns \code{pos}
+(position), \code{adj_p_val} (adjusted p-value), and a column for
+faceting. SNP information.}
 
-\item{facet}{A variable to use for faceting the plot, supplied as a bare column name}
+\item{facet}{Required. Bare column name to use for faceting the plot.}
 
-\item{x_range}{A numeric vector of length 2 specifying the genomic range limits to display}
+\item{x_range}{Numeric vector of length 2, required. Genomic range limits to display.}
 }
 \value{
 A ggplot object showing -log10(adjusted p-value) across the genomic region

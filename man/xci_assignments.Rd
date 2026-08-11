@@ -10,9 +10,8 @@ xci_assignments(x)
 \S4method{xci_assignments}{SNPData}(x)
 }
 \arguments{
-\item{x}{A SNPData object that had XCI diagnostics stored by
-\code{\link{assign_xci}} or
-\code{\link{assign_xci_by_clonotype}}.}
+\item{x}{A SNPData object, required, that had XCI diagnostics stored by
+\code{\link{assign_xci}} or \code{\link{assign_xci_by_clonotype}}.}
 }
 \value{
 A tibble with one row per cell and columns \code{cell_id}
@@ -27,6 +26,44 @@ out of a SNPData object's barcode metadata. Requires that
 \code{\link{assign_xci}} or \code{\link{assign_xci_by_clonotype}}
 has been run first; errors otherwise.
 }
+\section{Phase is inferred from expression, not genotyped}{
+
+snplet infers phase from scRNA-seq allelic counts alone: no DNA-based
+haplotype is ever observed, and that limitation propagates into every
+downstream result.
+
+\code{"X1"} and \code{"X2"} name two expression-defined haplotype
+clusters, not identified physical chromosomes: exchangeable labels, fixed
+only by the convention that X1 is the larger active-X group, and not
+comparable across donors. \code{allele_on_x1} records which allele the
+model assigned to the X1 cluster in one donor; it is not a genotyped
+haplotype.
+
+The active allele is \emph{defined} as the majority-expressed one: the
+EM's phase step orients each gene so the silenced allele is the minority,
+which bounds the per-gene escape fraction below 0.5. Three consequences
+follow:
+\itemize{
+  \item Escape above 0.5 cannot be represented; the measurable range runs
+    from 0 (strict inactivation) to 0.5 (complete escape), and 0.5 is the
+    maximum, not the midpoint.
+  \item A gene transcribed mainly from the inactive X is stored with
+    inverted phase and surfaces as unusually \emph{clean} inactivation
+    rather than as an escapee. \code{XIST} is the textbook case.
+  \item "active"/"inactive" are majority/minority labels, coinciding with
+    the true active and inactive X only where canonical inactivation
+    holds (precisely what an escape analysis is questioning).
+}
+
+Separating these cases needs phase independent of expression (DNA-based
+genotyping, or trio/population phasing), which this package does not
+have. \code{\link{add_molecule_phase}} supplies true physical linkage
+between SNPs co-observed on one molecule, but a molecule is a single
+transcript: it cannot link across genes, and its blocks are still
+oriented to X1/X2 using the expression-derived fit, so it refines phase
+within a gene without escaping this constraint.
+}
+
 \seealso{
 Other X-chromosome inactivation functions:
 \code{\link[=add_molecule_phase]{add_molecule_phase()}},

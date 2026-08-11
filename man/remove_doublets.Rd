@@ -7,9 +7,10 @@
 remove_doublets(x, drop_na = TRUE)
 }
 \arguments{
-\item{x}{A SNPData object}
+\item{x}{A SNPData object, required.}
 
-\item{drop_na}{Logical, whether to also remove cells with NA donor assignments (default TRUE)}
+\item{drop_na}{Logical (default \code{TRUE}). Whether to also remove
+cells with NA donor assignments.}
 }
 \value{
 A filtered SNPData object with doublets removed

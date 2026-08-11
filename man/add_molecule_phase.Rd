@@ -6,7 +6,7 @@
 \usage{
 add_molecule_phase(
   x,
-  bam_files,
+  bam_files = NULL,
   target_chrom = "chrX",
   min_mapq = 20L,
   min_baseq = 10L,
@@ -16,21 +16,37 @@ add_molecule_phase(
 )
 }
 \arguments{
-\item{x}{A SNPData object that has already been fit by `assign_xci()` or
-`assign_xci_by_clonotype()` (see `.has_xci_diagnostics()`), with a
-`donor` column in `barcode_info`.}
+\item{x}{A SNPData object, required, that has already been fit by
+`assign_xci()` or `assign_xci_by_clonotype()` (see
+`.has_xci_diagnostics()`), with a `donor` column in `barcode_info`. Each
+donor's cells must all carry the same `library_id`, since a donor's BAM
+files are looked up by its library; a donor spanning two libraries is an
+error. `library_id` may instead be unset for every cell, in which case the
+object is treated as a single library, but a mix of labelled and
+unlabelled cells is an error.}
 
-\item{bam_files}{A named character vector or list, `donor = path`, one
-indexed BAM per donor. Names must match `barcode_info(x)$donor`. Any
-entry named `"doublet"` or `"unassigned"` is dropped with a warning --
-neither is a real donor with its own genotype to phase against.}
+\item{bam_files}{A named character vector or list, optional (default
+`NULL`, taking the paths recorded in `library_info(x)$bam_files` by
+`import_cellsnp()` or `add_library_bams()`, and erroring if none were),
+`library_id = path(s)`, giving the indexed BAM file or files holding that
+library's reads. Names must match `barcode_info(x)$library_id`, or, for an
+object with no library labels at all, be a single entry of any name.
+Several files under one library are pooled per molecule, so a molecule
+split across them votes once with all of its reads; listing the same file
+twice is an error, as it would double every count it contributes.
+Libraries whose donors are all `"doublet"` or `"unassigned"` contribute
+nothing, since neither is a real donor with its own genotype to phase
+against.}
 
-\item{target_chrom}{Canonical chromosome to restrict het-SNP selection to.
-Default `"chrX"`, matching `assign_xci()`'s own restriction.}
+\item{target_chrom}{Character scalar (default `"chrX"`, matching
+`assign_xci()`'s own restriction). Canonical chromosome to restrict
+het-SNP selection to.}
 
-\item{min_mapq, min_baseq, threads}{Passed to `extract_snp_calls()`.}
+\item{min_mapq, min_baseq, threads}{Integer (defaults 20, 10, 4). Passed to
+`extract_snp_calls()`.}
 
-\item{min_molecules, min_consistency}{Passed to `phase_snps()`.}
+\item{min_molecules, min_consistency}{Integer/numeric (defaults 5, 0.9).
+Passed to `phase_snps()`.}
 }
 \value{
 A SNPData object with `donor_snp_info` gaining the columns
@@ -42,15 +58,19 @@ A SNPData object with `donor_snp_info` gaining the columns
   else `NA` where `phase_conflict` is `TRUE`. Also carries a
   `"molecule_calls"` attribute (a tibble with columns `donor`, `barcode`,
   `umi`, `snp_id`, `allele`, `transcript_strand` (`"+"`/`"-"`/`NA`, the
-  molecule's inferred transcript strand -- see
-  `.infer_bam_strand_orientation()` and `molecule_read_strand()` -- used by
+  molecule's inferred transcript strand, see
+  `.infer_bam_strand_orientation()` and `molecule_read_strand()`, used by
   `haplotype_expression_by_molecule()` to resolve SNPs `assign_snp_genes()`
   flagged `ambiguous`), the per-donor `molecule_snp_alleles()` output
   already computed here) so `haplotype_expression_by_molecule()` does not
-  need to re-extract from the BAM.
+  need to re-extract from the BAM. A second attribute, `"bam_calibration"`,
+  records one row per BAM file scanned with columns `bam_file`,
+  `orientation` (`"sense"`/`"antisense"`/`NA` where it could not be
+  inferred), `n_ts_reads`, `concordance`, and `n_scanned`, so the strand
+  call applied to each file's molecules can be inspected after the fact.
 }
 \description{
-Extracts molecule-level allele calls from one BAM per donor, phases them
+Extracts molecule-level allele calls from each library's BAM files, phases them
 with `phase_snps()`, orients the resulting blocks to X1/X2 against
 `assign_xci()`'s already-stored EM phase (see `.orient_phase_blocks()`),
 and writes the result into `donor_snp_info`. Additive only:
@@ -58,6 +78,44 @@ and writes the result into `donor_snp_info`. Additive only:
 `haplotype_expression()` is unaffected unless it is told to read the new
 columns.
 }
+\section{Phase is inferred from expression, not genotyped}{
+
+snplet infers phase from scRNA-seq allelic counts alone: no DNA-based
+haplotype is ever observed, and that limitation propagates into every
+downstream result.
+
+\code{"X1"} and \code{"X2"} name two expression-defined haplotype
+clusters, not identified physical chromosomes: exchangeable labels, fixed
+only by the convention that X1 is the larger active-X group, and not
+comparable across donors. \code{allele_on_x1} records which allele the
+model assigned to the X1 cluster in one donor; it is not a genotyped
+haplotype.
+
+The active allele is \emph{defined} as the majority-expressed one: the
+EM's phase step orients each gene so the silenced allele is the minority,
+which bounds the per-gene escape fraction below 0.5. Three consequences
+follow:
+\itemize{
+  \item Escape above 0.5 cannot be represented; the measurable range runs
+    from 0 (strict inactivation) to 0.5 (complete escape), and 0.5 is the
+    maximum, not the midpoint.
+  \item A gene transcribed mainly from the inactive X is stored with
+    inverted phase and surfaces as unusually \emph{clean} inactivation
+    rather than as an escapee. \code{XIST} is the textbook case.
+  \item "active"/"inactive" are majority/minority labels, coinciding with
+    the true active and inactive X only where canonical inactivation
+    holds (precisely what an escape analysis is questioning).
+}
+
+Separating these cases needs phase independent of expression (DNA-based
+genotyping, or trio/population phasing), which this package does not
+have. \code{\link{add_molecule_phase}} supplies true physical linkage
+between SNPs co-observed on one molecule, but a molecule is a single
+transcript: it cannot link across genes, and its blocks are still
+oriented to X1/X2 using the expression-derived fit, so it refines phase
+within a gene without escaping this constraint.
+}
+
 \seealso{
 Other molecule-level allele counting functions:
 \code{\link[=assign_snp_genes]{assign_snp_genes()}},

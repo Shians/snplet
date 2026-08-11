@@ -22,21 +22,23 @@ add_donor_snp_metadata(
 )
 }
 \arguments{
-\item{x}{A SNPData object}
+\item{x}{A SNPData object, required.}
 
-\item{metadata}{A data.frame containing new columns (and, for \code{add_donor_snp_metadata},
-possibly new rows) to add}
+\item{metadata}{A data.frame, required, with new columns (and, for
+\code{add_donor_snp_metadata}, possibly new rows) to add.}
 
-\item{join_by}{Character vector specifying the column(s) to join by.
-For \code{barcode_info}: \code{"cell_id"} or \code{"barcode"}. For \code{snp_info}:
-\code{"snp_id"}. For \code{donor_info}: \code{"donor"}. For \code{donor_snp_info}:
-\code{c("snp_id", "donor")}.}
+\item{join_by}{Character vector; default varies by function. Column(s) to
+join by: \code{"cell_id"} (default) or \code{"barcode"} for
+\code{add_barcode_metadata}; \code{"snp_id"} (default) for
+\code{add_snp_metadata}; \code{"donor"} (default) for
+\code{add_donor_metadata}; \code{c("snp_id", "donor", "zygosity_source")}
+(default) for \code{add_donor_snp_metadata}.}
 
-\item{overwrite}{Logical, whether to overwrite existing columns (default \code{FALSE},
-except for \code{add_donor_snp_metadata} where it defaults to \code{TRUE} since
-\code{donor_snp_info}'s columns are fixed by its schema from construction, so treating
-them as pre-existing and requiring \code{overwrite=FALSE} would reject on every call).
-Set to \code{TRUE} to update existing columns.}
+\item{overwrite}{Logical (default \code{FALSE}, except \code{TRUE} for
+\code{add_donor_snp_metadata}, since \code{donor_snp_info}'s columns are
+fixed by its schema from construction, so treating them as pre-existing
+and requiring \code{overwrite = FALSE} would reject on every call).
+Whether to overwrite existing columns.}
 }
 \value{
 A SNPData object with the updated table

@@ -7,10 +7,10 @@
 add_snp_gene_names(snp_df, gene_anno)
 }
 \arguments{
-\item{snp_df}{Data frame with columns \code{chrom} and \code{pos}.}
+\item{snp_df}{A data.frame, required, with columns \code{chrom} and \code{pos}.}
 
-\item{gene_anno}{Data frame with columns \code{chrom}, \code{start},
-\code{end}, and \code{gene_name}.}
+\item{gene_anno}{A data.frame, required, with columns \code{chrom},
+\code{start}, \code{end}, and \code{gene_name}.}
 }
 \value{
 A data frame matching \code{snp_df} with an added \code{gene_name} column.

@@ -7,9 +7,10 @@
 remove_na_clonotypes(x, clonotype_col = "clonotype")
 }
 \arguments{
-\item{x}{A SNPData object}
+\item{x}{A SNPData object, required.}
 
-\item{clonotype_col}{The column name in barcode_info containing clonotype values (default: "clonotype")}
+\item{clonotype_col}{Character scalar (default \code{"clonotype"}).
+Column name in \code{barcode_info} containing clonotype values.}
 }
 \value{
 A filtered SNPData object with NA clonotype barcodes removed

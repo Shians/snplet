@@ -3,9 +3,9 @@
 #' This function creates a gene annotation track visualization showing gene positions and names
 #' for a genomic region of interest.
 #'
-#' @param gene_anno A data frame containing gene annotation information with columns 'pos' (position)
-#'        and 'gene_name'
-#' @param x_range A numeric vector of length 2 specifying the genomic range limits to display
+#' @param gene_anno A data.frame, required, with columns \code{pos}
+#'   (position) and \code{gene_name}. Gene annotation information.
+#' @param x_range Numeric vector of length 2, required. Genomic range limits to display.
 #' @return A ggplot object representing the gene annotation track
 #' @family genomic track plotting functions
 #' @export
@@ -41,10 +41,11 @@ plot_gene_anno_track <- function(gene_anno, x_range) {
 #' This function creates a visualization of minor allele frequencies (MAF) across
 #' a genomic region, with optional faceting by a grouping variable.
 #'
-#' @param allele_count_df A data frame containing SNP information with columns 'pos' (position),
-#'        'maf' (minor allele frequency), and 'donor_id' for faceting
-#' @param facet A variable to use for faceting the plot
-#' @param x_range A numeric vector of length 2 specifying the genomic range limits to display
+#' @param allele_count_df A data.frame, required, with columns \code{pos}
+#'   (position), \code{maf} (minor allele frequency), and \code{donor_id} for
+#'   faceting. SNP information.
+#' @param facet Required. Variable to use for faceting the plot.
+#' @param x_range Numeric vector of length 2, required. Genomic range limits to display.
 #' @return A ggplot object showing MAF values across the genomic region
 #' @family genomic track plotting functions
 #' @export
@@ -90,10 +91,11 @@ plot_maf_track <- function(allele_count_df, facet, x_range) {
 #' This function creates a Manhattan-style plot showing the significance (-log10 p-value)
 #' of minor allele frequency differences across a genomic region.
 #'
-#' @param allele_counts_df A data frame containing SNP information with columns 'pos' (position),
-#'        'adj_p_val' (adjusted p-value), and a column for faceting
-#' @param facet A variable to use for faceting the plot, supplied as a bare column name
-#' @param x_range A numeric vector of length 2 specifying the genomic range limits to display
+#' @param allele_counts_df A data.frame, required, with columns \code{pos}
+#'   (position), \code{adj_p_val} (adjusted p-value), and a column for
+#'   faceting. SNP information.
+#' @param facet Required. Bare column name to use for faceting the plot.
+#' @param x_range Numeric vector of length 2, required. Genomic range limits to display.
 #' @return A ggplot object showing -log10(adjusted p-value) across the genomic region
 #' @family genomic track plotting functions
 #' @export

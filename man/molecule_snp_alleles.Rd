@@ -7,8 +7,9 @@
 molecule_snp_alleles(tallies)
 }
 \arguments{
-\item{tallies}{A tibble as returned by `extract_snp_calls()$tallies`, with
-columns `barcode`, `umi`, `snp_id`, `allele`, and `n_calls`.}
+\item{tallies}{A tibble, required, as returned by
+`extract_snp_calls()$tallies`, with columns `barcode`, `umi`, `snp_id`,
+`allele`, and `n_calls`.}
 }
 \value{
 A tibble with one row per (`barcode`, `umi`, `snp_id`) and columns

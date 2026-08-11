@@ -23,8 +23,8 @@ per-cell \code{rho}. Restricts to genes that passed
 \code{.filter_uninformative_genes()} (the trusted, genuinely
 non-escaping population, same population \code{xci_median_pi_g} summarises)
 and fits a single scalar \code{rho} per donor via exact beta-binomial MLE
-against that donor's \code{xci_median_pi_g} as a fixed null probability --
-i.e. how much do these genes' pooled inactive-read fractions actually vary
+against that donor's \code{xci_median_pi_g} as a fixed null probability:
+how much do these genes' pooled inactive-read fractions actually vary
 around the shared background rate, beyond binomial sampling.
 }
 \keyword{internal}

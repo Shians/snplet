@@ -3,9 +3,9 @@
 #' Takes SNP coordinates and gene annotations, then adds a gene_name column
 #' to each SNP with all overlapping genes collapsed by ", ".
 #'
-#' @param snp_df Data frame with columns \code{chrom} and \code{pos}.
-#' @param gene_anno Data frame with columns \code{chrom}, \code{start},
-#'   \code{end}, and \code{gene_name}.
+#' @param snp_df A data.frame, required, with columns \code{chrom} and \code{pos}.
+#' @param gene_anno A data.frame, required, with columns \code{chrom},
+#'   \code{start}, \code{end}, and \code{gene_name}.
 #'
 #' @return A data frame matching \code{snp_df} with an added \code{gene_name} column.
 #'

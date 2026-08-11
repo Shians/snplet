@@ -16,34 +16,35 @@ extract_snp_calls(
 )
 }
 \arguments{
-\item{bam_file}{Path to an indexed BAM with `CB` and `UB` tags.}
+\item{bam_file}{Character scalar, required. Path to an indexed BAM with
+`CB` and `UB` tags.}
 
-\item{snp_info}{A data.frame/tibble with one row per target SNP and columns
-`snp_id`, `chrom`, `pos`, `ref` (reference allele), and `alt` (alternate
-allele). Restrict to biallelic SNVs before calling -- there is no
-unambiguous REF/ALT base to compare an aligned base against for a
+\item{snp_info}{A data.frame/tibble, required, with one row per target SNP
+and columns `snp_id`, `chrom`, `pos`, `ref` (reference allele), and `alt`
+(alternate allele). Restrict to biallelic SNVs before calling: there is
+no unambiguous REF/ALT base to compare an aligned base against for a
 multi-allelic site or an indel.}
 
-\item{barcodes}{Character vector of cell barcodes to retain, or `NULL`
-(default) to keep every barcode carrying a `CB` and `UB` tag. Typically
+\item{barcodes}{Character vector, optional (default `NULL`, keeping every
+barcode carrying a `CB` and `UB` tag). Cell barcodes to retain; typically
 the barcodes of one donor, since a pooled sample dilutes the allele
 fraction of any site heterozygous in only some donors.}
 
-\item{min_mapq}{Minimum mapping quality. Default 20.}
+\item{min_mapq}{Integer (default 20). Minimum mapping quality.}
 
-\item{min_baseq}{Minimum base quality at the SNP position. Default 10.}
+\item{min_baseq}{Integer (default 10). Minimum base quality at the SNP position.}
 
-\item{chunk_size}{Alignments processed per chunk, to bound memory when
-expression is uneven across the region. Default 20000.}
+\item{chunk_size}{Integer (default 20000). Alignments processed per chunk,
+to bound memory when expression is uneven across the region.}
 
-\item{merge_gap}{Alignments are fetched over SNP positions merged into
-windows within this many bases of each other, rather than over each SNP
-individually -- a `which` with many ranges would otherwise return a read
-once per overlapping range, duplicating any read spanning several
-nearby SNPs. Default 10000.}
+\item{merge_gap}{Integer (default 10000). Alignments are fetched over SNP
+positions merged into windows within this many bases of each other,
+rather than over each SNP individually, since a `which` with many ranges
+would otherwise return a read once per overlapping range, duplicating
+any read spanning several nearby SNPs.}
 
-\item{threads}{Threads for the `samtools` pre-filter (see `prefilter_bam`
-below); gains plateau at 4. Default 4.}
+\item{threads}{Integer (default 4). Threads for the `samtools` pre-filter
+(see `prefilter_bam` below); gains plateau at 4.}
 }
 \value{
 A list of two tibbles:
@@ -51,7 +52,7 @@ A list of two tibbles:
     \item{tallies}{One row per (`barcode`, `umi`, `snp_id`, `allele`)
       combination, with `n_calls` the number of reads of that molecule
       agreeing on that allele ("REF", "ALT", or "OTH") at that SNP.}
-    \item{reads}{One row per (`barcode`, `umi`, `qname`) -- the distinct
+    \item{reads}{One row per (`barcode`, `umi`, `qname`), the distinct
       reads behind each molecule, with each read's alignment `strand`
       (`"+"`/`"-"`), for `molecule_read_strand()` to resolve into a single
       strand per molecule.}
@@ -60,14 +61,14 @@ A list of two tibbles:
 \description{
 Reads the region(s) spanned by `snp` from an indexed BAM and, for every
 alignment overlapping a target position, records the base and quality
-called there together with the read's identity -- the information needed
+called there together with the read's identity, the information needed
 to later group calls into molecules and phase blocks. Equivalent in
 principle to `GenomicAlignments::pileLettersAt()`, but retains the read of
 origin, which that function discards.
 }
 \details{
 A SNP falling in a deletion or an intron of a given read simply yields no
-row for that read -- a genuine no-call rather than a coerced base. Only
+row for that read: a genuine no-call rather than a coerced base. Only
 `M`/`=`/`X` CIGAR operations are treated as aligned to the reference.
 }
 \seealso{

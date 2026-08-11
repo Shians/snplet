@@ -240,14 +240,16 @@
 #' Both M-steps weight each observation by its cell's posterior. A cell present
 #' in \code{dat} but absent from \code{post} has none, and no numeric stand-in is
 #' safe: any default asserts a \emph{confident} call (0 reads as "certainly
-#' X2-active"), silently biasing phase and escape for genes covered only in that
-#' cell — and flipping meaning if the posterior's orientation ever changes.
-#' Missing cells therefore surface as \code{NA} and are rejected here.
+#' X2-active"), biasing phase and escape without warning for genes covered
+#' only in that cell, and flipping meaning if the posterior's orientation
+#' ever changes. Missing cells therefore surface as \code{NA} and are
+#' rejected here.
 #'
-#' Both current callers guarantee coverage: \code{.e_step} derives
-#' \code{post} from \code{dat}, and \code{.rephase_all_genes} filters \code{dat}
-#' to the scored cells (it runs over all genes, so cells covered only at
-#' outlier-dropped genes are genuinely unscored). Reaching this is a caller bug.
+#' Both functions that currently call this guarantee coverage: \code{.e_step}
+#' derives \code{post} from \code{dat}, and \code{.rephase_all_genes} filters
+#' \code{dat} to the scored cells (it runs over all genes, so cells covered
+#' only at outlier-dropped genes are genuinely unscored). Reaching this point
+#' means one of them has a bug.
 #'
 #' @keywords internal
 .check_post_covers_dat <- function(post_by_obs) {

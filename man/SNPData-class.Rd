@@ -23,6 +23,9 @@
 \alias{donor_info}
 \alias{donor_info,SNPData-method}
 \alias{get_donor_info}
+\alias{library_info}
+\alias{library_info,SNPData-method}
+\alias{get_library_info}
 \alias{donor_snp_info}
 \alias{donor_snp_info,SNPData-method}
 \alias{get_donor_snp_info}
@@ -105,6 +108,12 @@ donor_info(x)
 
 get_donor_info(x)
 
+library_info(x)
+
+\S4method{library_info}{SNPData}(x)
+
+get_library_info(x)
+
 donor_snp_info(x, source = NULL)
 
 \S4method{donor_snp_info}{SNPData}(x, source = NULL)
@@ -150,55 +159,59 @@ coverage(x)
 \S4method{coverage}{SNPData}(x)
 }
 \arguments{
-\item{x}{A SNPData object}
+\item{x}{A SNPData object, required.}
 
-\item{i}{Numeric or logical vector for subsetting SNPs (rows)}
+\item{i}{Numeric or logical vector, optional. Subsets SNPs (rows).}
 
-\item{j}{Numeric or logical vector for subsetting samples (columns)}
+\item{j}{Numeric or logical vector, optional. Subsets samples (columns).}
 
-\item{ref_count}{A sparse Matrix containing reference allele counts (SNPs x cells)}
+\item{ref_count}{A sparse Matrix (SNPs x cells), required. Reference allele counts.}
 
-\item{alt_count}{A sparse Matrix containing alternate allele counts (SNPs x cells)}
+\item{alt_count}{A sparse Matrix (SNPs x cells), required. Alternate allele counts.}
 
-\item{snp_info}{A data.frame containing SNP metadata}
+\item{snp_info}{A data.frame, required. SNP metadata.}
 
-\item{barcode_info}{A data.frame containing cell/barcode metadata}
+\item{barcode_info}{A data.frame, required. Cell/barcode metadata.}
 
-\item{oth_count}{A sparse Matrix containing other allele counts (SNPs x cells), optional}
+\item{oth_count}{A sparse Matrix (SNPs x cells), optional (default \code{NULL}).
+Other allele counts.}
 
-\item{donor_info}{A data.frame with one row per donor, optional. Defaults to one row per
-distinct value of \code{barcode_info$donor} (empty if \code{barcode_info} has no
-\code{donor} column). Must contain a \code{donor} column; \code{n_cells} is computed
-automatically.}
+\item{donor_info}{A data.frame, optional (default: one row per distinct
+value of \code{barcode_info$donor}, empty if \code{barcode_info} has no
+\code{donor} column). One row per donor; must contain a \code{donor}
+column, and \code{n_cells} is computed automatically.}
 
-\item{donor_snp_info}{A data.frame with one row per (\code{snp_id}, \code{donor},
-\code{zygosity_source}) triple, optional -- a pair may carry more than one row when
-more than one source has called it (e.g. a \code{"vireo_gt"} row and a
-\code{"binomial"} row for the same pair). Defaults to an empty table. Must contain
-\code{snp_id} and \code{donor} columns, both of which must already appear in
-\code{snp_info}/\code{donor_info}; a row with a non-\code{NA} \code{zygosity} must
-also carry a non-\code{NA} \code{zygosity_source}.}
+\item{donor_snp_info}{A data.frame, optional (default: an empty table).
+One row per SNP measured in a donor by a particular zygosity-calling
+source (keyed on \code{snp_id}, \code{donor}, \code{zygosity_source}). A
+given (\code{snp_id}, \code{donor}) pair may have more than one row when
+more than one source called it (e.g. a \code{"vireo_gt"} row and a
+\code{"binomial"} row). \code{snp_id} and \code{donor} must already
+appear in \code{snp_info}/\code{donor_info}, and a non-\code{NA}
+\code{zygosity} must carry a non-\code{NA} \code{zygosity_source}.}
 
-\item{donor_map}{A named character vector, \code{c(new_label = old_label, ...)} (the same
-\code{new = old} convention as \code{dplyr::rename()}), optional. Applied to
-\code{barcode_info$donor} and, if supplied, \code{donor_info$donor}/
-\code{donor_snp_info$donor} before the object is built -- useful since Vireo assigns
-arbitrary labels (\code{donor0}, \code{donor1}, ...) that this can relabel at import
-time rather than after the fact via \code{\link{rename_donor}}.}
+\item{donor_map}{A named character vector, \code{c(new_label = old_label, ...)}
+(the same \code{new = old} convention as \code{dplyr::rename()}), optional
+(default \code{NULL}). Applied to \code{barcode_info$donor} and, if
+supplied, \code{donor_info$donor}/\code{donor_snp_info$donor} before the
+object is built, useful since Vireo assigns arbitrary labels
+(\code{donor0}, \code{donor1}, ...) that this can relabel at import time
+rather than after the fact via \code{\link{rename_donor}}.}
 
-\item{source}{Character vector of \code{zygosity_source} value(s) to filter
-\code{donor_snp_info(x)} to, or \code{"all"} to return every source unfiltered.
-Defaults to \code{NULL}, meaning the object's active source (see
-\code{\link{zygosity_source}}).}
+\item{source}{Character vector, optional (default \code{NULL}, meaning
+the object's active source; see \code{\link{zygosity_source}}).
+\code{zygosity_source} value(s) to filter \code{donor_snp_info(x)} to,
+or \code{"all"} to return every source unfiltered.}
 
-\item{value}{A data.frame for replacement methods (barcode_info<- or snp_info<-)}
+\item{value}{A data.frame, required. Replacement value for
+\code{barcode_info<-} or \code{snp_info<-}.}
 
-\item{object}{A SNPData object for show method}
+\item{object}{A SNPData object, required. Passed to the show method.}
 
-\item{...}{Additional arguments (unused; required by the \code{updateObject} generic)}
+\item{...}{Unused; required by the \code{updateObject} generic.}
 
-\item{verbose}{Logical, whether \code{updateObject} logs which legacy slots it migrated
-(default \code{FALSE})}
+\item{verbose}{Logical (default \code{FALSE}). Whether \code{updateObject}
+logs which legacy slots it migrated.}
 }
 \value{
 A subsetted SNPData object
@@ -221,7 +234,12 @@ cell/barcode metadata to support allele-specific expression analysis workflows.
 
 \item{\code{snp_info}}{A data.frame containing SNP metadata with automatically computed coverage and non_zero_samples columns}
 
-\item{\code{barcode_info}}{A data.frame containing cell/barcode metadata with automatically computed library_size and non_zero_snps columns}
+\item{\code{barcode_info}}{A data.frame containing cell/barcode metadata with automatically
+computed library_size and non_zero_snps columns, and an automatically added
+\code{library_id} column (\code{NA} unless supplied) naming the sequencing library
+each cell came from. Because 10x barcodes are only unique within a library, a
+merged object may carry the same \code{barcode} on more than one cell; only
+\code{cell_id} is guaranteed unique.}
 
 \item{\code{chr_style}}{Character string indicating the chromosome naming style. One of: "numeric", "ucsc", "refseq_mouse", "genbank_mouse", "refseq_human", "genbank_human", or "unknown"}
 
@@ -229,17 +247,27 @@ cell/barcode metadata to support allele-specific expression analysis workflows.
 \code{n_cells} column. Rows are dropped when a donor loses all of its cells, via
 subsetting or \code{merge_snpdata()}.}
 
-\item{\code{donor_snp_info}}{A tibble with one row per (\code{snp_id}, \code{donor},
-\code{zygosity_source}) triple, carrying zygosity calls (\code{zygosity},
-\code{zygosity_source} and per-source confidence columns) and XCI fit diagnostics
+\item{\code{donor_snp_info}}{A tibble with one row per SNP measured in a donor by
+a particular zygosity-calling source (keyed on \code{snp_id},
+\code{donor}, \code{zygosity_source}), carrying zygosity calls
+(\code{zygosity}, \code{zygosity_source}, per-source confidence) and XCI fit diagnostics
 (\code{xci_informative}, \code{allele_on_x1}, \code{xci_escape_fraction}) written by
-\code{\link{assign_xci}} for whichever source was active when it ran. Rows are dropped
-along with their donor, same as \code{donor_info}.}
+\code{\link{assign_xci}} for whichever source was active when it ran; rows are
+dropped along with their donor, same as \code{donor_info}.}
+
+\item{\code{library_info}}{A tibble with one row per sequencing library present in
+\code{barcode_info$library_id}, with an automatically computed
+\code{n_cells} column and a \code{bam_files} list-column holding the BAM
+path(s) that library's reads came from (empty unless recorded with
+\code{import_cellsnp(..., bam_files = )} or \code{\link{add_library_bams}}).
+Never supplied at construction: which libraries an object holds is derived
+from its cells. A library that loses all of its cells loses its row, and
+its recorded paths with it.}
 
 \item{\code{zygosity_source}}{Character string naming the \emph{active} zygosity-call source
 (a value of \code{donor_snp_info$zygosity_source}), or \code{NA_character_} if none
-has been established yet. \code{\link{donor_snp_info}}, \code{\link{assign_xci}}, and
-other zygosity-dependent functions default to this source; switch it with
+is established yet. \code{\link{donor_snp_info}}, \code{\link{assign_xci}}, and other
+zygosity-dependent functions default to this source; switch it with
 \code{zygosity_source<-()}. Set automatically at import (e.g. \code{"vireo_gt"} after
 importing Vireo genotypes) or by \code{\link{infer_zygosity}}.}
 }}

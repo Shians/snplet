@@ -7,10 +7,11 @@
 assign_snp_genes(snp_info, gene_anno)
 }
 \arguments{
-\item{snp_info}{A data.frame/tibble with columns `snp_id`, `chrom`, `pos`.}
+\item{snp_info}{A data.frame/tibble, required, with columns `snp_id`,
+`chrom`, `pos`.}
 
-\item{gene_anno}{A data.frame/tibble with columns `chrom`, `start`, `end`,
-`gene_name`, `strand` (`"+"`/`"-"`), one row per gene body.}
+\item{gene_anno}{A data.frame/tibble, required, with columns `chrom`,
+`start`, `end`, `gene_name`, `strand` (`"+"`/`"-"`), one row per gene body.}
 }
 \value{
 A tibble with columns `snp_id`, `gene_name`, `gene_strand`, and

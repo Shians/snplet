@@ -7,7 +7,7 @@
 read_vcf(file)
 }
 \arguments{
-\item{file}{Path to VCF file (can be gzipped)}
+\item{file}{Character scalar, required. Path to a VCF file (can be gzipped).}
 }
 \value{
 A VCFData object containing header, samples, and variant data

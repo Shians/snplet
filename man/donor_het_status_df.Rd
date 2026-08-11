@@ -20,13 +20,18 @@ donor_het_status_df(
 )
 }
 \arguments{
-\item{x}{A SNPData object}
+\item{x}{A SNPData object, required.}
 
-\item{min_total_count}{Minimum total read depth (ref + alt) required per donor to test for heterozygosity (default: 10)}
+\item{min_total_count}{Numeric (default 10). Minimum total read depth
+(ref + alt) required per donor to test for heterozygosity.}
 
-\item{p_value_threshold}{P-value threshold for binomial test (default: 0.05). P-values are multiple-testing corrected and SNPs with p < threshold reject monoallelic expression.}
+\item{p_value_threshold}{Numeric, in \code{[0, 1]} (default 0.05).
+P-value threshold for the binomial test; p-values are multiple-testing
+corrected, and SNPs with p < threshold reject monoallelic expression.}
 
-\item{minor_allele_prop}{Minor allele proportion used as the null threshold for monoallelic expression testing (default: 0.1).}
+\item{minor_allele_prop}{Numeric, in \code{[0, 1]} (default 0.1). Minor
+allele proportion used as the null threshold for monoallelic expression
+testing.}
 }
 \value{
 A tibble with columns: snp_id, gene_name, chrom, pos, strand (if available in
@@ -41,10 +46,10 @@ Returns a long-format data frame with heterozygosity status per SNP and donor.
 A \code{(snp_id, donor)} pair with a zygosity call already stored in
 \code{donor_snp_info(x)} (e.g. from Vireo genotypes read at import, or from
 \code{\link{infer_zygosity}}) is returned as-is rather than recomputed, so the same
-pair's zygosity doesn't silently flip depending on which chromosomes happen to be
+pair's zygosity doesn't flip without warning depending on which chromosomes happen to be
 loaded alongside it. Pairs with no stored call fall back to the binomial test as
 before. Errors if \code{x} has no active zygosity source at all (see
-\code{\link{zygosity_source}}) -- call \code{\link{infer_zygosity}} first.
+\code{\link{zygosity_source}}); call \code{\link{infer_zygosity}} first.
 }
 \examples{
 \dontrun{

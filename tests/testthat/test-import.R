@@ -236,7 +236,7 @@ test_that("merge_cell_annotations handles mixed column naming scenarios", {
 })
 
 # Shared fixture paths and import call for the "works with example data" tests below
-import_example_snpdata <- function() {
+import_example_snpdata <- function(library_id = "lib1") {
     cellsnp_dir <- system.file("extdata/example_snpdata", package = "snplet")
     vdj_file <- system.file("extdata/example_snpdata/filtered_contig_annotations.csv", package = "snplet")
     gene_anno_file <- system.file("extdata/example_gene_anno.tsv", package = "snplet")
@@ -251,9 +251,40 @@ import_example_snpdata <- function() {
         cellsnp_dir = cellsnp_dir,
         gene_annotation = gene_annotation,
         vdj_file = vdj_file,
-        vireo_folder = vireo_folder
+        vireo_folder = vireo_folder,
+        library_id = library_id
     )
 }
+
+test_that("import_cellsnp() labels every cell with the supplied library_id", {
+    snp_data <- import_example_snpdata(library_id = "lib_A")
+
+    # Verify one cellSNP run yields one library label across all its cells
+    expect_equal(unique(barcode_info(snp_data)$library_id), "lib_A")
+})
+
+test_that("import_cellsnp() errors when library_id is not supplied", {
+    cellsnp_dir <- system.file("extdata/example_snpdata", package = "snplet")
+    gene_annotation <- data.frame(chrom = "chr1", start = 1, end = 1e9, gene_name = "dummy")
+
+    # Verify the label is demanded up front rather than defaulted, since it
+    # cannot be recovered from the counts once the object exists
+    expect_error(
+        import_cellsnp(cellsnp_dir, gene_annotation),
+        "library_id is required"
+    )
+})
+
+test_that("import_cellsnp() rejects a library_id that is not a single string", {
+    cellsnp_dir <- system.file("extdata/example_snpdata", package = "snplet")
+    gene_annotation <- data.frame(chrom = "chr1", start = 1, end = 1e9, gene_name = "dummy")
+
+    # Check that a vector of labels is refused, since one run is one library
+    expect_error(
+        import_cellsnp(cellsnp_dir, gene_annotation, library_id = c("lib_A", "lib_B")),
+        "single non-NA string"
+    )
+})
 
 test_that("import_cellsnp completes without error and returns a populated SNPData object", {
     # Verify import completes without error
@@ -315,7 +346,8 @@ test_that("import_cellsnp validates gene_annotation input", {
         import_cellsnp(
             cellsnp_dir = "dummy",
             gene_annotation = invalid_gene_anno,
-            vdj_file = "dummy"
+            vdj_file = "dummy",
+            library_id = "lib1"
         ),
         "gene_annotation is missing required columns"
     )
@@ -374,7 +406,8 @@ import_snpdata_without_vdj <- function() {
     import_cellsnp(
         cellsnp_dir = cellsnp_dir,
         gene_annotation = gene_annotation,
-        vireo_folder = vireo_folder
+        vireo_folder = vireo_folder,
+        library_id = "lib1",
     )
 }
 
@@ -423,7 +456,8 @@ import_snpdata_without_vdj_or_vireo <- function() {
 
     import_cellsnp(
         cellsnp_dir = cellsnp_dir,
-        gene_annotation = gene_annotation
+        gene_annotation = gene_annotation,
+        library_id = "lib1",
     )
 }
 
@@ -468,7 +502,8 @@ test_that("import_cellsnp(vireo_folder=) reads donor assignments when the folder
     snp_data <- import_cellsnp(
         cellsnp_dir = cellsnp_dir,
         gene_annotation = gene_annotation,
-        vireo_folder = vireo_folder
+        vireo_folder = vireo_folder,
+        library_id = "lib1",
     )
 
     # Verify donor assignments were still read from donor_ids.tsv
@@ -521,7 +556,8 @@ test_that("export_cellsnp skips VDJ export when clonotype missing", {
     gene_annotation <- readr::read_tsv(gene_anno_file, show_col_types = FALSE)
     snp_data <- import_cellsnp(
         cellsnp_dir = cellsnp_dir,
-        gene_annotation = gene_annotation
+        gene_annotation = gene_annotation,
+        library_id = "lib1",
     )
 
     out_dir <- withr::local_tempdir()
@@ -565,7 +601,8 @@ test_that("complete workflow: import without VDJ then add clonotype data", {
     snp_data <- import_cellsnp(
         cellsnp_dir = cellsnp_dir,
         gene_annotation = gene_annotation,
-        vireo_folder = vireo_folder
+        vireo_folder = vireo_folder,
+        library_id = "lib1",
     )
 
     # Verify initial state - clonotype exists but all NA
@@ -650,7 +687,8 @@ test_that("import with VDJ then export and re-import preserves clonotype", {
         cellsnp_dir = cellsnp_dir,
         gene_annotation = gene_annotation,
         vdj_file = vdj_file,
-        vireo_folder = vireo_folder
+        vireo_folder = vireo_folder,
+        library_id = "lib1",
     )
 
     # Verify clonotype data present
@@ -676,7 +714,8 @@ test_that("import with VDJ then export and re-import preserves clonotype", {
         cellsnp_dir = out_dir,
         gene_annotation = gene_annotation,
         vdj_file = vdj_exported,
-        vireo_folder = out_dir
+        vireo_folder = out_dir,
+        library_id = "lib1",
     )
 
     # Verify clonotype data preserved
@@ -703,7 +742,8 @@ test_that("import without VDJ, export, re-import maintains no clonotype state", 
     # Import without VDJ
     snp_data_original <- import_cellsnp(
         cellsnp_dir = cellsnp_dir,
-        gene_annotation = gene_annotation
+        gene_annotation = gene_annotation,
+        library_id = "lib1",
     )
 
     # Verify all clonotypes are NA
@@ -725,7 +765,8 @@ test_that("import without VDJ, export, re-import maintains no clonotype state", 
     snp_data_reimported <- import_cellsnp(
         cellsnp_dir = out_dir,
         gene_annotation = gene_annotation,
-        vireo_folder = out_dir
+        vireo_folder = out_dir,
+        library_id = "lib1",
     )
 
     # Verify all clonotypes still NA
@@ -734,6 +775,76 @@ test_that("import without VDJ, export, re-import maintains no clonotype state", 
     expect_true("clonotype" %in% colnames(barcode_info_reimported))
     # Verify all clonotype values remain NA after roundtrip
     expect_true(all(is.na(barcode_info_reimported$clonotype)))
+})
+
+test_that("export_cellsnp writes one annotation row per cell, in matrix column order", {
+    # Setup - Example data has clonotypes, so both annotation files are written
+    snp_data <- get_example_snpdata()
+    out_dir <- withr::local_tempdir()
+
+    export_cellsnp(snp_data, out_dir)
+    cells <- barcode_info(snp_data)
+
+    donor_df <- readr::read_tsv(file.path(out_dir, "donor_ids.tsv"), show_col_types = FALSE)
+    # Verify donor_ids.tsv has exactly one row per cell rather than distinct pairs
+    expect_equal(nrow(donor_df), ncol(snp_data))
+    # Check barcodes are written in matrix column order
+    expect_equal(donor_df$cell, cells$barcode)
+    # Verify donor labels stay aligned with their cells
+    expect_equal(donor_df$donor_id, cells$donor)
+    # Ensure the exported directory records which library it came from
+    expect_equal(donor_df$library_id, cells$library_id)
+    # Ensure the object's own cell identifiers survive the export
+    expect_equal(donor_df$cell_id, cells$cell_id)
+
+    vdj_df <- readr::read_csv(file.path(out_dir, "filtered_contig_annotations.csv"), show_col_types = FALSE)
+    # Verify VDJ annotations are also one row per cell in column order
+    expect_equal(vdj_df$barcode, cells$barcode)
+    # Confirm clonotypes stay aligned with their cells
+    expect_equal(vdj_df$raw_clonotype_id, cells$clonotype)
+
+    samples <- readr::read_tsv(
+        file.path(out_dir, "cellSNP.samples.tsv"),
+        col_names = "barcode",
+        show_col_types = FALSE
+    )
+    # Ensure cellSNP.samples.tsv stays single-column for external readers
+    expect_equal(ncol(samples), 1L)
+    # Verify the barcode list matches the matrix columns
+    expect_equal(samples$barcode, cells$barcode)
+})
+
+test_that("export_cellsnp rejects a multi-library object", {
+    # Setup - Relabel half the cells as a second library
+    snp_data <- get_example_snpdata()
+    cells <- barcode_info(snp_data)
+    cells$library_id <- rep(c("lib1", "lib2"), length.out = nrow(cells))
+    barcode_info(snp_data) <- cells
+
+    out_dir <- withr::local_tempdir()
+
+    # Verify export refuses rather than fusing barcodes shared across libraries
+    expect_error(export_cellsnp(snp_data, out_dir), "cannot write a multi-library object")
+    # Ensure the error names the libraries so the user knows what to split
+    expect_error(export_cellsnp(snp_data, out_dir), "lib1, lib2")
+    # Confirm nothing was written before the check failed
+    expect_false(file.exists(file.path(out_dir, "cellSNP.tag.AD.mtx")))
+})
+
+test_that("export_cellsnp rejects repeated barcodes", {
+    # Setup - Duplicate one barcode within a single library
+    snp_data <- get_example_snpdata()
+    cells <- barcode_info(snp_data)
+    skip_if(nrow(cells) < 2, "Example data has too few cells")
+    cells$barcode[2] <- cells$barcode[1]
+    barcode_info(snp_data) <- cells
+
+    out_dir <- withr::local_tempdir()
+
+    # Verify export refuses barcodes the cellSNP format cannot tell apart
+    expect_error(export_cellsnp(snp_data, out_dir), "cannot write repeated barcodes")
+    # Ensure the offending barcode is named in the message
+    expect_error(export_cellsnp(snp_data, out_dir), cells$barcode[1], fixed = TRUE)
 })
 
 # ==============================================================================
@@ -950,7 +1061,8 @@ test_that("import_cellsnp(vireo_folder=) populates donor_snp_info from real Vire
     snp_data <- import_cellsnp(
         cellsnp_dir = cellsnp_dir,
         gene_annotation = gene_annotation,
-        vireo_folder = vireo_folder
+        vireo_folder = vireo_folder,
+        library_id = "lib1",
     )
 
     donor_snp_info <- donor_snp_info(snp_data)

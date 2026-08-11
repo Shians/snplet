@@ -7,13 +7,14 @@
 rename_donor(x, donor_map)
 }
 \arguments{
-\item{x}{A SNPData object}
+\item{x}{A SNPData object, required.}
 
 \item{donor_map}{A named character vector, \code{c(new_label = old_label, ...)},
-following the same \code{new = old} convention as \code{dplyr::rename()}. Every value
-must be an existing donor (see \code{donor_info(x)}); donors not mentioned keep
-their current label. The resulting donor labels (renamed and unrenamed together) must
-stay unique -- \code{rename_donor()} relabels, it does not merge donors.}
+required (following the same \code{new = old} convention as
+\code{dplyr::rename()}). Every value must be an existing donor (see
+\code{donor_info(x)}); donors not mentioned keep their current label.
+The resulting donor labels (renamed and unrenamed together) must stay
+unique: \code{rename_donor()} relabels, it does not merge donors.}
 }
 \value{
 A SNPData object with the relabelled donors
@@ -24,7 +25,7 @@ Wholesale-relabels one or more donors, updating \code{barcode_info$donor},
 consistent. Every cell currently labelled with an old donor moves to its new label;
 individual cells cannot be reassigned between donors this way (\code{barcode_info<-}
 rejects any 'donor' column change once \code{donor_info} carries data, precisely to
-force donor-label changes through this single, atomic path).
+force donor-label changes through this single, all-or-nothing path).
 }
 \examples{
 \dontrun{

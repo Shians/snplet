@@ -20,21 +20,21 @@ haplotype_expression_by_molecule(
 )
 }
 \arguments{
-\item{x}{A SNPData object that has had XCI diagnostics stored by
-\code{\link{assign_xci}} (or \code{\link{assign_xci_by_clonotype}}) and
-subsequently had read-backed phase added by
+\item{x}{A SNPData object, required, that has had XCI diagnostics stored
+by \code{\link{assign_xci}} (or \code{\link{assign_xci_by_clonotype}})
+and subsequently had read-backed phase added by
 \code{\link{add_molecule_phase}}.}
 
-\item{molecule_calls}{A tibble with columns \code{donor}, \code{barcode},
-\code{umi}, \code{snp_id}, \code{allele}, \code{transcript_strand} --
-the union, across every donor, of \code{\link{add_molecule_phase}}'s
-\code{"molecule_calls"} attribute (or \code{\link{molecule_snp_alleles}}
-plus a \code{transcript_strand} column from
-\code{\link{molecule_read_strand}}, bind rows and add a \code{donor}
-column).}
+\item{molecule_calls}{A tibble, required, with columns \code{donor},
+\code{barcode}, \code{umi}, \code{snp_id}, \code{allele},
+\code{transcript_strand}: the union, across every donor, of
+\code{\link{add_molecule_phase}}'s \code{"molecule_calls"} attribute (or
+\code{\link{molecule_snp_alleles}} plus a \code{transcript_strand}
+column from \code{\link{molecule_read_strand}}, bind rows and add a
+\code{donor} column).}
 
-\item{snp_gene_map}{A tibble with columns \code{snp_id}, \code{gene_name},
-\code{gene_strand}, \code{ambiguous}, as returned by
+\item{snp_gene_map}{A tibble, required, with columns \code{snp_id},
+\code{gene_name}, \code{gene_strand}, \code{ambiguous}, as returned by
 \code{\link{assign_snp_genes}}. A SNP with \code{ambiguous = TRUE}
 overlaps more than one gene and is only counted towards a given
 candidate's \code{gene_name} for molecules whose own
@@ -43,8 +43,9 @@ molecules with no strand information (\code{NA}) or the wrong strand are
 dropped for that SNP rather than guessed. \code{ambiguous = FALSE} rows
 apply regardless of strand.}
 
-\item{escape_threshold}{Inactive-haplotype fraction at or above which a
-group is flagged as escaping. Default 0.1.}
+\item{escape_threshold}{Numeric, in \code{[0, 1]} (default 0.1).
+Inactive-haplotype fraction at or above which a group is flagged as
+escaping.}
 }
 \value{
 A tibble with one row per (\code{gene_name}, \code{donor},
@@ -60,43 +61,74 @@ A tibble with one row per (\code{gene_name}, \code{donor},
 \description{
 Counts each molecule once per gene regardless of how many of the gene's
 heterozygous SNPs it covers, unlike \code{\link{haplotype_expression}}
-(which reports one row per SNP): summing that function's per-SNP counts
-back up to a gene total would recreate the multi-SNP-per-molecule
-over-count read-backed phasing exists to remove, since a molecule
-spanning several of a gene's SNPs would cast one independent vote per row
-again. Pooling instead at the molecule level, within the gene's
-best-supported phase block, is what actually increases usable evidence
-per gene -- the motivation being genes like escapees with many SNPs
-(e.g. PRKX, 292 SNPs) that \code{assign_xci}'s EM reduces to a single
-representative SNP.
+(one row per SNP). Summing that function's per-SNP counts to a gene total
+would recreate the multi-SNP-per-molecule over-count read-backed phasing
+exists to remove, since a molecule spanning several SNPs would cast one
+vote per row. Pooling instead at the molecule level, within the gene's
+best-supported phase block, increases usable evidence per gene,
+particularly for escapees with many SNPs (e.g. PRKX, 292 SNPs) that
+\code{assign_xci}'s EM reduces to a single representative SNP.
 }
 \details{
 A gene's heterozygous SNPs can fall into more than one read-backed phase
 block (\code{\link{phase_snps}}) when no single molecule spans all of
-them -- most commonly a spliced/unspliced boundary, since a mature mRNA
-and its unspliced precursor rarely share a molecule. For each
-(\code{gene_name}, \code{donor}), only the block backed by the most
-distinct molecules is pooled; molecules whose SNPs fall in any other
-block for the same gene are real evidence but cannot be pooled with the
-dominant block's haplotype labels (their phase has no established
-relationship to it), so they are reported as \code{n_stranded_molecules}
-rather than dropped silently.
+them, most commonly at a spliced/unspliced boundary (a mature mRNA and its
+unspliced precursor rarely share a molecule). For each (\code{gene_name},
+\code{donor}), only the block backed by the most distinct molecules is
+pooled; molecules whose SNPs fall in any other block are real evidence but
+cannot be pooled with the dominant block's haplotype labels, so they are
+reported as \code{n_stranded_molecules} rather than dropped without record.
 
 A molecule's haplotype is called by majority vote across the SNPs it
-covers within the dominant block only (a tie is base-calling noise, once
-phase is accounted for, and is dropped as \code{"ambiguous"}). Only genes
-with a stored, resolved \code{allele_on_x1} and \code{phase_block} (i.e.
-processed by \code{\link{add_molecule_phase}}) contribute. A gene whose
-only heterozygous SNP could not be linked to any other by
-\code{\link{phase_snps}} still contributes here if that SNP already has
-an EM-derived phase from \code{\link{assign_xci}}: \code{\link{add_molecule_phase}}
-gives it its own singleton block, so a single-SNP gene benefits from
-correct molecule-level (rather than read-level) counting too. Only a
-single-SNP gene with \emph{no} EM-derived phase at all (never selected by
-\code{assign_xci}'s per-gene SNP pick) has no way to be oriented and is
-left to \code{haplotype_expression}, which already handles a single SNP
-correctly.
+covers within the dominant block only; a tie is dropped as
+\code{"ambiguous"} (residual base-calling noise once phase is accounted
+for). Only genes with a stored, resolved \code{allele_on_x1} and
+\code{phase_block} (i.e. processed by \code{\link{add_molecule_phase}})
+contribute. A single-SNP gene contributes too if that SNP already has an
+EM-derived phase from \code{\link{assign_xci}}: \code{add_molecule_phase()}
+gives it its own block of one, extending correct molecule-level counting
+to single-SNP genes. Only a single-SNP gene with \emph{no} EM-derived
+phase at all has no way to be oriented, and is left to
+\code{haplotype_expression}, which already handles it correctly.
 }
+\section{Phase is inferred from expression, not genotyped}{
+
+snplet infers phase from scRNA-seq allelic counts alone: no DNA-based
+haplotype is ever observed, and that limitation propagates into every
+downstream result.
+
+\code{"X1"} and \code{"X2"} name two expression-defined haplotype
+clusters, not identified physical chromosomes: exchangeable labels, fixed
+only by the convention that X1 is the larger active-X group, and not
+comparable across donors. \code{allele_on_x1} records which allele the
+model assigned to the X1 cluster in one donor; it is not a genotyped
+haplotype.
+
+The active allele is \emph{defined} as the majority-expressed one: the
+EM's phase step orients each gene so the silenced allele is the minority,
+which bounds the per-gene escape fraction below 0.5. Three consequences
+follow:
+\itemize{
+  \item Escape above 0.5 cannot be represented; the measurable range runs
+    from 0 (strict inactivation) to 0.5 (complete escape), and 0.5 is the
+    maximum, not the midpoint.
+  \item A gene transcribed mainly from the inactive X is stored with
+    inverted phase and surfaces as unusually \emph{clean} inactivation
+    rather than as an escapee. \code{XIST} is the textbook case.
+  \item "active"/"inactive" are majority/minority labels, coinciding with
+    the true active and inactive X only where canonical inactivation
+    holds (precisely what an escape analysis is questioning).
+}
+
+Separating these cases needs phase independent of expression (DNA-based
+genotyping, or trio/population phasing), which this package does not
+have. \code{\link{add_molecule_phase}} supplies true physical linkage
+between SNPs co-observed on one molecule, but a molecule is a single
+transcript: it cannot link across genes, and its blocks are still
+oriented to X1/X2 using the expression-derived fit, so it refines phase
+within a gene without escaping this constraint.
+}
+
 \examples{
 \dontrun{
 snp_data <- assign_xci(snp_data)

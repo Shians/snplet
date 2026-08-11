@@ -154,6 +154,100 @@
     }
 }
 
+# One row per library present in barcode_info. Derived rather than accepted
+# from the caller: which libraries an object holds is a property of its cells,
+# so there is nothing for a constructor argument to say that barcode_info does
+# not already. `bam_files` starts empty and is filled in later, by
+# import_cellsnp() or add_library_bams(), since a BAM path is knowledge about
+# where the reads came from rather than about the counts themselves.
+.default_library_info <- function(barcode_info) {
+    if (!"library_id" %in% colnames(barcode_info)) {
+        return(.empty_library_info())
+    }
+    libraries <- sort(unique(stats::na.omit(barcode_info$library_id)))
+    if (length(libraries) == 0) {
+        return(.empty_library_info())
+    }
+    tibble::tibble(
+        library_id = libraries,
+        n_cells = as.integer(tabulate(match(barcode_info$library_id, libraries), nbins = length(libraries))),
+        bam_files = replicate(length(libraries), character(0), simplify = FALSE)
+    )
+}
+
+.empty_library_info <- function() {
+    tibble::tibble(
+        library_id = character(0),
+        n_cells = integer(0),
+        bam_files = list()
+    )
+}
+
+# Carries stored BAM paths from one object onto another that was rebuilt from
+# its cells. Every route that makes a new SNPData out of an old one -- `[`,
+# and so filter_barcodes() and friends -- goes through the constructor, which
+# derives library_info afresh and would otherwise silently drop the paths.
+# Libraries with no surviving cells have no row to carry onto, so their paths
+# go with them: the object no longer contains that library.
+.propagate_library_info <- function(object, from) {
+    if (!methods::.hasSlot(from, "library_info") || nrow(object@library_info) == 0) {
+        return(object)
+    }
+    object@library_info$bam_files <- .lookup_bam_files(object@library_info$library_id, from@library_info)
+    object
+}
+
+# Re-derives library_info after barcode_info has been written to directly,
+# keeping the recorded paths of every library that is still present. Editing
+# barcode_info$library_id is the one way to change which libraries an object
+# holds without going through the constructor, so without this the two tables
+# drift apart and a path is filed against a library that no longer exists.
+.resync_library_info <- function(x, barcode_info) {
+    if (!methods::.hasSlot(x, "library_info")) {
+        return(x)
+    }
+    rederived <- .default_library_info(barcode_info)
+    rederived$bam_files <- .lookup_bam_files(rederived$library_id, x@library_info)
+    x@library_info <- rederived
+    x
+}
+
+.lookup_bam_files <- function(library_ids, library_info) {
+    matched <- match(library_ids, library_info$library_id)
+    purrr::map(matched, function(i) {
+        if (is.na(i)) {
+            return(character(0))
+        }
+        library_info$bam_files[[i]]
+    })
+}
+
+# Normalises the `bam_files` argument shared by import_cellsnp(),
+# add_library_bams(), and add_molecule_phase() into a named list of character
+# vectors, one element per library.
+.as_library_bam_list <- function(bam_files, arg_name = "bam_files") {
+    nms <- names(bam_files)
+    if (is.null(nms) || anyNA(nms) || any(!nzchar(nms))) {
+        stop(arg_name, " must be named, library_id = path(s).")
+    }
+    if (anyDuplicated(nms) > 0) {
+        stop(
+            arg_name,
+            " has repeated library_id name(s): ",
+            paste(unique(nms[duplicated(nms)]), collapse = ", "),
+            ". Give each library one entry listing all of its BAM files."
+        )
+    }
+    bam_files <- as.list(bam_files)
+    for (lib in nms) {
+        paths <- bam_files[[lib]]
+        if (!is.character(paths) || length(paths) == 0 || anyNA(paths)) {
+            stop(arg_name, "[['", lib, "']] must be a non-empty character vector of BAM paths.")
+        }
+    }
+    bam_files
+}
+
 .assign_snp_ids <- function(snp_info) {
     if (!"snp_id" %in% colnames(snp_info)) {
         if (all(c("chrom", "pos", "ref", "alt") %in% colnames(snp_info))) {
@@ -177,6 +271,27 @@
     }
 
     barcode_info
+}
+
+# Guarantees a `library_id` column on barcode_info, filled with NA where the
+# caller did not supply one.
+#
+# The column records which sequencing library each cell's barcode was drawn
+# from, which is what lets merge_snpdata() tell a barcode shared between two
+# libraries (two different cells that collided on a 737k-barcode whitelist)
+# from a barcode shared within one library (the same physical cell sequenced
+# twice). Always present rather than optional so that merging code can key on
+# (library_id, barcode) without first testing whether either object has the
+# column; an all-NA column simply means the libraries are unlabelled.
+.assign_library_id <- function(barcode_info) {
+    if (!"library_id" %in% colnames(barcode_info)) {
+        barcode_info$library_id <- NA_character_
+    }
+
+    barcode_info$library_id <- as.character(barcode_info$library_id)
+
+    anchor <- if ("barcode" %in% colnames(barcode_info)) "barcode" else "cell_id"
+    dplyr::relocate(barcode_info, "library_id", .after = dplyr::all_of(anchor))
 }
 
 .dedupe_snps <- function(ref_count, alt_count, oth_count, snp_info, donor_snp_info) {

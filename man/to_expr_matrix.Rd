@@ -10,9 +10,10 @@ to_expr_matrix(x, level = c("barcode", "clonotype", "donor"))
 \S4method{to_expr_matrix}{SNPData}(x, level = c("barcode", "clonotype", "donor"))
 }
 \arguments{
-\item{x}{SNPData object}
+\item{x}{A SNPData object, required.}
 
-\item{level}{Aggregation level: "barcode", "clonotype", or "donor"}
+\item{level}{Character scalar, one of \code{"barcode"}, \code{"clonotype"},
+or \code{"donor"} (default \code{"barcode"}). Aggregation level.}
 }
 \value{
 Matrix with snp_id as rows and cell/clonotype/donor as columns

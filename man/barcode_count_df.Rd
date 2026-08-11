@@ -12,7 +12,7 @@ barcode_count_df(x, test_maf = TRUE)
 \arguments{
 \item{x}{A SNPData object}
 
-\item{test_maf}{Logical, whether to include a test_maf column (default TRUE)}
+\item{test_maf}{Logical (default \code{TRUE}). Whether to include a test_maf column.}
 }
 \value{
 A tibble with columns: snp_id, gene_name, chrom, pos, strand (if available in snp_info), cell_id, ref_count, alt_count, total_count, ref_ratio, maf, (optionally test_maf)

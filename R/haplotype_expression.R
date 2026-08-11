@@ -1,55 +1,191 @@
-#' Phased active/inactive haplotype expression per SNP
+#' Phased active/inactive haplotype expression per gene
 #'
-#' Splits each phased SNP's ALT/REF counts into active- and
-#' inactive-haplotype reads using the phase \code{\link{assign_xci}} fit
-#' against its frozen cell-state calls, computed separately within the
-#' X1-active and X2-active cell groups. By default this spans every
-#' donor-genotyped het SNP with a stored phase, including SNPs
-#' \code{assign_xci} excluded from active-X calling as uninformative or
-#' escaping — exactly the SNPs worth inspecting for escape. Unlike a
-#' per-group \code{pmin}/\code{pmax} on raw counts, the allele-to-haplotype
-#' assignment comes from the stored per-donor phase
+#' Splits phased het SNPs' ALT/REF counts into active- and inactive-haplotype
+#' reads using the per-SNP phase that \code{\link{assign_xci}} assigned,
+#' computed separately within the X1-active and X2-active cell groups it
+#' called, then reports one selected representative SNP per donor and gene (see
+#' \sQuote{Gene-level representative selection}). \code{by_snp = TRUE} reports every SNP instead,
+#' useful for working out why a gene is missing from the gene-level output, or
+#' for double-checking one whose result looks wrong.
+#'
+#' Unlike a per-group \code{pmin}/\code{pmax} on raw counts, the
+#' allele-to-haplotype assignment comes from the stored per-donor phase
 #' (\code{donor_snp_info$allele_on_x1}) and is applied consistently to both
-#' groups, so the same physical allele can never be silently relabelled as
-#' "active" in both — that contradiction is instead surfaced explicitly.
+#' groups, so the same physical allele is never relabelled as "active" in
+#' both groups; that contradiction is instead flagged explicitly.
+#'
+#' Both the gene-level and per-SNP output span every donor-genotyped het SNP with a stored phase, including
+#' SNPs \code{assign_xci} excluded from active-X calling as uninformative or
+#' escaping, unless \code{xci_informative_only = TRUE}.
 #'
 #' @details
-#' For each SNP and donor, the stored phase records which physical allele (REF
-#' or ALT) is carried by the X1 haplotype; the other allele is carried by X2. The
-#' active haplotype is the one named by \code{active_x}: X1 in the X1-active
-#' group, X2 in the X2-active group; the other X is silenced. Counts are
-#' assigned to \code{active_count} / \code{inactive_count} accordingly.
+#' For each SNP and donor, the stored phase assigns REF or ALT to X1 (see
+#' \sQuote{Phase is inferred from expression, not genotyped}); the other
+#' allele is X2. \code{active_x} names the expected-active haplotype (X1 in
+#' the X1-active group, X2 in the X2-active group), and counts are split into
+#' \code{active_count}/\code{inactive_count} accordingly.
 #'
-#' Under canonical XCI, the active haplotype dominates in both groups, so the
-#' \emph{physical} allele that dominates should flip between the groups (X1's
-#' allele in X1-active cells, X2's allele in X2-active cells). When the same
-#' physical allele dominates in both groups — biologically impossible for a
-#' cleanly inactivated SNP — \code{same_allele_dominant} is \code{TRUE},
-#' identifying escaping or XCI-independent allelic imbalance rather than
-#' flattening it. The \code{escape_fraction} column quantifies the magnitude:
-#' the fraction of reads coming from the haplotype that should be silenced.
+#' \code{same_allele_dominant} is \code{TRUE} when the same physical allele
+#' dominates in both groups, flagging escape or XCI-independent imbalance
+#' rather than hiding it. Under canonical XCI the dominant allele should flip
+#' between groups (X1's allele in X1-active cells, X2's in X2-active cells),
+#' so a failure to flip is what triggers the flag. \code{escape_fraction}
+#' gives the magnitude, as the fraction of reads from the haplotype that
+#' should be silenced.
 #'
-#' @param x A SNPData object that had XCI diagnostics stored by
-#'   \code{\link{assign_xci}} or
-#'   \code{\link{assign_xci_by_clonotype}}.
-#' @param escape_threshold Inactive-haplotype fraction at or above which a
-#'   group is flagged as escaping in \code{escapes}. Default 0.1.
-#' @param xci_informative_only Logical. If \code{TRUE}, restrict to SNPs that
-#'   drove active-X calling in \code{assign_xci} (\code{donor_snp_info$xci_informative}),
-#'   excluding escaping or otherwise uninformative SNPs. Default \code{FALSE},
-#'   reporting every SNP with a stored phase.
+#' \strong{\code{escape_fraction} is bounded between 0 and 0.5.} Expression
+#' alone cannot distinguish a gene transcribed mostly from the inactive X
+#' from one transcribed mostly from the active X with inverted phase, so
+#' \code{\link{assign_xci}} always names the majority allele active. The
+#' scale therefore runs from 0 (strict inactivation) to 0.5 (complete
+#' escape), not to 1. Set \code{escape_threshold}, and any null passed to
+#' \code{\link{test_escape}}, on this 0-0.5 scale.
 #'
-#' @return A tibble with one row per donor, phased SNP, and active-X
-#'   group, with columns \code{donor} (when the object carries donor
-#'   assignments), \code{snp_id}, \code{gene_name} (when the object carries gene
-#'   annotation), \code{active_x} (the expressed X, "X1" or "X2"),
+#' One consequence: a gene expressed mainly from the inactive X is stored
+#' with inverted phase and reads as unusually \emph{clean} XCI rather than as
+#' escaping; see \sQuote{Genes masked by phase inversion}.
+#'
+#' \code{phase_contradiction} is \code{TRUE} for a group whose own
+#' \code{escape_fraction} exceeds 0.5, even though \code{\link{assign_xci}}'s
+#' donor-pooled estimate for the gene is capped at 0.5: each active-X group
+#' here draws on fewer cells than that pooled fit, so its own estimate is
+#' noisier and can cross 0.5 by chance alone, especially when the gene's true
+#' escape is near 0.5. Such rows are kept rather than dropped, since the same
+#' pattern can come from a quantification artefact or from a genuine complete
+#' escapee, and dropping it would let chance decide whether real escapees are
+#' reported.
+#'
+#' \code{same_allele_dominant} is \code{TRUE} exactly when the two groups'
+#' \code{phase_contradiction} status disagrees (with both groups covered):
+#' the two flags are related but not equivalent.
+#'
+#' @inheritSection assign_xci Phase is inferred from expression, not genotyped
+#'
+#' @param x A SNPData object, required, that had XCI diagnostics stored by
+#'   \code{\link{assign_xci}} or \code{\link{assign_xci_by_clonotype}}.
+#' @param escape_threshold Numeric, in \code{[0, 1]} (default 0.1).
+#'   Inactive-haplotype fraction at or above which a group is flagged as
+#'   escaping in \code{escapes}.
+#' @param xci_informative_only Logical (default \code{FALSE}, reporting every
+#'   SNP with a stored phase). If \code{TRUE}, restrict to SNPs that drove
+#'   active-X calling in \code{assign_xci}
+#'   (\code{donor_snp_info$xci_informative}), excluding escaping or otherwise
+#'   uninformative SNPs.
+#' @param by_snp Logical (default \code{FALSE}, i.e. gene-level, which
+#'   requires gene annotation). If \code{TRUE}, report every phased SNP
+#'   rather than selecting one representative per gene, changing what each
+#'   output row represents (see Value).
+#' @param inverted_phase_genes Character vector (default \code{"XIST"}).
+#'   Gene names known to be transcribed predominantly from the
+#'   \emph{inactive} X, whose stored phase is therefore expected to be
+#'   inverted (see \sQuote{Genes masked by phase inversion}). Matching rows
+#'   are marked \code{phase_likely_inverted}; nothing is dropped or
+#'   corrected. Pass \code{character(0)} to disable, or extend it with genes
+#'   you have independent evidence for; this is curated prior biology, not a
+#'   measurement, and the default is deliberately minimal because \code{XIST}
+#'   is the only such gene well established in human somatic cells.
+#'
+#' @section Gene-level representative selection:
+#' The default selects a single representative SNP per (\code{donor},
+#' \code{gene_name}) rather than summing per-SNP counts, since summing is not
+#' a valid gene total: a read (or long-read molecule) spanning several of a
+#' gene's het SNPs would be counted once per SNP, inflating well-covered
+#' multi-SNP genes relative to single-SNP ones. Only the representative's two
+#' groups are reported, keeping the returned counts a genuine read count.
+#'
+#' The representative is the highest-coverage SNP (summed over both active-X
+#' groups) whose dominant physical allele differs between the two groups,
+#' since that flip is what canonical XCI requires: the expressed allele must
+#' change when the active X does. This selects a SNP consistent with the
+#' stored phase, rather than simply the best-covered SNP regardless of
+#' whether it contradicts that phase.
+#'
+#' This is stricter than \code{!same_allele_dominant} (also \code{FALSE} for
+#' zero coverage in one group, which demonstrates no flip either way) and is
+#' not a test on escape \emph{magnitude}: a SNP whose two groups both exceed
+#' 0.5 still flips and remains a valid representative, failing only when the
+#' groups fall on opposite sides of 0.5 (one flagged
+#' \code{phase_contradiction}, the other not). The criterion is mutual
+#' consistency between the two cell populations, not low escape.
+#'
+#' A (donor, gene) pair with no qualifying SNP is dropped entirely, with the
+#' number dropped reported via \code{logger}, rather than falling back to the
+#' best-covered SNP.
+#'
+#' \code{same_allele_dominant} and \code{phase_contradiction} are dropped
+#' from the selected output, since both are uniformly \code{FALSE} for every
+#' retained row and would read as evidence rather than as the selection
+#' criterion they are.
+#'
+#' @section Genes masked by phase inversion:
+#' A gene transcribed mainly from the inactive X is stored with its phase
+#' inverted (the allele it actually expresses is recorded as sitting on the
+#' \emph{active} X), because escape above 0.5 is unidentifiable (see
+#' Details). It does not appear as escaping: it reads as one of the cleanest
+#' inactivated genes in the output, with \code{escape_fraction} near zero and
+#' \code{active_count}/\code{inactive_count} swapped relative to the truth.
+#'
+#' The masking applies to any inactive-X-biased or imprinted gene, not only
+#' \code{XIST}: no measurement distinguishes an inverted gene from a strictly
+#' inactivated one, since both produce identical counts. Read-backed phase
+#' cannot help either, since \code{\link{phase_snps}} links SNPs co-observed
+#' on one molecule (a single transcript), so phase blocks never span genes
+#' and cannot expose a \emph{gene-level} inversion; resolving it needs
+#' external chromosome-level phase, or prior knowledge of the gene.
+#'
+#' \code{inverted_phase_genes} supplies that prior knowledge, applied as a
+#' label only: matching rows are marked \code{phase_likely_inverted}, with
+#' counts, \code{escape_fraction} and the representative selection left
+#' untouched, since the flag asserts biology rather than anything measured
+#' here. For a flagged gene, read \code{active_count} and
+#' \code{inactive_count} as reversed and the true escape as roughly
+#' \code{1 - escape_fraction}.
+#'
+#' @section What the default output omits:
+#' Partial escape is \emph{not} excluded: a gene escaping at 0.2, 0.35 or 0.45
+#' flips normally, is selected as a representative, and has its
+#' \code{escape_fraction} reported intact. The selection step removes only a
+#' SNP whose two groups disagree about which side of 0.5 they sit on.
+#'
+#' The exposure lands specifically on \emph{complete} escapees, since
+#' \code{escape_fraction} saturates at 0.5 (see Details): a fully escaping
+#' gene sits exactly on that line, so each SNP's two groups land on a random
+#' side of it and the SNP is excluded with probability approaching one half
+#' \emph{however deep the coverage}. Away from the line the risk falls off
+#' with sampling noise, as \code{1/sqrt(coverage)}, and is negligible by 0.4
+#' at typical depths.
+#'
+#' The practical failure mode is a maximally escaping gene reported for some
+#' donors and missing for others without any flag, purely by sampling, which
+#' is exactly the pattern that would be misread as a biological difference
+#' between donors or experimental groups. When escape is the quantity of
+#' interest, always check the \code{logger} count of dropped pairs, inspect
+#' them under \code{by_snp = TRUE}, and prefer an independent measurement,
+#' read-backed phase via \code{\link{haplotype_expression_by_molecule}}, to
+#' settle whether such a SNP is an escapee or an artefact.
+#'
+#' @return A tibble with one row per donor, gene, and active-X group (two rows
+#'   per gene) with columns \code{donor} (when the object carries donor
+#'   assignments), \code{snp_id} (the selected representative),
+#'   \code{gene_name}, \code{active_x} (the expressed X, "X1" or "X2"),
 #'   \code{n_cells} (cells in the group), \code{active_count},
 #'   \code{inactive_count}, \code{coverage}, \code{dominant_allele} (the physical
 #'   allele, "REF"/"ALT", with more reads in this group; \code{NA} when
-#'   uncovered), \code{escape_fraction} (\code{inactive_count / coverage}),
+#'   uncovered), \code{escape_fraction} (\code{inactive_count / coverage}), and
 #'   \code{escapes} (\code{escape_fraction >= escape_threshold}), and
-#'   \code{same_allele_dominant} (per SNP; \code{TRUE} when both covered groups
-#'   favour the same physical allele).
+#'   \code{phase_likely_inverted} (\code{TRUE} when \code{gene_name} is in
+#'   \code{inverted_phase_genes}). SNPs with no gene annotation (\code{NA}
+#'   \code{gene_name}) are excluded, as are genes with no qualifying SNP.
+#'
+#'   With \code{by_snp = TRUE} each row instead represents one donor, phased
+#'   SNP, and active-X group, and two further columns are reported:
+#'   \code{phase_contradiction} (per group; \code{TRUE} when
+#'   \code{escape_fraction > 0.5}, i.e. the "inactive" haplotype outnumbers the
+#'   "active" one, see Details) and \code{same_allele_dominant} (per SNP;
+#'   \code{TRUE} when both covered groups favour the same physical allele). No
+#'   group is dropped for contradicting the phase; both flags are reported for
+#'   you to act on. When the object carries no gene annotation,
+#'   \code{gene_name} and \code{phase_likely_inverted} are both omitted.
 #'
 #' @family X-chromosome inactivation functions
 #' @export
@@ -57,29 +193,60 @@
 #' @examples
 #' \dontrun{
 #' snp_data <- assign_xci(snp_data)
+#'
+#' # One representative SNP per gene, safe to carry into test_escape()
 #' hap <- haplotype_expression(snp_data)
 #'
-#' # SNPs that escape inactivation surface directly
-#' dplyr::filter(hap, same_allele_dominant)
+#' # Every SNP, including those no gene could select as its representative,
+#' # where escape candidates and phase artefacts both live
+#' hap_by_snp <- haplotype_expression(snp_data, by_snp = TRUE)
+#'
+#' # SNPs whose dominant allele failed to flip between the active-X groups
+#' dplyr::filter(hap_by_snp, same_allele_dominant)
 #'
 #' # Restrict to the narrower set that drove active-X calling
 #' hap_informative <- haplotype_expression(snp_data, xci_informative_only = TRUE)
 #' }
-setGeneric("haplotype_expression", function(x, escape_threshold = 0.1, xci_informative_only = FALSE) {
-    standardGeneric("haplotype_expression")
-})
+setGeneric(
+    "haplotype_expression",
+    function(
+        x,
+        escape_threshold = 0.1,
+        xci_informative_only = FALSE,
+        by_snp = FALSE,
+        inverted_phase_genes = "XIST"
+    ) {
+        standardGeneric("haplotype_expression")
+    }
+)
 
 #' @rdname haplotype_expression
 #' @include SNPData-class.R
 setMethod(
     "haplotype_expression",
     signature(x = "SNPData"),
-    function(x, escape_threshold = 0.1, xci_informative_only = FALSE) {
+    function(
+        x,
+        escape_threshold = 0.1,
+        xci_informative_only = FALSE,
+        by_snp = FALSE,
+        inverted_phase_genes = "XIST"
+    ) {
         barcode_info <- barcode_info(x)
         snp_info <- snp_info(x)
 
         if (!"active_x" %in% colnames(barcode_info) || !.has_xci_diagnostics(x)) {
             stop("No stored XCI diagnostics found. Run assign_xci(x) first.")
+        }
+        # Electing a representative per gene is meaningless without knowing which
+        # gene each SNP belongs to. Erroring beats silently falling back to
+        # per-SNP output, which would return a different grain than the caller
+        # asked for -- the message names the argument that does that on purpose.
+        if (!by_snp && !"gene_name" %in% colnames(snp_info)) {
+            stop(
+                "Gene-level output requires gene annotation; run add_snp_gene_names(x) first, ",
+                "or pass by_snp = TRUE for per-SNP output."
+            )
         }
 
         donor_snp_info <- donor_snp_info(x)
@@ -172,6 +339,31 @@ setMethod(
                 escape_fraction = dplyr::if_else(coverage > 0, inactive_count / coverage, NA_real_),
                 escapes = escape_fraction >= escape_threshold
             ) %>%
+            # A group where the "inactive" haplotype outnumbers the "active" one
+            # contradicts the stored phase rather than showing partial leakage.
+            # It is flagged, not dropped: the same signature is produced by a
+            # quantification artefact (reference-mapping bias, ambient RNA) and
+            # by a near-complete escapee, whose two groups straddle 0.5 by noise
+            # and whose side of the line depends on the EM's arbitrary X1/X2
+            # labelling. Dropping would make that coin-flip decide whether a real
+            # escapee is reported at all.
+            #
+            # Purely mechanical, with no per-gene exemption. An earlier XIST
+            # carve-out was removed: assign_xci() cannot store a phase that makes
+            # XIST read above 0.5 in the first place (see phase_likely_inverted
+            # below), so the exemption never fired for the case it was written
+            # for, and in the one case it could fire -- a near-0.5 straddle -- it
+            # suppressed the flag for XIST alone while changing nothing else.
+            dplyr::mutate(
+                phase_contradiction = !is.na(escape_fraction) & escape_fraction > 0.5
+            ) %>%
+            # Prior biology, not a measurement: a gene transcribed mainly from
+            # the inactive X is stored by assign_xci() with inverted phase and so
+            # reports a near-zero escape_fraction, indistinguishable from strict
+            # inactivation. Nothing in expression data separates the two, so the
+            # only available signal is the gene's identity -- hence a curated
+            # list rather than a derived flag.
+            dplyr::mutate(phase_likely_inverted = gene_name %in% inverted_phase_genes) %>%
             # The flip must be assessed within a donor: X1/X2 labels are not
             # comparable across donors.
             dplyr::group_by(donor, snp_id) %>%
@@ -183,72 +375,142 @@ setMethod(
             ) %>%
             dplyr::ungroup()
 
+        # Elect before the donor/gene_name columns are conditionally dropped
+        # below: the election is per (donor, gene) and needs both.
+        if (!by_snp) {
+            result <- .elect_gene_representative_snps(result)
+        }
+
         if (!has_donor) {
             result <- dplyr::select(result, -donor)
         }
 
-        # Drop the placeholder gene_name column when the object carries no annotation.
+        # Drop the placeholder gene_name column when the object carries no
+        # annotation, and with it the curated flag, which is keyed on gene name
+        # and would otherwise be a uniformly FALSE column asserting that no gene
+        # is inverted when in truth none could be checked.
         if (!"gene_name" %in% colnames(snp_info)) {
-            result <- dplyr::select(result, -gene_name)
+            result <- dplyr::select(result, -gene_name, -phase_likely_inverted)
         }
         result
     }
 )
 
+#' Select one representative SNP per donor and gene
+#'
+#' Collapses \code{\link{haplotype_expression}}'s per-SNP rows to the
+#' highest-coverage SNP whose dominant physical allele flips between the two
+#' active-X groups. Summing a gene's SNPs instead would count a read spanning
+#' several of them once per SNP; selecting one keeps the output a genuine read
+#' count. See the \sQuote{Gene-level representative selection} section of
+#' \code{\link{haplotype_expression}} for why the flip is required.
+#'
+#' @param result The per-SNP tibble assembled by \code{\link{haplotype_expression}},
+#'   still carrying its \code{donor}, \code{gene_name} and
+#'   \code{same_allele_dominant} columns.
+#'
+#' @return \code{result} restricted to the selected SNPs' rows, without
+#'   \code{same_allele_dominant}, ordered by donor, gene and active X.
+#'
+#' @keywords internal
+.elect_gene_representative_snps <- function(result) {
+    annotated <- dplyr::filter(result, !is.na(gene_name))
+
+    # Both groups covered AND favouring different physical alleles. Deliberately
+    # not !same_allele_dominant: that is also FALSE for a SNP covered in only one
+    # group, which demonstrates no flip and so cannot represent the gene. Total
+    # coverage is summed over both groups, so the ranking is not decided by
+    # whichever group happens to hold more cells.
+    #
+    # This is deliberately not a test on the magnitude of escape. If both groups
+    # exceed 0.5, each is dominated by the other X's allele -- two different
+    # physical alleles -- so the pair still flips and stays electable. Only groups
+    # on opposite sides of 0.5 fail, which is mutual inconsistency between the two
+    # cell populations rather than high escape. Symmetric escape at any level
+    # therefore survives; see the "What the default output omits" section.
+    candidates <- annotated %>%
+        dplyr::group_by(donor, snp_id) %>%
+        dplyr::filter(
+            sum(coverage > 0) == 2L,
+            dplyr::n_distinct(dominant_allele[coverage > 0]) == 2L
+        ) %>%
+        dplyr::mutate(snp_coverage = sum(coverage)) %>%
+        dplyr::ungroup()
+
+    # Ties on coverage are broken by snp_id so repeat runs elect the same SNP;
+    # slice_max(with_ties = FALSE) alone would depend on incoming row order.
+    elected <- candidates %>%
+        dplyr::distinct(donor, gene_name, snp_id, snp_coverage) %>%
+        dplyr::arrange(donor, gene_name, dplyr::desc(snp_coverage), snp_id) %>%
+        dplyr::slice_head(n = 1, by = c(donor, gene_name))
+
+    n_before <- nrow(dplyr::distinct(annotated, donor, gene_name))
+    n_dropped <- n_before - nrow(elected)
+    if (n_dropped > 0) {
+        logger::log_warn(
+            "Dropped {n_dropped}/{n_before} donor x gene pair(s) from gene-level output: ",
+            "no SNP had its dominant allele flip between the active-X groups"
+        )
+    }
+
+    # same_allele_dominant and phase_contradiction are both uniformly FALSE for
+    # every elected SNP, by the argument above; keeping them would read as
+    # evidence rather than as the selection criteria they are.
+    candidates %>%
+        dplyr::semi_join(elected, by = c("donor", "gene_name", "snp_id")) %>%
+        dplyr::select(-snp_coverage, -same_allele_dominant, -phase_contradiction) %>%
+        dplyr::arrange(donor, gene_name, active_x)
+}
+
 #' Phased active/inactive haplotype expression per gene, pooling molecules across SNPs
 #'
 #' Counts each molecule once per gene regardless of how many of the gene's
 #' heterozygous SNPs it covers, unlike \code{\link{haplotype_expression}}
-#' (which reports one row per SNP): summing that function's per-SNP counts
-#' back up to a gene total would recreate the multi-SNP-per-molecule
-#' over-count read-backed phasing exists to remove, since a molecule
-#' spanning several of a gene's SNPs would cast one independent vote per row
-#' again. Pooling instead at the molecule level, within the gene's
-#' best-supported phase block, is what actually increases usable evidence
-#' per gene -- the motivation being genes like escapees with many SNPs
-#' (e.g. PRKX, 292 SNPs) that \code{assign_xci}'s EM reduces to a single
-#' representative SNP.
+#' (one row per SNP). Summing that function's per-SNP counts to a gene total
+#' would recreate the multi-SNP-per-molecule over-count read-backed phasing
+#' exists to remove, since a molecule spanning several SNPs would cast one
+#' vote per row. Pooling instead at the molecule level, within the gene's
+#' best-supported phase block, increases usable evidence per gene,
+#' particularly for escapees with many SNPs (e.g. PRKX, 292 SNPs) that
+#' \code{assign_xci}'s EM reduces to a single representative SNP.
 #'
 #' @details
 #' A gene's heterozygous SNPs can fall into more than one read-backed phase
 #' block (\code{\link{phase_snps}}) when no single molecule spans all of
-#' them -- most commonly a spliced/unspliced boundary, since a mature mRNA
-#' and its unspliced precursor rarely share a molecule. For each
-#' (\code{gene_name}, \code{donor}), only the block backed by the most
-#' distinct molecules is pooled; molecules whose SNPs fall in any other
-#' block for the same gene are real evidence but cannot be pooled with the
-#' dominant block's haplotype labels (their phase has no established
-#' relationship to it), so they are reported as \code{n_stranded_molecules}
-#' rather than dropped silently.
+#' them, most commonly at a spliced/unspliced boundary (a mature mRNA and its
+#' unspliced precursor rarely share a molecule). For each (\code{gene_name},
+#' \code{donor}), only the block backed by the most distinct molecules is
+#' pooled; molecules whose SNPs fall in any other block are real evidence but
+#' cannot be pooled with the dominant block's haplotype labels, so they are
+#' reported as \code{n_stranded_molecules} rather than dropped without record.
 #'
 #' A molecule's haplotype is called by majority vote across the SNPs it
-#' covers within the dominant block only (a tie is base-calling noise, once
-#' phase is accounted for, and is dropped as \code{"ambiguous"}). Only genes
-#' with a stored, resolved \code{allele_on_x1} and \code{phase_block} (i.e.
-#' processed by \code{\link{add_molecule_phase}}) contribute. A gene whose
-#' only heterozygous SNP could not be linked to any other by
-#' \code{\link{phase_snps}} still contributes here if that SNP already has
-#' an EM-derived phase from \code{\link{assign_xci}}: \code{\link{add_molecule_phase}}
-#' gives it its own singleton block, so a single-SNP gene benefits from
-#' correct molecule-level (rather than read-level) counting too. Only a
-#' single-SNP gene with \emph{no} EM-derived phase at all (never selected by
-#' \code{assign_xci}'s per-gene SNP pick) has no way to be oriented and is
-#' left to \code{haplotype_expression}, which already handles a single SNP
-#' correctly.
+#' covers within the dominant block only; a tie is dropped as
+#' \code{"ambiguous"} (residual base-calling noise once phase is accounted
+#' for). Only genes with a stored, resolved \code{allele_on_x1} and
+#' \code{phase_block} (i.e. processed by \code{\link{add_molecule_phase}})
+#' contribute. A single-SNP gene contributes too if that SNP already has an
+#' EM-derived phase from \code{\link{assign_xci}}: \code{add_molecule_phase()}
+#' gives it its own block of one, extending correct molecule-level counting
+#' to single-SNP genes. Only a single-SNP gene with \emph{no} EM-derived
+#' phase at all has no way to be oriented, and is left to
+#' \code{haplotype_expression}, which already handles it correctly.
 #'
-#' @param x A SNPData object that has had XCI diagnostics stored by
-#'   \code{\link{assign_xci}} (or \code{\link{assign_xci_by_clonotype}}) and
-#'   subsequently had read-backed phase added by
+#' @inheritSection assign_xci Phase is inferred from expression, not genotyped
+#'
+#' @param x A SNPData object, required, that has had XCI diagnostics stored
+#'   by \code{\link{assign_xci}} (or \code{\link{assign_xci_by_clonotype}})
+#'   and subsequently had read-backed phase added by
 #'   \code{\link{add_molecule_phase}}.
-#' @param molecule_calls A tibble with columns \code{donor}, \code{barcode},
-#'   \code{umi}, \code{snp_id}, \code{allele}, \code{transcript_strand} --
-#'   the union, across every donor, of \code{\link{add_molecule_phase}}'s
-#'   \code{"molecule_calls"} attribute (or \code{\link{molecule_snp_alleles}}
-#'   plus a \code{transcript_strand} column from
-#'   \code{\link{molecule_read_strand}}, bind rows and add a \code{donor}
-#'   column).
-#' @param snp_gene_map A tibble with columns \code{snp_id}, \code{gene_name},
-#'   \code{gene_strand}, \code{ambiguous}, as returned by
+#' @param molecule_calls A tibble, required, with columns \code{donor},
+#'   \code{barcode}, \code{umi}, \code{snp_id}, \code{allele},
+#'   \code{transcript_strand}: the union, across every donor, of
+#'   \code{\link{add_molecule_phase}}'s \code{"molecule_calls"} attribute (or
+#'   \code{\link{molecule_snp_alleles}} plus a \code{transcript_strand}
+#'   column from \code{\link{molecule_read_strand}}, bind rows and add a
+#'   \code{donor} column).
+#' @param snp_gene_map A tibble, required, with columns \code{snp_id},
+#'   \code{gene_name}, \code{gene_strand}, \code{ambiguous}, as returned by
 #'   \code{\link{assign_snp_genes}}. A SNP with \code{ambiguous = TRUE}
 #'   overlaps more than one gene and is only counted towards a given
 #'   candidate's \code{gene_name} for molecules whose own
@@ -256,8 +518,9 @@ setMethod(
 #'   molecules with no strand information (\code{NA}) or the wrong strand are
 #'   dropped for that SNP rather than guessed. \code{ambiguous = FALSE} rows
 #'   apply regardless of strand.
-#' @param escape_threshold Inactive-haplotype fraction at or above which a
-#'   group is flagged as escaping. Default 0.1.
+#' @param escape_threshold Numeric, in \code{[0, 1]} (default 0.1).
+#'   Inactive-haplotype fraction at or above which a group is flagged as
+#'   escaping.
 #'
 #' @return A tibble with one row per (\code{gene_name}, \code{donor},
 #'   \code{active_x}) triple, with columns \code{donor}, \code{gene_name},

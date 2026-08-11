@@ -10,17 +10,17 @@ assign_xci_by_clonotype(x, n_inits = 10, confidence_threshold = 0.95)
 \S4method{assign_xci_by_clonotype}{SNPData}(x, n_inits = 10, confidence_threshold = 0.95)
 }
 \arguments{
-\item{x}{SNPData object containing X chromosome SNP data with donor
-assignments, clonotype information, and heterozygosity information}
+\item{x}{A SNPData object, required, with donor assignments, clonotype
+information, and heterozygosity information for the X chromosome.}
 
-\item{n_inits}{Number of random initialisations for the EM algorithm.
-The run with the highest log-likelihood is returned. Default 10.}
+\item{n_inits}{Integer (default 10). Number of random initialisations for
+the EM algorithm; the run with the highest log-likelihood is returned.}
 
-\item{confidence_threshold}{Posterior probability threshold for hard
-assignment. Clonotypes whose posterior probability that a given X is the
-active one reaches \code{confidence_threshold} are assigned that X;
-clonotypes where neither X reaches the threshold receive \code{NA}.
-Default 0.95.}
+\item{confidence_threshold}{Numeric, in \code{[0, 1]} (default 0.95).
+Posterior probability threshold for hard assignment: clonotypes whose
+posterior probability that a given X is the active one reaches
+\code{confidence_threshold} are assigned that X; clonotypes where
+neither X reaches the threshold receive \code{NA}.}
 }
 \value{
 SNPData object with an additional \code{active_x} column in
@@ -58,6 +58,44 @@ The algorithm works as follows:
   \item Projects clonotype assignments back to individual cells
 }
 }
+\section{Phase is inferred from expression, not genotyped}{
+
+snplet infers phase from scRNA-seq allelic counts alone: no DNA-based
+haplotype is ever observed, and that limitation propagates into every
+downstream result.
+
+\code{"X1"} and \code{"X2"} name two expression-defined haplotype
+clusters, not identified physical chromosomes: exchangeable labels, fixed
+only by the convention that X1 is the larger active-X group, and not
+comparable across donors. \code{allele_on_x1} records which allele the
+model assigned to the X1 cluster in one donor; it is not a genotyped
+haplotype.
+
+The active allele is \emph{defined} as the majority-expressed one: the
+EM's phase step orients each gene so the silenced allele is the minority,
+which bounds the per-gene escape fraction below 0.5. Three consequences
+follow:
+\itemize{
+  \item Escape above 0.5 cannot be represented; the measurable range runs
+    from 0 (strict inactivation) to 0.5 (complete escape), and 0.5 is the
+    maximum, not the midpoint.
+  \item A gene transcribed mainly from the inactive X is stored with
+    inverted phase and surfaces as unusually \emph{clean} inactivation
+    rather than as an escapee. \code{XIST} is the textbook case.
+  \item "active"/"inactive" are majority/minority labels, coinciding with
+    the true active and inactive X only where canonical inactivation
+    holds (precisely what an escape analysis is questioning).
+}
+
+Separating these cases needs phase independent of expression (DNA-based
+genotyping, or trio/population phasing), which this package does not
+have. \code{\link{add_molecule_phase}} supplies true physical linkage
+between SNPs co-observed on one molecule, but a molecule is a single
+transcript: it cannot link across genes, and its blocks are still
+oriented to X1/X2 using the expression-derived fit, so it refines phase
+within a gene without escaping this constraint.
+}
+
 \examples{
 \dontrun{
 # Assign the active X chromosome to cells by clonotype

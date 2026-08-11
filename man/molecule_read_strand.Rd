@@ -7,8 +7,8 @@
 molecule_read_strand(reads)
 }
 \arguments{
-\item{reads}{A tibble as returned by `extract_snp_calls()$reads`, with
-columns `barcode`, `umi`, `qname`, `strand`.}
+\item{reads}{A tibble, required, as returned by `extract_snp_calls()$reads`,
+with columns `barcode`, `umi`, `qname`, `strand`.}
 }
 \value{
 A tibble with one row per (`barcode`, `umi`) and columns
@@ -17,7 +17,7 @@ A tibble with one row per (`barcode`, `umi`) and columns
 \description{
 A molecule is one transcript, so every read behind it should agree on
 alignment strand; a majority vote absorbs the rare mismapped or chimeric
-read rather than letting one read decide. This is alignment strand only --
+read rather than letting one read decide. This is alignment strand only;
 converting it to the strand of the original transcript (needed to
 disambiguate a SNP overlapping genes on opposite strands) additionally
 requires the BAM's sense/antisense orientation, since some demultiplexing

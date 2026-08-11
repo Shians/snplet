@@ -32,7 +32,7 @@
 #' @keywords internal
 #' @examples
 #' \dontrun{
-#' # Internal helper -- not exported, so this example is not run by R CMD check.
+#' # Internal helper, not exported, so this example is not run by R CMD check.
 #' df <- tibble::tibble(
 #'     ref_count = c(10, 5),
 #'     alt_count = c(2, 8),

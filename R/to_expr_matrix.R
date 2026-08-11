@@ -27,8 +27,9 @@
 #'   \item The log transformation stabilizes variance across depth ranges
 #' }
 #'
-#' @param x SNPData object
-#' @param level Aggregation level: "barcode", "clonotype", or "donor"
+#' @param x A SNPData object, required.
+#' @param level Character scalar, one of \code{"barcode"}, \code{"clonotype"},
+#'   or \code{"donor"} (default \code{"barcode"}). Aggregation level.
 #' @return Matrix with snp_id as rows and cell/clonotype/donor as columns
 #' @export
 setGeneric("to_expr_matrix", function(x, level = c("barcode", "clonotype", "donor")) standardGeneric("to_expr_matrix"))

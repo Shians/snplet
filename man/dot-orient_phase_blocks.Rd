@@ -27,26 +27,32 @@ A `phase_snps()` block's H1/H2 labelling is arbitrary and local to that
 block; this maps it onto the same X1/X2 convention `assign_xci()` and
 `haplotype_expression()` use, by finding SNPs in the block already phased
 by the EM ("anchors") and reading off whether H1 agrees with X1 or X2 at
-each. Since physical phase is a genotype fact, independently derived
-anchors within one component should never legitimately disagree; where
-they do, this is treated as a signal to investigate (most likely a
-low-power or noisy per-gene EM fit, occasionally a spurious `phase_snps()`
-edge), not as evidence to average away.
+each. The chromosome the anchors are estimating is a single physical object,
+so independently derived anchors within one component should never
+legitimately disagree; where they do, this is treated as a signal to
+investigate (most likely a low-power or noisy per-gene EM fit, occasionally a
+spurious `phase_snps()` edge), not as evidence to average away.
 }
 \details{
+Agreement among anchors is therefore evidence of a consistent fit, not of a
+correct one: the anchors are expression-derived, so a systematically inverted
+gene yields unanimous anchors pointing the wrong way. See the note above
+`.orient_phase_blocks()` in the source.
+
+
 Per connected component (`block`), every reachable anchor's vote on
 whether H1 corresponds to X1 or X2 is tallied:
 \itemize{
-  \item All anchors agree -- oriented confidently.
-  \item No anchors reachable -- left unoriented (`allele_on_x1_molecule`
+  \item All anchors agree: oriented confidently.
+  \item No anchors reachable: left unoriented (`allele_on_x1_molecule`
     `NA`); a block's own molecules are not used to orient it, since that
     reproduces the EM's own escapee blind spot.
   \item >= 3 anchors, exactly one disagrees with an otherwise-unanimous
-    majority -- oriented from the majority; the outlier anchor's own row
+    majority: oriented from the majority; the outlier anchor's own row
     is still flagged `phase_conflict = TRUE` for inspection (a repeat
     offender across donors would point to a reference-bias locus).
   \item Any other split (including exactly 2 anchors disagreeing, or >= 2
-    anchors dissenting from a majority) -- not resolved. Every SNP in the
+    anchors dissenting from a majority): not resolved. Every SNP in the
     component gets `allele_on_x1_molecule = NA` and `phase_conflict =
     TRUE`, since there is no principled way to tell which anchor is
     wrong.
@@ -54,7 +60,7 @@ whether H1 corresponds to X1 or X2 is tallied:
 
 An anchor `phase_snps()` never linked to any other SNP (most commonly a
 gene with only one heterozygous SNP) still carries its own EM-derived
-phase; it becomes a singleton block of one (negative `phase_block`, to
+phase; it becomes its own block of one (negative `phase_block`, to
 stay visually distinct from `phase_snps()`'s positive block ids) rather
 than being left out entirely.
 }

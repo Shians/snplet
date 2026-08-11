@@ -7,7 +7,7 @@
 plot_snp_cov_distribution(snp_data)
 }
 \arguments{
-\item{snp_data}{A SNPData object containing SNP information with coverage data}
+\item{snp_data}{A SNPData object, required, with SNP information and coverage data.}
 }
 \value{
 A ggplot object showing the density distribution of SNP coverage on a log10 scale
