@@ -7,18 +7,62 @@
 export_cellsnp(snpdata, out_dir)
 }
 \arguments{
-\item{snpdata}{A SNPData object, required.}
+\item{snpdata}{A SNPData object, required. Must hold cells from a single
+sequencing library; see Details.}
 
 \item{out_dir}{Character scalar, required. Output directory to write files to.}
 }
 \description{
-Writes the components of a SNPData object to an output folder in a format
-compatible with import_cellsnp.
+Writes the count matrices and cell annotations of a SNPData object to an
+output folder laid out like cellSNP-lite output, so that the data can be
+handed to external tools that read that format (and re-read by
+\code{\link{import_cellsnp}}).
+}
+\details{
+The cellSNP format describes one library: it keys cells by barcode alone,
+and carries no slot for anything the analysis has since derived. Exporting
+is therefore lossy, and deliberately so — this writes an interchange format,
+not a saved object. Use \code{saveRDS()} to round-trip a SNPData object
+without loss.
+
+Written out:
+\itemize{
+  \item \code{cellSNP.tag.AD.mtx}, \code{cellSNP.tag.DP.mtx},
+    \code{cellSNP.tag.OTH.mtx} — ALT, total (REF + ALT), and OTH counts.
+  \item \code{cellSNP.base.vcf.gz} — \code{chrom}, \code{pos}, \code{snp_id},
+    \code{ref}, \code{alt} from \code{snp_info}.
+  \item \code{cellSNP.samples.tsv} — one barcode per line, in matrix column
+    order. Kept single-column, as external readers expect.
+  \item \code{donor_ids.tsv} — one row per cell, in matrix column order,
+    carrying \code{cell} and \code{donor_id} as Vireo writes them, plus this
+    object's \code{cell_id} and \code{library_id} so the exported directory
+    records which library it came from. \code{import_cellsnp} ignores those
+    two extra columns and takes \code{library_id} from its own argument.
+  \item \code{filtered_contig_annotations.csv} — \code{barcode} and
+    \code{raw_clonotype_id}, written only when clonotypes are present.
+}
+
+Dropped, with no cellSNP-format equivalent: \code{donor_snp_info} (every
+zygosity call and every \code{\link{assign_xci}} result), the active
+\code{\link{zygosity_source}}, \code{library_info} (including recorded BAM
+paths), \code{donor_info}, and any columns of \code{snp_info} or
+\code{barcode_info} beyond those listed above — notably \code{gene_name},
+which \code{import_cellsnp} regenerates from its \code{gene_annotation}
+argument.
+
+A multi-library object cannot be represented: a 10x barcode is unique only
+within its library, so writing two libraries into one barcode-keyed
+directory would fuse or mis-assign cells that happen to share a barcode.
+Such an object is rejected rather than exported; split it first, e.g.
+\code{filter_barcodes(x, library_id == "run1")}.
 }
 \examples{
 \dontrun{
 snp_data <- get_example_snpdata()
 export_cellsnp(snp_data, "exported_cellsnp")
+
+# A merged object must be split into its libraries first
+export_cellsnp(filter_barcodes(merged, library_id == "run1"), "run1_cellsnp")
 }
 }
 \seealso{
