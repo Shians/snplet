@@ -64,6 +64,14 @@
 #'   (\code{xci_informative}, \code{allele_on_x1}, \code{xci_escape_fraction}) written by
 #'   \code{\link{assign_xci}} for whichever source was active when it ran; rows are
 #'   dropped along with their donor, same as \code{donor_info}.
+#' @slot library_info A tibble with one row per sequencing library present in
+#'   \code{barcode_info$library_id}, with an automatically computed
+#'   \code{n_cells} column and a \code{bam_files} list-column holding the BAM
+#'   path(s) that library's reads came from (empty unless recorded with
+#'   \code{import_cellsnp(..., bam_files = )} or \code{\link{add_library_bams}}).
+#'   Never supplied at construction: which libraries an object holds is derived
+#'   from its cells. A library that loses all of its cells loses its row, and
+#'   its recorded paths with it.
 #' @slot zygosity_source Character string naming the \emph{active} zygosity-call source
 #'   (a value of \code{donor_snp_info$zygosity_source}), or \code{NA_character_} if none
 #'   is established yet. \code{\link{donor_snp_info}}, \code{\link{assign_xci}}, and other
@@ -139,6 +147,7 @@ setClass(
         chr_style = "character",
         donor_info = "tbl_df",
         donor_snp_info = "tbl_df",
+        library_info = "tbl_df",
         zygosity_source = "character"
     )
 )
@@ -225,6 +234,7 @@ setMethod(
         .Object@barcode_info <- metrics$barcode_info
         .Object@donor_info <- metrics$donor_info
         .Object@donor_snp_info <- donor_snp_info
+        .Object@library_info <- .default_library_info(metrics$barcode_info)
         .Object@zygosity_source <- .derive_zygosity_source(donor_snp_info)
 
         methods::validObject(.Object)
@@ -292,6 +302,7 @@ setMethod(
             obj@chr_style <- x@chr_style
         }
         obj <- .propagate_zygosity_source(obj, x)
+        obj <- .propagate_library_info(obj, x)
         obj
     }
 )
@@ -419,6 +430,64 @@ setMethod("donor_info", signature(x = "SNPData"), function(x) {
 #' @export
 #' @rdname SNPData-class
 get_donor_info <- function(x) donor_info(x)
+
+#' @exportMethod library_info
+#' @rdname SNPData-class
+setGeneric("library_info", function(x) standardGeneric("library_info"))
+#' @exportMethod library_info
+#' @rdname SNPData-class
+setMethod("library_info", signature(x = "SNPData"), function(x) {
+    # Handle backwards compatibility with older SNPData objects
+    if (!methods::.hasSlot(x, "library_info")) {
+        return(.default_library_info(x@barcode_info))
+    }
+    x@library_info
+})
+
+#' @export
+#' @rdname SNPData-class
+get_library_info <- function(x) library_info(x)
+
+#' Record the BAM file(s) each library's reads came from
+#'
+#' Attaches BAM paths to an object's `library_info`, where
+#' `add_molecule_phase()` can find them without being told again. Paths are
+#' recorded per library rather than per donor because that is what they are a
+#' property of: one library's BAM holds all of its donors' cells.
+#'
+#' @param x A SNPData object, required.
+#' @param bam_files A named character vector or list, required,
+#'   `library_id = path(s)`. Each element may name several BAM files for one
+#'   library. Names must match `library_info(x)$library_id`.
+#' @param overwrite Logical (default `FALSE`). If `TRUE`, a named library's
+#'   stored paths are replaced; otherwise the new paths are unioned with any
+#'   already recorded, matching how `merge_snpdata()` combines them.
+#'
+#' @return The SNPData object with `library_info(x)$bam_files` updated.
+#'
+#' @family SNPData accessors
+#' @export
+add_library_bams <- function(x, bam_files, overwrite = FALSE) {
+    bam_files <- .as_library_bam_list(bam_files)
+    stored <- library_info(x)
+    unknown <- setdiff(names(bam_files), stored$library_id)
+    if (length(unknown) > 0) {
+        stop(
+            "bam_files names not found in library_info(x)$library_id: ",
+            paste(unknown, collapse = ", ")
+        )
+    }
+    for (lib in names(bam_files)) {
+        at <- match(lib, stored$library_id)
+        stored$bam_files[[at]] <- if (overwrite) {
+            unique(bam_files[[lib]])
+        } else {
+            union(stored$bam_files[[at]], bam_files[[lib]])
+        }
+    }
+    x@library_info <- stored
+    x
+}
 
 #' @exportMethod donor_snp_info
 #' @rdname SNPData-class
@@ -627,6 +696,7 @@ setReplaceMethod("barcode_info", signature(x = "SNPData", value = "data.frame"),
         }
     }
     x@barcode_info <- value
+    x <- .resync_library_info(x, value)
     x
 })
 

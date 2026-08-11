@@ -802,9 +802,198 @@ assign_snp_genes <- function(snp_info, gene_anno) {
     dplyr::bind_rows(linked, unlinked_anchors)
 }
 
+# The paths recorded against each library at import, as the named list
+# `bam_files` would have been given as. Libraries with no stored path are left
+# out entirely, so a half-populated object fails the same way an incomplete
+# `bam_files` argument would rather than silently phasing only some donors.
+.stored_bam_files <- function(x) {
+    stored <- library_info(x)
+    stored <- stored[lengths(stored$bam_files) > 0, , drop = FALSE]
+    if (nrow(stored) == 0) {
+        stop(
+            "No bam_files given and none recorded on the object. Supply them here, or record them with ",
+            "import_cellsnp(..., bam_files = ) or add_library_bams()."
+        )
+    }
+    stats::setNames(stored$bam_files, stored$library_id)
+}
+
+# Normalise `bam_files` into a named list, library_id = character vector of
+# paths. Shape only: membership against the object and the state of the files
+# themselves are checked later, so that an unrecognised library is reported
+# before a missing file is.
+.normalise_bam_files <- function(bam_files) {
+    if (length(bam_files) == 0) {
+        stop("bam_files is empty; supply at least one library's BAM file(s).")
+    }
+    nms <- names(bam_files)
+    if (is.null(nms) || anyNA(nms) || any(!nzchar(nms))) {
+        stop("bam_files must be named, library_id = path(s), matching barcode_info(x)$library_id.")
+    }
+    if (anyDuplicated(nms) > 0) {
+        stop(
+            "bam_files has repeated library_id name(s): ",
+            paste(unique(nms[duplicated(nms)]), collapse = ", "),
+            ". Give each library one entry listing all of its BAM files."
+        )
+    }
+    bam_files <- as.list(bam_files)
+    for (lib in nms) {
+        paths <- bam_files[[lib]]
+        if (!is.character(paths) || length(paths) == 0 || anyNA(paths)) {
+            stop("bam_files[['", lib, "']] must be a non-empty character vector of BAM paths.")
+        }
+    }
+    bam_files
+}
+
+# A BAM file listed twice under one library would be extracted twice and its
+# tallies summed by `.pool_donor_calls()`, silently doubling every read behind
+# that library's molecules. A missing index is just as quiet but costlier:
+# `.prefilter_bam()`'s `samtools view -M -L` seeks by index, and without one the
+# region-restricted scan degrades to streaming the whole file once per donor.
+.check_bam_paths <- function(bam_files) {
+    for (lib in names(bam_files)) {
+        paths <- bam_files[[lib]]
+        missing <- paths[!file.exists(paths)]
+        if (length(missing) > 0) {
+            stop("[", lib, "] BAM file(s) not found: ", paste(missing, collapse = ", "))
+        }
+        resolved <- normalizePath(paths)
+        if (anyDuplicated(resolved) > 0) {
+            stop(
+                "[",
+                lib,
+                "] the same BAM file is listed more than once: ",
+                paste(unique(resolved[duplicated(resolved)]), collapse = ", "),
+                ". Repeated files would double every read count they contribute."
+            )
+        }
+        indexed <- vapply(paths, .has_bam_index, logical(1), USE.NAMES = FALSE)
+        if (!all(indexed)) {
+            stop(
+                "[",
+                lib,
+                "] BAM file(s) have no index: ",
+                paste(paths[!indexed], collapse = ", "),
+                ". Index them with samtools index; extraction seeks by index and is far slower without one."
+            )
+        }
+        bam_files[[lib]] <- resolved
+    }
+    bam_files
+}
+
+.has_bam_index <- function(bam_file) {
+    candidates <- c(
+        paste0(bam_file, c(".bai", ".csi")),
+        sub("\\.bam$", ".bai", bam_file),
+        sub("\\.bam$", ".csi", bam_file)
+    )
+    any(file.exists(candidates))
+}
+
+# Which library each donor's cells came from. This is derived from the object
+# rather than asked of the caller: `library_id` is a property of the cell, so
+# the object already knows, and a donor whose cells span two libraries breaks
+# the assumption every BAM lookup here rests on -- that a donor's reads live in
+# exactly one library's files -- and so is an error rather than a guess.
+# An object with no library labels at all is treated as one implicit library.
+.donor_library_map <- function(barcode_info) {
+    n_missing <- sum(is.na(barcode_info$library_id))
+    if (n_missing > 0 && n_missing < nrow(barcode_info)) {
+        stop(
+            "barcode_info$library_id is set for some cells but not others (",
+            n_missing,
+            " of ",
+            nrow(barcode_info),
+            " unlabelled). Label every cell's library, or none."
+        )
+    }
+    map <- dplyr::distinct(barcode_info, donor, library_id)
+    map <- map[!is.na(map$donor), , drop = FALSE]
+    split_donors <- map$donor[duplicated(map$donor)]
+    if (length(split_donors) > 0) {
+        stop(
+            "Donor(s) with cells in more than one library: ",
+            paste(unique(split_donors), collapse = ", "),
+            ". add_molecule_phase() looks up a donor's BAM files by its library, so each donor must sit in one."
+        )
+    }
+    map
+}
+
+# Strand calibration is a property of the BAM's pipeline, not of the donors
+# read out of it, so it is computed once per file and up front: eagerly, so a
+# file that cannot be calibrated is reported before any expensive extraction is
+# paid for, and once, so two donors sharing a library BAM cannot calibrate it
+# inconsistently. Unlike extraction this scan starts at the head of the file
+# and ignores the index, so repeating it per donor is the one cost that does
+# not shrink with the chromosome filter.
+.calibrate_bam_strands <- function(bam_paths) {
+    rows <- purrr::map(bam_paths, function(f) {
+        calibration <- tryCatch(
+            .infer_bam_strand_orientation(f),
+            error = function(e) {
+                logger::log_warn(
+                    "could not infer strand orientation for {f} ({conditionMessage(e)}); ",
+                    "strand-ambiguous SNPs will be unresolved for molecules from this file"
+                )
+                NULL
+            }
+        )
+        if (is.null(calibration)) {
+            return(tibble::tibble(
+                bam_file = f,
+                orientation = NA_character_,
+                n_ts_reads = NA_integer_,
+                concordance = NA_real_,
+                n_scanned = NA_integer_
+            ))
+        }
+        tibble::tibble(
+            bam_file = f,
+            orientation = calibration$orientation,
+            n_ts_reads = as.integer(calibration$n_ts_reads),
+            concordance = as.numeric(calibration$concordance),
+            n_scanned = as.integer(calibration$n_scanned)
+        )
+    })
+    dplyr::bind_rows(rows)
+}
+
+# Pool one donor's per-file extractions into the shape a single file would have
+# produced. The two tables need different reductions because they mean
+# different things. Read tallies for a molecule split across files are partial
+# counts of one vote, so they must be summed *before* `molecule_snp_alleles()`
+# picks a winner: binding alone would instead take the argmax of the per-file
+# counts and discard the losing file's reads, and voting per file then binding
+# would emit one row per file per molecule, so `phase_snps()` would count a
+# single molecule several times towards `min_molecules`. Transcript strand is
+# already one call per molecule per file, so it is majority-voted instead, and
+# must come out at one row per molecule or the left join onto the calls fans
+# out. Molecules seen only in an uncalibrated file are simply absent here and
+# pick up `NA` from that join; a genuine "+"/"-" disagreement between files
+# resolves to `NA` rather than a guess.
+.pool_donor_calls <- function(per_file) {
+    tallies <- dplyr::bind_rows(purrr::map(per_file, "tallies")) %>%
+        dplyr::summarise(n_calls = sum(n_calls), .by = c(barcode, umi, snp_id, allele))
+
+    molecule_strand <- dplyr::bind_rows(purrr::map(per_file, "molecule_strand")) %>%
+        dplyr::filter(!is.na(transcript_strand)) %>%
+        dplyr::count(barcode, umi, transcript_strand, name = "n_files") %>%
+        dplyr::slice_max(n_files, n = 1, by = c(barcode, umi), with_ties = TRUE) %>%
+        dplyr::summarise(
+            transcript_strand = dplyr::if_else(dplyr::n() == 1L, transcript_strand[1], NA_character_),
+            .by = c(barcode, umi)
+        )
+
+    list(tallies = tallies, molecule_strand = molecule_strand)
+}
+
 #' Add read-backed molecule phase to a SNPData object's donor SNP metadata
 #'
-#' Extracts molecule-level allele calls from one BAM per donor, phases them
+#' Extracts molecule-level allele calls from each library's BAM files, phases them
 #' with `phase_snps()`, orients the resulting blocks to X1/X2 against
 #' `assign_xci()`'s already-stored EM phase (see `.orient_phase_blocks()`),
 #' and writes the result into `donor_snp_info`. Additive only:
@@ -816,17 +1005,24 @@ assign_snp_genes <- function(snp_info, gene_anno) {
 #'
 #' @param x A SNPData object, required, that has already been fit by
 #'   `assign_xci()` or `assign_xci_by_clonotype()` (see
-#'   `.has_xci_diagnostics()`), with a `donor` column in `barcode_info`. Cells
-#'   are matched to BAM records by `barcode` alone, which is unambiguous only
-#'   within a single library, so every cell's `library_id` must be the same
-#'   (or all unlabelled); subset a multi-library object with
-#'   `filter_barcodes(x, library_id == ...)` and phase each library
-#'   separately.
-#' @param bam_files A named character vector or list, required,
-#'   `donor = path`, one indexed BAM per donor. Names must match
-#'   `barcode_info(x)$donor`. Any entry named `"doublet"` or `"unassigned"`
-#'   is dropped with a warning, since neither is a real donor with its own
-#'   genotype to phase against.
+#'   `.has_xci_diagnostics()`), with a `donor` column in `barcode_info`. Each
+#'   donor's cells must all carry the same `library_id`, since a donor's BAM
+#'   files are looked up by its library; a donor spanning two libraries is an
+#'   error. `library_id` may instead be unset for every cell, in which case the
+#'   object is treated as a single library, but a mix of labelled and
+#'   unlabelled cells is an error.
+#' @param bam_files A named character vector or list, optional (default
+#'   `NULL`, taking the paths recorded in `library_info(x)$bam_files` by
+#'   `import_cellsnp()` or `add_library_bams()`, and erroring if none were),
+#'   `library_id = path(s)`, giving the indexed BAM file or files holding that
+#'   library's reads. Names must match `barcode_info(x)$library_id`, or, for an
+#'   object with no library labels at all, be a single entry of any name.
+#'   Several files under one library are pooled per molecule, so a molecule
+#'   split across them votes once with all of its reads; listing the same file
+#'   twice is an error, as it would double every count it contributes.
+#'   Libraries whose donors are all `"doublet"` or `"unassigned"` contribute
+#'   nothing, since neither is a real donor with its own genotype to phase
+#'   against.
 #' @param target_chrom Character scalar (default `"chrX"`, matching
 #'   `assign_xci()`'s own restriction). Canonical chromosome to restrict
 #'   het-SNP selection to.
@@ -849,14 +1045,18 @@ assign_snp_genes <- function(snp_info, gene_anno) {
 #'   `haplotype_expression_by_molecule()` to resolve SNPs `assign_snp_genes()`
 #'   flagged `ambiguous`), the per-donor `molecule_snp_alleles()` output
 #'   already computed here) so `haplotype_expression_by_molecule()` does not
-#'   need to re-extract from the BAM.
+#'   need to re-extract from the BAM. A second attribute, `"bam_calibration"`,
+#'   records one row per BAM file scanned with columns `bam_file`,
+#'   `orientation` (`"sense"`/`"antisense"`/`NA` where it could not be
+#'   inferred), `n_ts_reads`, `concordance`, and `n_scanned`, so the strand
+#'   call applied to each file's molecules can be inspected after the fact.
 #'
 #' @family molecule-level allele counting functions
 #' @family X-chromosome inactivation functions
 #' @export
 add_molecule_phase <- function(
     x,
-    bam_files,
+    bam_files = NULL,
     target_chrom = "chrX",
     min_mapq = 20L,
     min_baseq = 10L,
@@ -869,46 +1069,60 @@ add_molecule_phase <- function(
     }
     barcode_info <- barcode_info(x)
     if (!"donor" %in% colnames(barcode_info)) {
-        stop("SNPData object has no donor assignments; add_molecule_phase() requires one BAM per donor.")
+        stop("SNPData object has no donor assignments; add_molecule_phase() phases each donor separately.")
     }
-    if (is.null(names(bam_files)) || any(!nzchar(names(bam_files)))) {
-        stop("bam_files must be named, donor = path, matching barcode_info(x)$donor.")
+    bam_files <- bam_files %||% .stored_bam_files(x)
+    bam_files <- .normalise_bam_files(bam_files)
+
+    # BAM files are keyed by library rather than by donor because that is what
+    # they are a property of: one library's BAM holds all of its donors' cells,
+    # and the object already records which library each cell came from. A
+    # donor's files are therefore looked up, not asked for, which also makes it
+    # impossible for the caller to point a donor at another library's reads --
+    # where the same barcode names a different cell entirely.
+    donor_library <- .donor_library_map(barcode_info)
+    if (all(is.na(donor_library$library_id))) {
+        # No labels anywhere: the object is a single implicit library, so one
+        # entry covers every donor whatever the caller happened to name it.
+        if (length(bam_files) != 1) {
+            stop(
+                "barcode_info$library_id is unset for every cell, so the object is a single library and ",
+                "bam_files must have exactly one entry; it has ",
+                length(bam_files),
+                ". Label each cell's library to phase more than one."
+            )
+        }
+        donor_library$library_id <- names(bam_files)
     }
-    # Cells are matched to BAM records by barcode alone, which is only
-    # unambiguous within a single library: a merged multi-library object can
-    # carry the same barcode on two different cells, and one BAM covers only
-    # one of them, so the reads would be attributed to both.
-    libraries_present <- unique(stats::na.omit(barcode_info$library_id))
-    if (length(libraries_present) > 1) {
+
+    unknown_libraries <- setdiff(names(bam_files), donor_library$library_id)
+    if (length(unknown_libraries) > 0) {
         stop(
-            "add_molecule_phase() requires cells from a single library, but barcode_info$library_id has ",
-            length(libraries_present),
-            " values (",
-            paste(utils::head(libraries_present, 5), collapse = ", "),
-            "). Barcodes are only unique within a library; subset to one library with ",
-            "filter_barcodes(x, library_id == ...) and phase each separately."
+            "bam_files names not found in barcode_info$library_id: ",
+            paste(unknown_libraries, collapse = ", ")
         )
     }
-    unknown_donors <- setdiff(names(bam_files), unique(barcode_info$donor))
-    if (length(unknown_donors) > 0) {
-        stop("bam_files names not found in barcode_info$donor: ", paste(unknown_donors, collapse = ", "))
-    }
+
     # "doublet"/"unassigned" are not real donors -- a doublet's genotype is a
     # mix of two cells' and an unassigned cell has no confident genotype, so
     # neither has a meaningful het-SNP set to phase against. Dropped here the
-    # same way assign_xci() excludes them from its own per-donor EM fit,
-    # rather than relying on every caller to filter bam_files first.
-    non_donor_labels <- intersect(names(bam_files), c("doublet", "unassigned"))
+    # same way assign_xci() excludes them from its own per-donor EM fit.
+    non_donor_labels <- intersect(donor_library$donor, c("doublet", "unassigned"))
     if (length(non_donor_labels) > 0) {
         logger::log_warn(
-            "Ignoring bam_files entries for non-donor label(s): {paste(non_donor_labels, collapse = ', ')}"
+            "Excluding non-donor label(s) from phasing: {paste(non_donor_labels, collapse = ', ')}"
         )
-        bam_files <- bam_files[!names(bam_files) %in% non_donor_labels]
     }
-    if (length(bam_files) == 0) {
-        logger::log_warn("No real donors left in bam_files after excluding doublet/unassigned; SNPData unchanged.")
+    donor_library <- donor_library %>%
+        dplyr::filter(!donor %in% c("doublet", "unassigned"), library_id %in% names(bam_files))
+    if (nrow(donor_library) == 0) {
+        logger::log_warn("No real donors have BAM files supplied for their library; SNPData unchanged.")
         return(x)
     }
+
+    bam_files <- .check_bam_paths(bam_files[unique(donor_library$library_id)])
+    donor_bams <- stats::setNames(bam_files[donor_library$library_id], donor_library$donor)
+    calibration <- .calibrate_bam_strands(unique(unlist(bam_files, use.names = FALSE)))
 
     snp_info <- snp_info(x)
     if (!"chrom_canonical" %in% colnames(snp_info)) {
@@ -916,11 +1130,11 @@ add_molecule_phase <- function(
     }
     x_chrom <- filter_snps(x, chrom_canonical == target_chrom)
     het_status <- donor_het_status_df(x_chrom) %>%
-        dplyr::filter(zygosity == "het", donor %in% names(bam_files))
+        dplyr::filter(zygosity == "het", donor %in% names(donor_bams))
 
     donor_snp_info <- donor_snp_info(x)
 
-    per_donor_phase <- purrr::map(names(bam_files), function(d) {
+    per_donor_phase <- purrr::map(names(donor_bams), function(d) {
         donor_snp_ids <- unique(het_status$snp_id[het_status$donor == d])
         this_snp_info <- snp_info(x_chrom) %>%
             dplyr::filter(snp_id %in% donor_snp_ids) %>%
@@ -930,39 +1144,42 @@ add_molecule_phase <- function(
             return(NULL)
         }
 
+        # A donor's whole barcode set is safe to use against every one of its
+        # library's files: `library_id` is what disambiguates a barcode shared
+        # with another library, and these files are that library's.
         donor_barcodes <- barcode_info$barcode[barcode_info$donor == d]
-        extracted <- extract_snp_calls(
-            bam_files[[d]],
-            this_snp_info,
-            barcodes = donor_barcodes,
-            min_mapq = min_mapq,
-            min_baseq = min_baseq,
-            threads = threads
-        )
-        strand_calibration <- tryCatch(
-            .infer_bam_strand_orientation(bam_files[[d]]),
-            error = function(e) {
-                logger::log_warn(
-                    "[{d}] could not infer strand orientation ({conditionMessage(e)}); ",
-                    "strand-ambiguous SNPs will be unresolved for this donor"
-                )
-                NULL
+        per_file <- purrr::map(donor_bams[[d]], function(bam_file) {
+            extracted <- extract_snp_calls(
+                bam_file,
+                this_snp_info,
+                barcodes = donor_barcodes,
+                min_mapq = min_mapq,
+                min_baseq = min_baseq,
+                threads = threads
+            )
+            # Orientation is a property of the file's pipeline, so it is applied
+            # before pooling: two of a donor's files may well be calibrated
+            # differently, and pooled reads carry no record of where they came
+            # from.
+            orientation <- calibration$orientation[calibration$bam_file == bam_file]
+            molecule_strand <- molecule_read_strand(extracted$reads)
+            aligned_strand <- molecule_strand$strand
+            if (is.na(orientation)) {
+                molecule_strand$transcript_strand <- rep(NA_character_, length(aligned_strand))
+            } else if (orientation == "sense") {
+                molecule_strand$transcript_strand <- aligned_strand
+            } else {
+                molecule_strand$transcript_strand <- ifelse(aligned_strand == "+", "-", "+")
             }
-        )
-        is_orientation_unknown <- is.null(strand_calibration)
-        is_antisense <- !is_orientation_unknown && strand_calibration$orientation == "antisense"
+            list(
+                tallies = extracted$tallies,
+                molecule_strand = dplyr::select(molecule_strand, barcode, umi, transcript_strand)
+            )
+        })
+        pooled <- .pool_donor_calls(per_file)
 
-        molecule_strand <- molecule_read_strand(extracted$reads)
-        molecule_strand$transcript_strand <- dplyr::case_when(
-            is_orientation_unknown ~ NA_character_,
-            !is_antisense ~ molecule_strand$strand,
-            molecule_strand$strand == "+" ~ "-",
-            TRUE ~ "+"
-        )
-        molecule_strand <- dplyr::select(molecule_strand, barcode, umi, transcript_strand)
-
-        per_snp <- molecule_snp_alleles(extracted$tallies) %>%
-            dplyr::left_join(molecule_strand, by = c("barcode", "umi"))
+        per_snp <- molecule_snp_alleles(pooled$tallies) %>%
+            dplyr::left_join(pooled$molecule_strand, by = c("barcode", "umi"))
         phase <- phase_snps(per_snp, min_molecules = min_molecules, min_consistency = min_consistency)
         if (nrow(phase) == 0) {
             logger::log_warn("[{d}] no phase blocks formed from {nrow(this_snp_info)} het SNPs")
@@ -1028,5 +1245,11 @@ add_molecule_phase <- function(
     # attaching the per-molecule calls lets haplotype_expression_by_molecule()
     # reuse them instead of re-extracting from the BAM a second time.
     attr(x, "molecule_calls") <- molecule_calls
+    # Strand calibration decides how every ambiguous SNP in a file is resolved,
+    # so it is recorded rather than only logged: a file whose orientation came
+    # out `NA`, or whose concordance was low enough that
+    # `.infer_bam_strand_orientation()` fell back to a bare majority, is the
+    # first thing to check when phase blocks look wrong.
+    attr(x, "bam_calibration") <- calibration
     x
 }

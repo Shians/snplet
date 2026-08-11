@@ -913,6 +913,185 @@ make_phase_fixture <- function() {
     list(obj = obj, snp_ids = snp_ids)
 }
 
+# add_molecule_phase() insists its BAM files exist and are indexed before it
+# extracts anything, so tests that mock the extraction still need real paths.
+# The files stay empty: nothing ever reads them.
+local_fake_bam <- function(name = "fake.bam", env = parent.frame()) {
+    dir <- withr::local_tempdir(.local_envir = env)
+    bam <- file.path(dir, name)
+    file.create(bam, paste0(bam, ".bai"))
+    # add_molecule_phase() resolves the paths it is given, so return the
+    # resolved form: on macOS the temp directory is reached through a symlink
+    # and the two spellings would not compare equal.
+    normalizePath(bam)
+}
+
+# Stubs out the BAM-reading step with an empty extraction, so the surrounding
+# validation and control flow can be exercised without a real BAM. Records
+# every file it was called for, so tests can assert which BAMs were opened.
+local_mocked_extraction <- function(called_for, env = parent.frame()) {
+    testthat::local_mocked_bindings(
+        extract_snp_calls = function(bam_file, snp_info, barcodes = NULL, ...) {
+            assign(
+                "calls",
+                c(get("calls", envir = called_for), bam_file),
+                envir = called_for
+            )
+            list(
+                tallies = tibble::tibble(
+                    barcode = character(),
+                    umi = character(),
+                    snp_id = character(),
+                    allele = character(),
+                    n_calls = integer()
+                ),
+                reads = tibble::tibble(
+                    barcode = character(),
+                    umi = character(),
+                    qname = character(),
+                    strand = character()
+                )
+            )
+        },
+        .infer_bam_strand_orientation = function(bam_file, ...) {
+            list(orientation = "sense", n_ts_reads = 500L, concordance = 1, n_scanned = 5000L)
+        },
+        .package = "snplet",
+        .env = env
+    )
+}
+
+# A place for local_mocked_extraction() to record the BAMs it was called for.
+new_call_log <- function() {
+    log_env <- new.env(parent = emptyenv())
+    log_env$calls <- character()
+    log_env
+}
+
+test_that(".pool_donor_calls() sums a split molecule's reads before the allele vote", {
+    per_file <- list(
+        list(
+            tallies = tibble::tibble(
+                barcode = "c1",
+                umi = "u1",
+                snp_id = "snp1",
+                allele = "REF",
+                n_calls = 3L
+            ),
+            molecule_strand = tibble::tibble(barcode = "c1", umi = "u1", transcript_strand = "+")
+        ),
+        list(
+            tallies = tibble::tibble(
+                barcode = c("c1", "c1"),
+                umi = c("u1", "u1"),
+                snp_id = c("snp1", "snp1"),
+                allele = c("REF", "ALT"),
+                n_calls = c(1L, 2L)
+            ),
+            molecule_strand = tibble::tibble(barcode = "c1", umi = "u1", transcript_strand = "+")
+        )
+    )
+
+    pooled <- .pool_donor_calls(per_file)
+
+    # Verify REF's reads are summed across the two files (3 + 1) rather than
+    # taken as the per-file maximum, which would have lost the first file's 3
+    expect_equal(pooled$tallies$n_calls[pooled$tallies$allele == "REF"], 4L)
+    # Confirm the pooled counts elect REF, the winner over all 6 reads, where
+    # the largest single-file tally would have elected ALT
+    expect_equal(molecule_snp_alleles(pooled$tallies)$allele, "REF")
+})
+
+test_that(".pool_donor_calls() returns one strand row per molecule", {
+    strand_table <- tibble::tibble(barcode = "c1", umi = "u1", transcript_strand = "+")
+    per_file <- list(
+        list(
+            tallies = tibble::tibble(
+                barcode = "c1",
+                umi = "u1",
+                snp_id = "snp1",
+                allele = "REF",
+                n_calls = 1L
+            ),
+            molecule_strand = strand_table
+        ),
+        list(
+            tallies = tibble::tibble(
+                barcode = "c1",
+                umi = "u1",
+                snp_id = "snp1",
+                allele = "REF",
+                n_calls = 1L
+            ),
+            molecule_strand = strand_table
+        )
+    )
+
+    pooled <- .pool_donor_calls(per_file)
+
+    # Ensure a molecule seen in both files yields a single strand row: the
+    # left join onto the calls fans out if it does not
+    expect_equal(nrow(pooled$molecule_strand), 1L)
+    # Verify the agreed strand survives the majority vote
+    expect_equal(pooled$molecule_strand$transcript_strand, "+")
+})
+
+test_that(".pool_donor_calls() resolves a cross-file strand disagreement to NA", {
+    tallies <- tibble::tibble(barcode = "c1", umi = "u1", snp_id = "snp1", allele = "REF", n_calls = 1L)
+    per_file <- list(
+        list(
+            tallies = tallies,
+            molecule_strand = tibble::tibble(
+                barcode = "c1",
+                umi = "u1",
+                transcript_strand = "+"
+            )
+        ),
+        list(
+            tallies = tallies,
+            molecule_strand = tibble::tibble(
+                barcode = "c1",
+                umi = "u1",
+                transcript_strand = "-"
+            )
+        )
+    )
+
+    pooled <- .pool_donor_calls(per_file)
+
+    # Verify a tied disagreement becomes NA rather than an arbitrary pick,
+    # leaving strand-ambiguous SNPs unresolved for that molecule
+    expect_true(is.na(pooled$molecule_strand$transcript_strand))
+})
+
+test_that(".pool_donor_calls() lets a calibrated file outvote an uncalibrated one", {
+    tallies <- tibble::tibble(barcode = "c1", umi = "u1", snp_id = "snp1", allele = "REF", n_calls = 1L)
+    per_file <- list(
+        list(
+            tallies = tallies,
+            molecule_strand = tibble::tibble(
+                barcode = "c1",
+                umi = "u1",
+                transcript_strand = NA_character_
+            )
+        ),
+        list(
+            tallies = tallies,
+            molecule_strand = tibble::tibble(
+                barcode = "c1",
+                umi = "u1",
+                transcript_strand = "-"
+            )
+        )
+    )
+
+    pooled <- .pool_donor_calls(per_file)
+
+    # Confirm an NA from a file whose orientation could not be inferred is an
+    # absence of evidence, not a vote against the file that does know
+    expect_equal(pooled$molecule_strand$transcript_strand, "-")
+})
+
 test_that("add_molecule_phase() errors when no XCI diagnostics are stored", {
     ref <- Matrix::Matrix(matrix(1L, 2, 2), sparse = TRUE)
     alt <- Matrix::Matrix(matrix(1L, 2, 2), sparse = TRUE)
@@ -924,17 +1103,52 @@ test_that("add_molecule_phase() errors when no XCI diagnostics are stored", {
     expect_error(add_molecule_phase(obj, bam_files = c(donor0 = "x.bam")), "Run assign_xci")
 })
 
-test_that("add_molecule_phase() errors on unrecognised donor names in bam_files", {
+test_that("add_molecule_phase() falls back to the BAM paths recorded on the object", {
+    fixture <- make_phase_fixture()
+    obj <- add_barcode_metadata(
+        fixture$obj,
+        data.frame(cell_id = barcode_info(fixture$obj)$cell_id, library_id = "lib_A"),
+        join_by = "cell_id",
+        overwrite = TRUE
+    )
+    bam <- local_fake_bam()
+    obj <- add_library_bams(obj, c(lib_A = bam))
+    call_log <- new_call_log()
+    local_mocked_extraction(call_log)
+
+    add_molecule_phase(obj)
+
+    # Verify a path recorded at import is used without being passed again,
+    # which is the point of storing it on the object
+    expect_identical(call_log$calls, bam)
+})
+
+test_that("add_molecule_phase() errors when no BAM paths are given or recorded", {
     fixture <- make_phase_fixture()
 
-    # Verify a BAM keyed to a donor absent from barcode_info is rejected up front
+    # Verify the object says where the paths should come from rather than
+    # failing on a missing argument
+    expect_error(add_molecule_phase(fixture$obj), "none recorded on the object")
+})
+
+test_that("add_molecule_phase() errors on unrecognised library names in bam_files", {
+    fixture <- make_phase_fixture()
+    obj <- add_barcode_metadata(
+        fixture$obj,
+        data.frame(cell_id = barcode_info(fixture$obj)$cell_id, library_id = "lib_A"),
+        join_by = "cell_id",
+        overwrite = TRUE
+    )
+
+    # Verify a BAM keyed to a library absent from barcode_info is rejected up
+    # front, rather than silently leaving that library's donors unphased
     expect_error(
-        add_molecule_phase(fixture$obj, bam_files = c(not_a_donor = "x.bam")),
-        "not found in barcode_info\\$donor"
+        add_molecule_phase(obj, bam_files = c(lib_B = "x.bam")),
+        "not found in barcode_info\\$library_id"
     )
 })
 
-test_that("add_molecule_phase() errors when cells span more than one library", {
+test_that("add_molecule_phase() errors when one donor's cells span two libraries", {
     fixture <- make_phase_fixture()
     obj <- add_barcode_metadata(
         fixture$obj,
@@ -946,29 +1160,111 @@ test_that("add_molecule_phase() errors when cells span more than one library", {
         overwrite = TRUE
     )
 
-    # Verify a multi-library object is rejected: barcodes are only unique
-    # within a library, so one BAM's reads could be attributed to two cells
+    # Verify a donor split across libraries is rejected: its BAM files are
+    # looked up by library, so there is no single correct set to read
     expect_error(
-        add_molecule_phase(obj, bam_files = c(donor0 = "x.bam")),
-        "requires cells from a single library"
+        add_molecule_phase(obj, bam_files = c(lib_A = "x.bam", lib_B = "y.bam")),
+        "more than one library"
+    )
+})
+
+test_that("add_molecule_phase() errors when only some cells carry a library_id", {
+    fixture <- make_phase_fixture()
+    obj <- add_barcode_metadata(
+        fixture$obj,
+        data.frame(
+            cell_id = barcode_info(fixture$obj)$cell_id,
+            library_id = c("lib_A", "lib_A", NA, NA)
+        ),
+        join_by = "cell_id",
+        overwrite = TRUE
+    )
+
+    # Verify a partly-labelled object is rejected rather than guessed at: the
+    # unlabelled cells could belong to lib_A or to a library with no BAM at all
+    expect_error(
+        add_molecule_phase(obj, bam_files = c(lib_A = "x.bam")),
+        "set for some cells but not others"
+    )
+})
+
+test_that("add_molecule_phase() errors when an unlabelled object is given several libraries", {
+    fixture <- make_phase_fixture()
+
+    # Check that an object with no library labels cannot be handed more than
+    # one library's BAMs, since nothing records which donor belongs to which
+    expect_error(
+        add_molecule_phase(fixture$obj, bam_files = c(lib_A = "x.bam", lib_B = "y.bam")),
+        "must have exactly one entry"
+    )
+})
+
+test_that("add_molecule_phase() errors when a library lists the same BAM twice", {
+    fixture <- make_phase_fixture()
+    bam <- local_fake_bam()
+
+    # Verify a repeated file is rejected: it would be extracted twice and its
+    # tallies summed, doubling every read behind that library's molecules
+    expect_error(
+        add_molecule_phase(fixture$obj, bam_files = list(lib_A = c(bam, bam))),
+        "listed more than once"
+    )
+})
+
+test_that("add_molecule_phase() errors when a BAM has no index", {
+    fixture <- make_phase_fixture()
+    dir <- withr::local_tempdir()
+    unindexed <- file.path(dir, "unindexed.bam")
+    file.create(unindexed)
+
+    # Verify a missing index is a hard error: extraction seeks by index, and
+    # without one the region-restricted scan degrades to reading the whole file
+    expect_error(
+        add_molecule_phase(fixture$obj, bam_files = c(lib_A = unindexed)),
+        "no index"
     )
 })
 
 test_that("add_molecule_phase() accepts an object whose cells are all unlabelled", {
     fixture <- make_phase_fixture()
+    bam <- local_fake_bam()
+    call_log <- new_call_log()
+    local_mocked_extraction(call_log)
 
-    # Confirm an all-NA library_id does not trip the single-library check,
-    # so objects imported without a library label still phase as before
-    expect_error(
-        add_molecule_phase(fixture$obj, bam_files = c(not_a_donor = "x.bam")),
-        "not found in barcode_info\\$donor"
-    )
+    # Confirm an all-NA library_id is treated as one implicit library, so
+    # objects imported without a library label still phase as before
+    expect_no_error(add_molecule_phase(fixture$obj, bam_files = c(any_name = bam)))
+    # Verify the single supplied BAM was the one opened for the only donor
+    expect_identical(call_log$calls, bam)
 })
 
-test_that("add_molecule_phase() ignores 'doublet' and 'unassigned' entries in bam_files", {
+test_that("add_molecule_phase() opens every BAM listed for a donor's library", {
+    fixture <- make_phase_fixture()
+    obj <- add_barcode_metadata(
+        fixture$obj,
+        data.frame(cell_id = barcode_info(fixture$obj)$cell_id, library_id = "lib_A"),
+        join_by = "cell_id",
+        overwrite = TRUE
+    )
+    dir <- withr::local_tempdir()
+    bams <- file.path(dir, c("a.bam", "b.bam"))
+    file.create(bams, paste0(bams, ".bai"))
+    bams <- normalizePath(bams)
+    call_log <- new_call_log()
+    local_mocked_extraction(call_log)
+
+    add_molecule_phase(obj, bam_files = list(lib_A = bams))
+
+    # Verify both of the library's files were extracted for its donor, so a
+    # molecule split across them can be pooled rather than half-counted
+    expect_setequal(call_log$calls, bams)
+})
+
+test_that("add_molecule_phase() excludes the 'doublet' and 'unassigned' donor labels", {
     # A fixture where "doublet" is a real, valid donor label in barcode_info
-    # (as Vireo emits it) -- so the unknown_donors check alone wouldn't catch
-    # it, and the exclusion has to be deliberate, not incidental.
+    # (as Vireo emits it). Donors are now derived from the object rather than
+    # named by the caller, so the exclusion has to be deliberate: nothing else
+    # would stop these two being phased like any other donor.
     ref <- rbind(c(0L, 0L, 10L, 10L, 5L, 5L))
     alt <- rbind(c(10L, 10L, 0L, 0L, 5L, 5L))
     snp_info <- data.frame(chrom = "chrX", pos = 1000L, ref = "A", alt = "G", stringsAsFactors = FALSE)
@@ -1024,8 +1320,12 @@ test_that("add_molecule_phase() ignores 'doublet' and 'unassigned' entries in ba
             called_for <<- c(called_for, bam_file)
             list(tallies = fake_tallies, reads = fake_reads)
         },
+        .infer_bam_strand_orientation = function(bam_file, ...) {
+            list(orientation = "sense", n_ts_reads = 500L, concordance = 1, n_scanned = 5000L)
+        },
         .package = "snplet"
     )
+    bam <- local_fake_bam()
 
     # The package test suite raises the global log threshold to FATAL (see
     # tests/testthat/setup.R), so capturing the WARN-level exclusion message
@@ -1039,7 +1339,7 @@ test_that("add_molecule_phase() ignores 'doublet' and 'unassigned' entries in ba
     withr::defer(logger::log_appender(original_appender))
     withr::defer(logger::log_threshold(original_threshold))
 
-    add_molecule_phase(obj, bam_files = c(donor0 = "fake.bam", doublet = "fake.bam", unassigned = "fake.bam"))
+    add_molecule_phase(obj, bam_files = c(lib_A = bam))
 
     # Verify the log names the excluded non-donor labels
     log_lines <- readLines(log_file, warn = FALSE)
@@ -1049,7 +1349,7 @@ test_that("add_molecule_phase() ignores 'doublet' and 'unassigned' entries in ba
     expect_length(called_for, 1)
 })
 
-test_that("add_molecule_phase() returns x unchanged when only doublet/unassigned are given", {
+test_that("add_molecule_phase() returns x unchanged when every donor is doublet/unassigned", {
     ref <- rbind(c(5L, 5L))
     alt <- rbind(c(5L, 5L))
     snp_info <- data.frame(chrom = "chrX", pos = 1000L, ref = "A", alt = "G", stringsAsFactors = FALSE)
@@ -1081,8 +1381,100 @@ test_that("add_molecule_phase() returns x unchanged when only doublet/unassigned
     )
 
     # Verify no error, and the object is returned unchanged when nothing real is left to process
-    result <- add_molecule_phase(obj, bam_files = c(doublet = "fake.bam", unassigned = "fake.bam"))
+    result <- add_molecule_phase(obj, bam_files = c(lib_A = "fake.bam"))
     expect_identical(donor_snp_info(result), donor_snp_info(obj))
+})
+
+test_that("add_molecule_phase() phases a donor's split BAMs as if they were one file", {
+    fixture <- make_phase_fixture()
+    snp_ids <- fixture$snp_ids
+
+    # Five molecules, each spanning both SNPs on the same haplotype. The same
+    # reads are presented two ways: whole in one file, or split 2/3 across two
+    # files of the same library, which is the arrangement pooling exists for.
+    calls <- tibble::tibble(
+        barcode = rep(paste0("c", 1:5), each = 2),
+        umi = rep(paste0("u", 1:5), each = 2),
+        snp_id = rep(snp_ids, times = 5),
+        allele = rep(c("REF", "ALT"), times = 5)
+    )
+    reads <- tibble::tibble(
+        barcode = paste0("c", 1:5),
+        umi = paste0("u", 1:5),
+        qname = paste0("read", 1:5),
+        strand = "+"
+    )
+    whole <- dplyr::mutate(calls, n_calls = 5L)
+    first_part <- dplyr::mutate(calls, n_calls = 2L)
+    second_part <- dplyr::mutate(calls, n_calls = 3L)
+
+    dir <- withr::local_tempdir()
+    bams <- file.path(dir, c("whole.bam", "part_a.bam", "part_b.bam"))
+    file.create(bams, paste0(bams, ".bai"))
+    bams <- normalizePath(bams)
+
+    testthat::local_mocked_bindings(
+        extract_snp_calls = function(bam_file, ...) {
+            tallies <- switch(
+                basename(bam_file),
+                part_a.bam = first_part,
+                part_b.bam = second_part,
+                whole
+            )
+            list(tallies = tallies, reads = reads)
+        },
+        .infer_bam_strand_orientation = function(bam_file, ...) {
+            list(orientation = "sense", n_ts_reads = 500L, concordance = 1, n_scanned = 5000L)
+        },
+        .package = "snplet"
+    )
+
+    single <- add_molecule_phase(fixture$obj, bam_files = c(lib_A = bams[1]))
+    split <- add_molecule_phase(fixture$obj, bam_files = list(lib_A = bams[2:3]))
+
+    # Verify splitting a donor's reads across two of its library's BAM files
+    # changes nothing about the phase it ends up with
+    expect_identical(donor_snp_info(split), donor_snp_info(single))
+    # Confirm the pooled molecule calls match too, so each split molecule was
+    # reassembled with all of its reads rather than counted once per file
+    expect_equal(
+        dplyr::arrange(attr(split, "molecule_calls"), barcode, umi, snp_id),
+        dplyr::arrange(attr(single, "molecule_calls"), barcode, umi, snp_id)
+    )
+})
+
+test_that("add_molecule_phase() records the strand calibration of every BAM it scanned", {
+    fixture <- make_phase_fixture()
+    snp_ids <- fixture$snp_ids
+    tallies <- tibble::tibble(
+        barcode = rep(paste0("c", 1:5), each = 2),
+        umi = rep(paste0("u", 1:5), each = 2),
+        snp_id = rep(snp_ids, times = 5),
+        allele = rep(c("REF", "ALT"), times = 5),
+        n_calls = 5L
+    )
+    reads <- tibble::tibble(
+        barcode = paste0("c", 1:5),
+        umi = paste0("u", 1:5),
+        qname = paste0("read", 1:5),
+        strand = "+"
+    )
+    bam <- local_fake_bam()
+    testthat::local_mocked_bindings(
+        extract_snp_calls = function(...) list(tallies = tallies, reads = reads),
+        .infer_bam_strand_orientation = function(bam_file, ...) {
+            list(orientation = "antisense", n_ts_reads = 500L, concordance = 0.99, n_scanned = 5000L)
+        },
+        .package = "snplet"
+    )
+
+    calibration <- attr(add_molecule_phase(fixture$obj, bam_files = c(lib_A = bam)), "bam_calibration")
+
+    # Verify the orientation applied to this file's molecules is recorded on
+    # the object, so a misread strand can be diagnosed after the fact
+    expect_equal(calibration$bam_file, bam)
+    expect_equal(calibration$orientation, "antisense")
+    expect_equal(calibration$concordance, 0.99)
 })
 
 test_that("add_molecule_phase() never overwrites an existing EM-derived allele_on_x1", {
@@ -1157,10 +1549,13 @@ test_that("add_molecule_phase() never overwrites an existing EM-derived allele_o
     )
     testthat::local_mocked_bindings(
         extract_snp_calls = function(...) list(tallies = fake_tallies, reads = fake_reads),
+        .infer_bam_strand_orientation = function(bam_file, ...) {
+            list(orientation = "sense", n_ts_reads = 500L, concordance = 1, n_scanned = 5000L)
+        },
         .package = "snplet"
     )
 
-    result <- add_molecule_phase(fixture$obj, bam_files = c(donor0 = "fake.bam"))
+    result <- add_molecule_phase(fixture$obj, bam_files = c(lib_A = local_fake_bam()))
     donor_snp_info <- donor_snp_info(result)
 
     # Verify the pre-existing EM-derived phase for the anchor SNP is unchanged

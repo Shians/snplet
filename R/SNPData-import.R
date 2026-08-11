@@ -27,6 +27,11 @@
 #' @param clonotype_column Character scalar (default \code{"raw_clonotype_id"}).
 #'   Name of the column in \code{vdj_file} containing clonotype information
 #'   (only used if \code{vdj_file} is provided).
+#' @param bam_files Character vector, optional (default \code{NULL}, recording
+#'   no paths). The BAM file or files this cellSNP run was made from, stored
+#'   against \code{library_id} in \code{library_info} so that
+#'   \code{\link{add_molecule_phase}} can find them without being told again.
+#'   Paths are kept as given and only checked when read.
 #' @param library_id Character scalar, required. Name of the sequencing
 #'   library this cellSNP-lite run came from, stored on every cell. A 10x
 #'   barcode is unique only within its library, so \code{\link{merge_snpdata}}
@@ -87,7 +92,8 @@ import_cellsnp <- function(
     donor_map = NULL,
     barcode_column = "barcode",
     clonotype_column = "raw_clonotype_id",
-    library_id
+    library_id,
+    bam_files = NULL
 ) {
     # Validate gene_annotation columns
     required_gene_cols <- c("chrom", "start", "end", "gene_name")
@@ -234,6 +240,13 @@ import_cellsnp <- function(
         donor_snp_info = donor_snp_info,
         donor_map = donor_map
     )
+
+    # Import is when a BAM path is actually known -- this cellSNP run was made
+    # from it -- so recording it here means add_molecule_phase() never has to
+    # be told again, and the path survives every later merge.
+    if (!is.null(bam_files)) {
+        snp_data <- add_library_bams(snp_data, stats::setNames(list(bam_files), library_id))
+    }
 
     return(snp_data)
 }

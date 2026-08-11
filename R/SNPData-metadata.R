@@ -197,6 +197,7 @@ NULL
     }
     if (!is.null(barcode_info)) {
         result@barcode_info <- tibble::as_tibble(barcode_info)
+        result <- .resync_library_info(result, result@barcode_info)
     }
     if (!is.null(donor_info)) {
         result@donor_info <- tibble::as_tibble(donor_info)

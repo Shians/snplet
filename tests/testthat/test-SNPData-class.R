@@ -162,6 +162,172 @@ test_that("SNPData() preserves a caller-supplied library_id column", {
     expect_equal(barcode_info(snp_data)$library_id, c("lib_A", "lib_A"))
 })
 
+test_that("library_info() derives one row per labelled library", {
+    barcode_info_labelled <- test_barcode_info
+    barcode_info_labelled$library_id <- c("lib_A", "lib_A")
+
+    snp_data <- SNPData(
+        ref_count = test_ref_count,
+        alt_count = test_alt_count,
+        snp_info = test_snp_info,
+        barcode_info = barcode_info_labelled
+    )
+
+    # Verify the library table is derived from the cells rather than supplied
+    expect_equal(library_info(snp_data)$library_id, "lib_A")
+    # Check n_cells counts the cells that library actually contributed
+    expect_equal(library_info(snp_data)$n_cells, 2L)
+    # Ensure BAM paths start empty, to be recorded later
+    expect_equal(library_info(snp_data)$bam_files, list(character(0)))
+})
+
+test_that("library_info() is empty when no cell carries a library_id", {
+    snp_data <- create_test_snpdata()
+
+    # Verify an unlabelled object has no library rows rather than an NA row,
+    # since NA does not name a library
+    expect_equal(nrow(library_info(snp_data)), 0L)
+})
+
+test_that("add_library_bams() records paths against the named library", {
+    barcode_info_labelled <- test_barcode_info
+    barcode_info_labelled$library_id <- c("lib_A", "lib_A")
+    snp_data <- SNPData(
+        ref_count = test_ref_count,
+        alt_count = test_alt_count,
+        snp_info = test_snp_info,
+        barcode_info = barcode_info_labelled
+    )
+
+    result <- add_library_bams(snp_data, list(lib_A = c("a.bam", "b.bam")))
+
+    # Verify several BAM files can be recorded for one library, since a
+    # library's reads may be split across files
+    expect_equal(library_info(result)$bam_files[[1]], c("a.bam", "b.bam"))
+})
+
+test_that("add_library_bams() unions with paths already recorded", {
+    barcode_info_labelled <- test_barcode_info
+    barcode_info_labelled$library_id <- c("lib_A", "lib_A")
+    snp_data <- SNPData(
+        ref_count = test_ref_count,
+        alt_count = test_alt_count,
+        snp_info = test_snp_info,
+        barcode_info = barcode_info_labelled
+    )
+    snp_data <- add_library_bams(snp_data, c(lib_A = "a.bam"))
+
+    result <- add_library_bams(snp_data, c(lib_A = "b.bam"))
+
+    # Verify a second call adds to the record rather than replacing it, and
+    # does not duplicate a path already present
+    expect_equal(result %>% library_info() %>% dplyr::pull(bam_files) %>% .[[1]], c("a.bam", "b.bam"))
+    expect_equal(
+        add_library_bams(snp_data, c(lib_A = "a.bam")) %>%
+            library_info() %>%
+            dplyr::pull(bam_files) %>%
+            .[[1]],
+        "a.bam"
+    )
+})
+
+test_that("add_library_bams() replaces stored paths when overwrite is TRUE", {
+    barcode_info_labelled <- test_barcode_info
+    barcode_info_labelled$library_id <- c("lib_A", "lib_A")
+    snp_data <- SNPData(
+        ref_count = test_ref_count,
+        alt_count = test_alt_count,
+        snp_info = test_snp_info,
+        barcode_info = barcode_info_labelled
+    )
+    snp_data <- add_library_bams(snp_data, c(lib_A = "a.bam"))
+
+    result <- add_library_bams(snp_data, c(lib_A = "b.bam"), overwrite = TRUE)
+
+    # Confirm overwrite discards the previous record rather than unioning
+    expect_equal(library_info(result)$bam_files[[1]], "b.bam")
+})
+
+test_that("add_library_bams() errors on a library absent from the object", {
+    barcode_info_labelled <- test_barcode_info
+    barcode_info_labelled$library_id <- c("lib_A", "lib_A")
+    snp_data <- SNPData(
+        ref_count = test_ref_count,
+        alt_count = test_alt_count,
+        snp_info = test_snp_info,
+        barcode_info = barcode_info_labelled
+    )
+
+    # Verify a path cannot be filed against a library the object doesn't hold,
+    # which would otherwise sit unread and look like it had been recorded
+    expect_error(
+        add_library_bams(snp_data, c(lib_B = "b.bam")),
+        "not found in library_info"
+    )
+})
+
+test_that("recorded BAM paths survive subsetting", {
+    barcode_info_labelled <- test_barcode_info
+    barcode_info_labelled$library_id <- c("lib_A", "lib_A")
+    snp_data <- SNPData(
+        ref_count = test_ref_count,
+        alt_count = test_alt_count,
+        snp_info = test_snp_info,
+        barcode_info = barcode_info_labelled
+    )
+    snp_data <- add_library_bams(snp_data, c(lib_A = "a.bam"))
+
+    result <- snp_data[1, ]
+
+    # Verify subsetting rebuilds the object through the constructor without
+    # losing the paths, which derive-from-cells alone would silently drop
+    expect_equal(library_info(result)$bam_files[[1]], "a.bam")
+})
+
+test_that("a library that loses all of its cells loses its recorded paths", {
+    barcode_info_labelled <- test_barcode_info
+    barcode_info_labelled$library_id <- c("lib_A", "lib_B")
+    snp_data <- SNPData(
+        ref_count = test_ref_count,
+        alt_count = test_alt_count,
+        snp_info = test_snp_info,
+        barcode_info = barcode_info_labelled
+    )
+    snp_data <- add_library_bams(snp_data, c(lib_A = "a.bam", lib_B = "b.bam"))
+
+    result <- snp_data[, 1]
+
+    # Confirm library_info tracks the libraries actually present: lib_B has no
+    # cells left, so it has no row and its path goes with it
+    expect_equal(library_info(result)$library_id, "lib_A")
+    expect_equal(library_info(result)$bam_files[[1]], "a.bam")
+})
+
+test_that("barcode_info<- re-derives library_info when library_id changes", {
+    barcode_info_labelled <- test_barcode_info
+    barcode_info_labelled$library_id <- c("lib_A", "lib_A")
+    snp_data <- SNPData(
+        ref_count = test_ref_count,
+        alt_count = test_alt_count,
+        snp_info = test_snp_info,
+        barcode_info = barcode_info_labelled
+    )
+    snp_data <- add_library_bams(snp_data, c(lib_A = "a.bam"))
+
+    updated <- barcode_info(snp_data)
+    updated$library_id <- c("lib_A", "lib_B")
+    barcode_info(snp_data) <- updated
+
+    # Verify the new library gains a row rather than leaving library_info
+    # describing libraries the cells no longer belong to
+    expect_equal(library_info(snp_data)$library_id, c("lib_A", "lib_B"))
+    # Check the surviving library keeps its recorded path
+    expect_equal(library_info(snp_data)$bam_files[[1]], "a.bam")
+    # Ensure the newly named library starts with no paths rather than
+    # inheriting another library's
+    expect_equal(library_info(snp_data)$bam_files[[2]], character(0))
+})
+
 test_that("SNPData() coerces a non-character library_id to character", {
     barcode_info_numeric <- test_barcode_info
     barcode_info_numeric$library_id <- c(1L, 1L)

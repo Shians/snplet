@@ -292,6 +292,7 @@ merge_snpdata <- function(
         donor_snp_info = donor_snp_info_merged
     )
     merged_obj@zygosity_source <- zygosity_source_merged
+    merged_obj <- .merge_library_bams(merged_obj, x, y)
 
     logger::log_success(
         "Merged SNPData: {nrow(merged_obj)} SNPs x {ncol(merged_obj)} cells"

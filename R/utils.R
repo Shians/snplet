@@ -65,6 +65,7 @@ utils::globalVariables(c(
     "umi",
     "allele",
     "n_calls",
+    "n_files",
     "qname",
     "base",
     "base_quality",

@@ -23,6 +23,9 @@
 \alias{donor_info}
 \alias{donor_info,SNPData-method}
 \alias{get_donor_info}
+\alias{library_info}
+\alias{library_info,SNPData-method}
+\alias{get_library_info}
 \alias{donor_snp_info}
 \alias{donor_snp_info,SNPData-method}
 \alias{get_donor_snp_info}
@@ -104,6 +107,12 @@ donor_info(x)
 \S4method{donor_info}{SNPData}(x)
 
 get_donor_info(x)
+
+library_info(x)
+
+\S4method{library_info}{SNPData}(x)
+
+get_library_info(x)
 
 donor_snp_info(x, source = NULL)
 
@@ -245,6 +254,15 @@ a particular zygosity-calling source (keyed on \code{snp_id},
 (\code{xci_informative}, \code{allele_on_x1}, \code{xci_escape_fraction}) written by
 \code{\link{assign_xci}} for whichever source was active when it ran; rows are
 dropped along with their donor, same as \code{donor_info}.}
+
+\item{\code{library_info}}{A tibble with one row per sequencing library present in
+\code{barcode_info$library_id}, with an automatically computed
+\code{n_cells} column and a \code{bam_files} list-column holding the BAM
+path(s) that library's reads came from (empty unless recorded with
+\code{import_cellsnp(..., bam_files = )} or \code{\link{add_library_bams}}).
+Never supplied at construction: which libraries an object holds is derived
+from its cells. A library that loses all of its cells loses its row, and
+its recorded paths with it.}
 
 \item{\code{zygosity_source}}{Character string naming the \emph{active} zygosity-call source
 (a value of \code{donor_snp_info$zygosity_source}), or \code{NA_character_} if none

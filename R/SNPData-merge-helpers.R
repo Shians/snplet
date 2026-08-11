@@ -146,6 +146,23 @@
     tibble::as_tibble(merged)
 }
 
+# The merged object's library_info is already derived from its cells, so only
+# the BAM paths need carrying over. They are unioned rather than given to one
+# side: two cellSNP runs over the same library legitimately share a BAM, and a
+# library present in both objects has the same reads behind it either way. A
+# path that is genuinely wrong is caught where it is used, by
+# add_molecule_phase()'s existence and duplicate checks, rather than guessed at
+# here.
+.merge_library_bams <- function(merged, x, y) {
+    if (nrow(merged@library_info) == 0) {
+        return(merged)
+    }
+    from_x <- .lookup_bam_files(merged@library_info$library_id, library_info(x))
+    from_y <- .lookup_bam_files(merged@library_info$library_id, library_info(y))
+    merged@library_info$bam_files <- purrr::map2(from_x, from_y, union)
+    merged
+}
+
 .merge_donor_info <- function(x, y, donors_retained) {
     auto_cols <- c("n_cells")
     donor_info_x <- donor_info(x) %>% dplyr::select(-dplyr::any_of(auto_cols))

@@ -1511,6 +1511,46 @@ create_barcode_merge_test_data <- function() {
     list(x = x, y = y)
 }
 
+test_that("merge_snpdata() unions the BAM paths recorded for a shared library", {
+    data <- create_merge_test_data()
+    x <- add_library_bams(data$x, c(lib1 = "a.bam"))
+    y <- add_library_bams(data$y, c(lib1 = "b.bam"))
+
+    merged <- merge_snpdata(x, y)
+
+    # Verify both objects' paths survive: two cellSNP runs over one library can
+    # legitimately come from different BAM files, and neither is wrong
+    expect_equal(library_info(merged)$bam_files[[1]], c("a.bam", "b.bam"))
+})
+
+test_that("merge_snpdata() does not duplicate a BAM path recorded on both sides", {
+    data <- create_merge_test_data()
+    x <- add_library_bams(data$x, c(lib1 = "a.bam"))
+    y <- add_library_bams(data$y, c(lib1 = "a.bam"))
+
+    merged <- merge_snpdata(x, y)
+
+    # Confirm the union collapses the shared path, so a file cannot end up
+    # listed twice and have its reads counted twice at phasing
+    expect_equal(library_info(merged)$bam_files[[1]], "a.bam")
+})
+
+test_that("merge_snpdata() keeps each library's BAM paths with its own library", {
+    data <- create_merge_test_data()
+    x <- add_library_bams(data$x, c(lib1 = "a.bam"))
+    y <- data$y
+    barcode_info(y)$library_id <- "lib2"
+    y <- add_library_bams(y, c(lib2 = "b.bam"))
+
+    merged <- merge_snpdata(x, y, cell_join = "union")
+
+    # Verify paths are filed per library rather than pooled, so a donor's
+    # lookup can never reach another library's reads
+    stored <- library_info(merged)
+    expect_equal(stored$bam_files[[match("lib1", stored$library_id)]], "a.bam")
+    expect_equal(stored$bam_files[[match("lib2", stored$library_id)]], "b.bam")
+})
+
 test_that("merge_snpdata union/union retains all SNPs and cells", {
     data <- create_merge_test_data()
     x <- data$x

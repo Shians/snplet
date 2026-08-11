@@ -6,7 +6,7 @@
 \usage{
 add_molecule_phase(
   x,
-  bam_files,
+  bam_files = NULL,
   target_chrom = "chrX",
   min_mapq = 20L,
   min_baseq = 10L,
@@ -18,18 +18,25 @@ add_molecule_phase(
 \arguments{
 \item{x}{A SNPData object, required, that has already been fit by
 `assign_xci()` or `assign_xci_by_clonotype()` (see
-`.has_xci_diagnostics()`), with a `donor` column in `barcode_info`. Cells
-are matched to BAM records by `barcode` alone, which is unambiguous only
-within a single library, so every cell's `library_id` must be the same
-(or all unlabelled); subset a multi-library object with
-`filter_barcodes(x, library_id == ...)` and phase each library
-separately.}
+`.has_xci_diagnostics()`), with a `donor` column in `barcode_info`. Each
+donor's cells must all carry the same `library_id`, since a donor's BAM
+files are looked up by its library; a donor spanning two libraries is an
+error. `library_id` may instead be unset for every cell, in which case the
+object is treated as a single library, but a mix of labelled and
+unlabelled cells is an error.}
 
-\item{bam_files}{A named character vector or list, required,
-`donor = path`, one indexed BAM per donor. Names must match
-`barcode_info(x)$donor`. Any entry named `"doublet"` or `"unassigned"`
-is dropped with a warning, since neither is a real donor with its own
-genotype to phase against.}
+\item{bam_files}{A named character vector or list, optional (default
+`NULL`, taking the paths recorded in `library_info(x)$bam_files` by
+`import_cellsnp()` or `add_library_bams()`, and erroring if none were),
+`library_id = path(s)`, giving the indexed BAM file or files holding that
+library's reads. Names must match `barcode_info(x)$library_id`, or, for an
+object with no library labels at all, be a single entry of any name.
+Several files under one library are pooled per molecule, so a molecule
+split across them votes once with all of its reads; listing the same file
+twice is an error, as it would double every count it contributes.
+Libraries whose donors are all `"doublet"` or `"unassigned"` contribute
+nothing, since neither is a real donor with its own genotype to phase
+against.}
 
 \item{target_chrom}{Character scalar (default `"chrX"`, matching
 `assign_xci()`'s own restriction). Canonical chromosome to restrict
@@ -56,10 +63,14 @@ A SNPData object with `donor_snp_info` gaining the columns
   `haplotype_expression_by_molecule()` to resolve SNPs `assign_snp_genes()`
   flagged `ambiguous`), the per-donor `molecule_snp_alleles()` output
   already computed here) so `haplotype_expression_by_molecule()` does not
-  need to re-extract from the BAM.
+  need to re-extract from the BAM. A second attribute, `"bam_calibration"`,
+  records one row per BAM file scanned with columns `bam_file`,
+  `orientation` (`"sense"`/`"antisense"`/`NA` where it could not be
+  inferred), `n_ts_reads`, `concordance`, and `n_scanned`, so the strand
+  call applied to each file's molecules can be inspected after the fact.
 }
 \description{
-Extracts molecule-level allele calls from one BAM per donor, phases them
+Extracts molecule-level allele calls from each library's BAM files, phases them
 with `phase_snps()`, orients the resulting blocks to X1/X2 against
 `assign_xci()`'s already-stored EM phase (see `.orient_phase_blocks()`),
 and writes the result into `donor_snp_info`. Additive only:

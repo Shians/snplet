@@ -12,7 +12,8 @@ import_cellsnp(
   donor_map = NULL,
   barcode_column = "barcode",
   clonotype_column = "raw_clonotype_id",
-  library_id
+  library_id,
+  bam_files = NULL
 )
 }
 \arguments{
@@ -52,6 +53,12 @@ library this cellSNP-lite run came from, stored on every cell. A 10x
 barcode is unique only within its library, so \code{\link{merge_snpdata}}
 needs this label to tell a repeated cell from two different cells that
 happened to draw the same barcode.}
+
+\item{bam_files}{Character vector, optional (default \code{NULL}, recording
+no paths). The BAM file or files this cellSNP run was made from, stored
+against \code{library_id} in \code{library_info} so that
+\code{\link{add_molecule_phase}} can find them without being told again.
+Paths are kept as given and only checked when read.}
 }
 \value{
 A SNPData object
