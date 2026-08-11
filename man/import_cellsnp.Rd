@@ -7,12 +7,12 @@
 import_cellsnp(
   cellsnp_dir,
   gene_annotation,
+  library_id,
   vdj_file = NULL,
   vireo_folder = NULL,
   donor_map = NULL,
   barcode_column = "barcode",
   clonotype_column = "raw_clonotype_id",
-  library_id,
   bam_files = NULL
 )
 }
@@ -22,6 +22,12 @@ cellSNP-lite output files.}
 
 \item{gene_annotation}{A data.frame, required, with columns \code{chrom},
 \code{start}, \code{end}, \code{gene_name}. Gene annotations.}
+
+\item{library_id}{Character scalar, required. Name of the sequencing
+library this cellSNP-lite run came from, stored on every cell. A 10x
+barcode is unique only within its library, so \code{\link{merge_snpdata}}
+needs this label to tell a repeated cell from two different cells that
+happened to draw the same barcode.}
 
 \item{vdj_file}{Character scalar, optional (default \code{NULL}). Path to
 \code{filtered_contig_annotations.csv} from cellranger VDJ.}
@@ -47,12 +53,6 @@ of the column in \code{vdj_file} containing cell barcodes (only used if
 \item{clonotype_column}{Character scalar (default \code{"raw_clonotype_id"}).
 Name of the column in \code{vdj_file} containing clonotype information
 (only used if \code{vdj_file} is provided).}
-
-\item{library_id}{Character scalar, required. Name of the sequencing
-library this cellSNP-lite run came from, stored on every cell. A 10x
-barcode is unique only within its library, so \code{\link{merge_snpdata}}
-needs this label to tell a repeated cell from two different cells that
-happened to draw the same barcode.}
 
 \item{bam_files}{Character vector, optional (default \code{NULL}, recording
 no paths). The BAM file or files this cellSNP run was made from, stored

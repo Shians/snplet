@@ -7,6 +7,11 @@
 #'   cellSNP-lite output files.
 #' @param gene_annotation A data.frame, required, with columns \code{chrom},
 #'   \code{start}, \code{end}, \code{gene_name}. Gene annotations.
+#' @param library_id Character scalar, required. Name of the sequencing
+#'   library this cellSNP-lite run came from, stored on every cell. A 10x
+#'   barcode is unique only within its library, so \code{\link{merge_snpdata}}
+#'   needs this label to tell a repeated cell from two different cells that
+#'   happened to draw the same barcode.
 #' @param vdj_file Character scalar, optional (default \code{NULL}). Path to
 #'   \code{filtered_contig_annotations.csv} from cellranger VDJ.
 #' @param vireo_folder Character scalar, optional (default \code{NULL}).
@@ -32,11 +37,6 @@
 #'   against \code{library_id} in \code{library_info} so that
 #'   \code{\link{add_molecule_phase}} can find them without being told again.
 #'   Paths are kept as given and only checked when read.
-#' @param library_id Character scalar, required. Name of the sequencing
-#'   library this cellSNP-lite run came from, stored on every cell. A 10x
-#'   barcode is unique only within its library, so \code{\link{merge_snpdata}}
-#'   needs this label to tell a repeated cell from two different cells that
-#'   happened to draw the same barcode.
 #'
 #' @return A SNPData object
 #' @family import and export functions
@@ -87,12 +87,12 @@
 import_cellsnp <- function(
     cellsnp_dir,
     gene_annotation,
+    library_id,
     vdj_file = NULL,
     vireo_folder = NULL,
     donor_map = NULL,
     barcode_column = "barcode",
     clonotype_column = "raw_clonotype_id",
-    library_id,
     bam_files = NULL
 ) {
     # Validate gene_annotation columns
@@ -136,6 +136,13 @@ import_cellsnp <- function(
     if (!is.null(vdj_file)) {
         check_file(vdj_file)
     }
+    # Check BAM files if provided
+    if (!is.null(bam_files)) {
+        for (bam_file in bam_files) {
+            check_file(bam_file)
+        }
+    }
+
     # donor_ids.tsv is the point of pointing at a Vireo folder, so it must exist;
     # the genotype VCF is a bonus feature of that same run and is silently skipped
     # if the folder doesn't have one (e.g. an older or genotype-free Vireo run).
