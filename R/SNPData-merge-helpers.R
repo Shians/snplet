@@ -163,6 +163,16 @@
     merged
 }
 
+# The map is a property of the genome annotation, not of either object's cells,
+# so the two sides' rows are unioned and cut to the SNPs the merge retained. An
+# object whose annotation lacked strand contributes nothing, leaving the other's
+# rows intact rather than blanking them.
+.merge_snp_gene_map <- function(merged, x, y) {
+    combined <- dplyr::distinct(dplyr::bind_rows(snp_gene_map(x), snp_gene_map(y)))
+    merged@snp_gene_map <- combined[combined$snp_id %in% merged@snp_info$snp_id, , drop = FALSE]
+    merged
+}
+
 .merge_donor_info <- function(x, y, donors_retained) {
     auto_cols <- c("n_cells")
     donor_info_x <- donor_info(x) %>% dplyr::select(-dplyr::any_of(auto_cols))

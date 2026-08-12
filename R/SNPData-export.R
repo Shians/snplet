@@ -185,6 +185,9 @@ export_cellsnp <- function(snpdata, out_dir) {
     if (any(lengths(library_info(snpdata)$bam_files) > 0)) {
         dropped <- c(dropped, "library_info BAM paths")
     }
+    if (nrow(snp_gene_map(snpdata)) > 0) {
+        dropped <- c(dropped, "the SNP-to-gene map")
+    }
     if (length(dropped) > 0) {
         logger::log_warn(
             "The cellSNP format cannot carry {paste(dropped, collapse = ' and ')}; ",

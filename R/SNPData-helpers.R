@@ -212,6 +212,38 @@
     x
 }
 
+.empty_snp_gene_map <- function() {
+    tibble::tibble(
+        snp_id = character(0),
+        gene_name = character(0),
+        gene_strand = character(0),
+        ambiguous = logical(0)
+    )
+}
+
+# The map is keyed on snp_id alone, so it is carried over whole and then cut
+# down to the SNPs that survived, the same way donor_snp_info is. A row for a
+# dropped SNP is not merely redundant: it would let
+# haplotype_expression_by_molecule() count molecules at a SNP the object no
+# longer holds.
+.propagate_snp_gene_map <- function(object, from) {
+    if (!methods::.hasSlot(from, "snp_gene_map")) {
+        return(object)
+    }
+    kept <- from@snp_gene_map[from@snp_gene_map$snp_id %in% object@snp_info$snp_id, , drop = FALSE]
+    object@snp_gene_map <- tibble::as_tibble(kept)
+    object
+}
+
+.validate_snp_gene_map <- function(snp_gene_map) {
+    required <- c("snp_id", "gene_name", "gene_strand", "ambiguous")
+    missing_cols <- setdiff(required, colnames(snp_gene_map))
+    if (length(missing_cols) > 0) {
+        stop("snp_gene_map is missing required column(s): ", paste(missing_cols, collapse = ", "))
+    }
+    tibble::as_tibble(snp_gene_map)
+}
+
 .lookup_bam_files <- function(library_ids, library_info) {
     matched <- match(library_ids, library_info$library_id)
     purrr::map(matched, function(i) {

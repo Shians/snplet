@@ -501,26 +501,46 @@ setMethod(
 #' @param x A SNPData object, required, that has had XCI diagnostics stored
 #'   by \code{\link{assign_xci}} (or \code{\link{assign_xci_by_clonotype}})
 #'   and subsequently had read-backed phase added by
-#'   \code{\link{add_molecule_phase}}.
-#' @param molecule_calls A tibble, required, with columns \code{donor},
-#'   \code{barcode}, \code{umi}, \code{snp_id}, \code{allele},
-#'   \code{transcript_strand}: the union, across every donor, of
-#'   \code{\link{add_molecule_phase}}'s \code{"molecule_calls"} attribute (or
-#'   \code{\link{molecule_snp_alleles}} plus a \code{transcript_strand}
-#'   column from \code{\link{molecule_read_strand}}, bind rows and add a
-#'   \code{donor} column).
-#' @param snp_gene_map A tibble, required, with columns \code{snp_id},
-#'   \code{gene_name}, \code{gene_strand}, \code{ambiguous}, as returned by
-#'   \code{\link{assign_snp_genes}}. A SNP with \code{ambiguous = TRUE}
-#'   overlaps more than one gene and is only counted towards a given
-#'   candidate's \code{gene_name} for molecules whose own
-#'   \code{transcript_strand} matches that candidate's \code{gene_strand};
-#'   molecules with no strand information (\code{NA}) or the wrong strand are
-#'   dropped for that SNP rather than guessed. \code{ambiguous = FALSE} rows
-#'   apply regardless of strand.
+#'   \code{\link{add_molecule_phase}}, which is also where the per-molecule
+#'   allele calls come from (see \sQuote{Where the molecule calls come from}).
 #' @param escape_threshold Numeric, in \code{[0, 1]} (default 0.1).
 #'   Inactive-haplotype fraction at or above which a group is flagged as
 #'   escaping.
+#'
+#' @section Where the inputs come from:
+#' Beyond \code{x}, there is nothing to supply. Both inputs this function needs
+#' are already on the object:
+#'
+#' \describe{
+#'   \item{The per-molecule allele calls}{Read from the
+#'     \code{"molecule_calls"} attribute \code{\link{add_molecule_phase}} left
+#'     there when it extracted them from the BAM files. They are an attribute
+#'     rather than a slot because they are BAM-derived working data keyed by
+#'     molecule, not part of the object's SNP-by-cell counts, and so are lost
+#'     by operations that rebuild the object: pass the object
+#'     \code{add_molecule_phase()} returned, and subset \emph{before} that call
+#'     rather than after.}
+#'   \item{The SNP-to-gene map}{Read from \code{\link{snp_gene_map}}, built by
+#'     \code{\link{import_cellsnp}} from the gene annotation it was given, and
+#'     carried through subsetting and merging with its SNPs. It is distinct
+#'     from \code{snp_info$gene_name}, which comma-joins overlapping genes into
+#'     one label: attributing a molecule at a SNP overlapping two genes needs
+#'     each candidate as its own row with its strand. An annotation without a
+#'     \code{strand} column cannot supply that, so an object imported with one
+#'     has an empty map; \code{snp_gene_map(x) <- assign_snp_genes(snp_info(x),
+#'     gene_anno)} fills it in without re-importing.}
+#' }
+#'
+#' A missing input is an error naming the step that produces it, rather than a
+#' silently empty result.
+#'
+#' @section How the map resolves multi-gene SNPs:
+#' A SNP that \code{\link{assign_snp_genes}} flagged \code{ambiguous} overlaps
+#' more than one gene, and is only counted towards a given candidate's
+#' \code{gene_name} for molecules whose own \code{transcript_strand} matches
+#' that candidate's \code{gene_strand}; molecules with no strand information
+#' (\code{NA}) or the wrong strand are dropped for that SNP rather than
+#' guessed. Unambiguous rows apply regardless of strand.
 #'
 #' @return A tibble with one row per (\code{gene_name}, \code{donor},
 #'   \code{active_x}) triple, with columns \code{donor}, \code{gene_name},
@@ -538,12 +558,18 @@ setMethod(
 #' @examples
 #' \dontrun{
 #' snp_data <- assign_xci(snp_data)
-#' snp_data <- add_molecule_phase(snp_data, bam_files = c(donor0 = "donor0.bam"))
-#' hap <- haplotype_expression_by_molecule(snp_data, molecule_calls, snp_gene_map)
+#' # the molecule calls ride along on snp_data from here on
+#' snp_data <- add_molecule_phase(snp_data, bam_files = c(lib1 = "lib1.bam"))
+#'
+#' hap <- haplotype_expression_by_molecule(snp_data)
+#'
+#' # Only needed if the annotation given to import_cellsnp() had no strand
+#' # column, leaving snp_gene_map(snp_data) empty
+#' snp_gene_map(snp_data) <- assign_snp_genes(snp_info(snp_data), gene_anno)
 #' }
 setGeneric(
     "haplotype_expression_by_molecule",
-    function(x, molecule_calls, snp_gene_map, escape_threshold = 0.1) {
+    function(x, escape_threshold = 0.1) {
         standardGeneric("haplotype_expression_by_molecule")
     }
 )
@@ -553,7 +579,7 @@ setGeneric(
 setMethod(
     "haplotype_expression_by_molecule",
     signature(x = "SNPData"),
-    function(x, molecule_calls, snp_gene_map, escape_threshold = 0.1) {
+    function(x, escape_threshold = 0.1) {
         barcode_info <- barcode_info(x)
         donor_snp_info <- donor_snp_info(x)
 
@@ -563,15 +589,35 @@ setMethod(
         if (!all(c("phase_block", "allele_on_x1") %in% colnames(donor_snp_info))) {
             stop("No stored molecule phase found. Run add_molecule_phase(x) first.")
         }
+        # The molecule calls are BAM-derived working data that add_molecule_phase()
+        # already extracted, so they are taken from the object rather than asked
+        # for: there is no other way to derive them that would agree with the
+        # phase blocks stored alongside. Being an attribute, they do not survive
+        # operations that rebuild the object, hence a named error rather than an
+        # empty result.
+        molecule_calls <- attr(x, "molecule_calls")
+        if (is.null(molecule_calls)) {
+            stop(
+                "This object carries no molecule calls; they are attached by add_molecule_phase(x). ",
+                "Attributes are lost by operations that rebuild the object, so re-run it, ",
+                "or subset before it rather than after."
+            )
+        }
         required_call_cols <- c("donor", "barcode", "umi", "snp_id", "allele", "transcript_strand")
         missing_call_cols <- setdiff(required_call_cols, colnames(molecule_calls))
         if (length(missing_call_cols) > 0) {
             stop("molecule_calls is missing required column(s): ", paste(missing_call_cols, collapse = ", "))
         }
-        required_gene_cols <- c("snp_id", "gene_name", "gene_strand", "ambiguous")
-        missing_gene_cols <- setdiff(required_gene_cols, colnames(snp_gene_map))
-        if (length(missing_gene_cols) > 0) {
-            stop("snp_gene_map is missing required column(s): ", paste(missing_gene_cols, collapse = ", "))
+        # Built at import from the gene annotation, where strand is available;
+        # snp_info$gene_name cannot stand in for it, being a comma-joined label
+        # with no strand and no per-candidate rows.
+        snp_gene_map <- snp_gene_map(x)
+        if (nrow(snp_gene_map) == 0) {
+            stop(
+                "This object carries no SNP-to-gene map. It is built by import_cellsnp() from a gene ",
+                "annotation with a strand column; set it on an existing object with ",
+                "snp_gene_map(x) <- assign_snp_genes(snp_info(x), gene_anno)."
+            )
         }
 
         phase <- donor_snp_info %>%

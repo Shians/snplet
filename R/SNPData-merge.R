@@ -293,6 +293,7 @@ merge_snpdata <- function(
     )
     merged_obj@zygosity_source <- zygosity_source_merged
     merged_obj <- .merge_library_bams(merged_obj, x, y)
+    merged_obj <- .merge_snp_gene_map(merged_obj, x, y)
 
     logger::log_success(
         "Merged SNPData: {nrow(merged_obj)} SNPs x {ncol(merged_obj)} cells"

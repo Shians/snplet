@@ -236,6 +236,21 @@ import_cellsnp <- function(
         NULL
     }
 
+    # Import is the one point where the gene annotation is in hand, so the
+    # molecule-level SNP-to-gene map is derived here rather than asked for again
+    # by haplotype_expression_by_molecule(). It needs strand, which the display
+    # labels in snp_info$gene_name do not, so an unstranded annotation leaves the
+    # map empty; assign_snp_genes() can supply it later via snp_gene_map<-().
+    snp_gene_map <- if ("strand" %in% colnames(gene_annotation)) {
+        assign_snp_genes(snp_info, gene_annotation)
+    } else {
+        logger::log_info(
+            "gene_annotation has no strand column, so no SNP-to-gene map was built; ",
+            "haplotype_expression_by_molecule() needs one, set later with snp_gene_map(x) <- ."
+        )
+        NULL
+    }
+
     # Create SNPData object
     logger::log_info("Creating SNPData object with {nrow(barcode_info)} barcodes and {nrow(snp_info)} SNPs")
     snp_data <- SNPData(
@@ -245,7 +260,8 @@ import_cellsnp <- function(
         snp_info = snp_info,
         barcode_info = barcode_info,
         donor_snp_info = donor_snp_info,
-        donor_map = donor_map
+        donor_map = donor_map,
+        snp_gene_map = snp_gene_map
     )
 
     # Import is when a BAM path is actually known -- this cellSNP run was made

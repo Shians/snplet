@@ -5,43 +5,16 @@
 \alias{haplotype_expression_by_molecule,SNPData-method}
 \title{Phased active/inactive haplotype expression per gene, pooling molecules across SNPs}
 \usage{
-haplotype_expression_by_molecule(
-  x,
-  molecule_calls,
-  snp_gene_map,
-  escape_threshold = 0.1
-)
+haplotype_expression_by_molecule(x, escape_threshold = 0.1)
 
-\S4method{haplotype_expression_by_molecule}{SNPData}(
-  x,
-  molecule_calls,
-  snp_gene_map,
-  escape_threshold = 0.1
-)
+\S4method{haplotype_expression_by_molecule}{SNPData}(x, escape_threshold = 0.1)
 }
 \arguments{
 \item{x}{A SNPData object, required, that has had XCI diagnostics stored
 by \code{\link{assign_xci}} (or \code{\link{assign_xci_by_clonotype}})
 and subsequently had read-backed phase added by
-\code{\link{add_molecule_phase}}.}
-
-\item{molecule_calls}{A tibble, required, with columns \code{donor},
-\code{barcode}, \code{umi}, \code{snp_id}, \code{allele},
-\code{transcript_strand}: the union, across every donor, of
-\code{\link{add_molecule_phase}}'s \code{"molecule_calls"} attribute (or
-\code{\link{molecule_snp_alleles}} plus a \code{transcript_strand}
-column from \code{\link{molecule_read_strand}}, bind rows and add a
-\code{donor} column).}
-
-\item{snp_gene_map}{A tibble, required, with columns \code{snp_id},
-\code{gene_name}, \code{gene_strand}, \code{ambiguous}, as returned by
-\code{\link{assign_snp_genes}}. A SNP with \code{ambiguous = TRUE}
-overlaps more than one gene and is only counted towards a given
-candidate's \code{gene_name} for molecules whose own
-\code{transcript_strand} matches that candidate's \code{gene_strand};
-molecules with no strand information (\code{NA}) or the wrong strand are
-dropped for that SNP rather than guessed. \code{ambiguous = FALSE} rows
-apply regardless of strand.}
+\code{\link{add_molecule_phase}}, which is also where the per-molecule
+allele calls come from (see \sQuote{Where the molecule calls come from}).}
 
 \item{escape_threshold}{Numeric, in \code{[0, 1]} (default 0.1).
 Inactive-haplotype fraction at or above which a group is flagged as
@@ -91,6 +64,45 @@ to single-SNP genes. Only a single-SNP gene with \emph{no} EM-derived
 phase at all has no way to be oriented, and is left to
 \code{haplotype_expression}, which already handles it correctly.
 }
+\section{Where the inputs come from}{
+
+Beyond \code{x}, there is nothing to supply. Both inputs this function needs
+are already on the object:
+
+\describe{
+  \item{The per-molecule allele calls}{Read from the
+    \code{"molecule_calls"} attribute \code{\link{add_molecule_phase}} left
+    there when it extracted them from the BAM files. They are an attribute
+    rather than a slot because they are BAM-derived working data keyed by
+    molecule, not part of the object's SNP-by-cell counts, and so are lost
+    by operations that rebuild the object: pass the object
+    \code{add_molecule_phase()} returned, and subset \emph{before} that call
+    rather than after.}
+  \item{The SNP-to-gene map}{Read from \code{\link{snp_gene_map}}, built by
+    \code{\link{import_cellsnp}} from the gene annotation it was given, and
+    carried through subsetting and merging with its SNPs. It is distinct
+    from \code{snp_info$gene_name}, which comma-joins overlapping genes into
+    one label: attributing a molecule at a SNP overlapping two genes needs
+    each candidate as its own row with its strand. An annotation without a
+    \code{strand} column cannot supply that, so an object imported with one
+    has an empty map; \code{snp_gene_map(x) <- assign_snp_genes(snp_info(x),
+    gene_anno)} fills it in without re-importing.}
+}
+
+A missing input is an error naming the step that produces it, rather than a
+silently empty result.
+}
+
+\section{How the map resolves multi-gene SNPs}{
+
+A SNP that \code{\link{assign_snp_genes}} flagged \code{ambiguous} overlaps
+more than one gene, and is only counted towards a given candidate's
+\code{gene_name} for molecules whose own \code{transcript_strand} matches
+that candidate's \code{gene_strand}; molecules with no strand information
+(\code{NA}) or the wrong strand are dropped for that SNP rather than
+guessed. Unambiguous rows apply regardless of strand.
+}
+
 \section{Phase is inferred from expression, not genotyped}{
 
 snplet infers phase from scRNA-seq allelic counts alone: no DNA-based
@@ -132,8 +144,14 @@ within a gene without escaping this constraint.
 \examples{
 \dontrun{
 snp_data <- assign_xci(snp_data)
-snp_data <- add_molecule_phase(snp_data, bam_files = c(donor0 = "donor0.bam"))
-hap <- haplotype_expression_by_molecule(snp_data, molecule_calls, snp_gene_map)
+# the molecule calls ride along on snp_data from here on
+snp_data <- add_molecule_phase(snp_data, bam_files = c(lib1 = "lib1.bam"))
+
+hap <- haplotype_expression_by_molecule(snp_data)
+
+# Only needed if the annotation given to import_cellsnp() had no strand
+# column, leaving snp_gene_map(snp_data) empty
+snp_gene_map(snp_data) <- assign_snp_genes(snp_info(snp_data), gene_anno)
 }
 }
 \seealso{
