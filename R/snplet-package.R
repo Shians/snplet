@@ -9,7 +9,7 @@
 #' @importFrom scales percent label_comma label_number cut_short_scale
 #' @importFrom logger log_info log_success log_warn
 #' @importFrom glue glue
-#' @importFrom stringr str_remove str_to_title str_detect str_escape str_split_fixed
+#' @importFrom stringr str_remove str_to_title str_detect str_split_fixed
 #' @importFrom methods as is new setClass setGeneric setMethod show
 #' @importFrom BiocGenerics nrow ncol rownames colnames updateObject start end
 #' @importFrom magrittr %>%
@@ -23,15 +23,12 @@
 #' @importFrom plyranges as_granges join_overlap_left
 #' @importFrom fs path
 #' @importFrom furrr future_map future_map2
-#' @importFrom future nbrOfWorkers
 #' @importFrom purrr map map2 map2_dbl map_dbl
 #' @importFrom R.utils gzip
 #' @importFrom grid unit
 #' @importFrom VGAM dbetabinom pbetabinom
 #' @importFrom stats median quantile p.adjust pbeta setNames cor as.dist hclust cutree dist mad na.omit
 #' @importFrom utils head combn write.table
-#' @importFrom DelayedArray colsum
-#' @importFrom mclust Mclust predict.Mclust
 #' @importFrom Rsamtools ScanBamParam scanBamFlag
 #' @importFrom GenomicAlignments readGAlignments cigar cigarRangesAlongReferenceSpace
 #' @importFrom GenomicAlignments cigarRangesAlongQuerySpace
