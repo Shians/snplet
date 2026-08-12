@@ -5,9 +5,17 @@
 \alias{haplotype_expression_by_molecule,SNPData-method}
 \title{Phased active/inactive haplotype expression per gene, pooling molecules across SNPs}
 \usage{
-haplotype_expression_by_molecule(x, escape_threshold = 0.1)
+haplotype_expression_by_molecule(
+  x,
+  escape_threshold = 0.1,
+  by_active_x = FALSE
+)
 
-\S4method{haplotype_expression_by_molecule}{SNPData}(x, escape_threshold = 0.1)
+\S4method{haplotype_expression_by_molecule}{SNPData}(
+  x,
+  escape_threshold = 0.1,
+  by_active_x = FALSE
+)
 }
 \arguments{
 \item{x}{A SNPData object, required, that has had XCI diagnostics stored
@@ -17,19 +25,29 @@ and subsequently had read-backed phase added by
 allele calls come from (see \sQuote{Where the molecule calls come from}).}
 
 \item{escape_threshold}{Numeric, in \code{[0, 1]} (default 0.1).
-Inactive-haplotype fraction at or above which a group is flagged as
+Inactive-haplotype fraction at or above which a row is flagged as
 escaping.}
+
+\item{by_active_x}{Logical (default \code{FALSE}, i.e. the X1-active and
+X2-active cell groups pooled into one row per gene, matching
+\code{\link{haplotype_expression}} and the grain
+\code{\link{test_escape}} tests at). If \code{TRUE}, report the two
+groups on separate rows, adding \code{active_x}.}
 }
 \value{
-A tibble with one row per (\code{gene_name}, \code{donor},
-  \code{active_x}) triple, with columns \code{donor}, \code{gene_name},
-  \code{active_x} (the expressed X, "X1" or "X2"), \code{active_count},
+A tibble with one row per (\code{donor}, \code{gene_name}) pair,
+  with columns \code{donor}, \code{gene_name}, \code{active_count},
   \code{inactive_count}, \code{coverage}, \code{escape_fraction}
   (\code{inactive_count / coverage}), \code{escapes}
   (\code{escape_fraction >= escape_threshold}), \code{phase_block_used}
   (the phase block whose molecules were pooled), \code{dominant_molecules}
   (molecules backing the pooled block), and \code{n_stranded_molecules}
   (molecules of the same gene in a different, unpooled block).
+
+  With \code{by_active_x = TRUE} each row is split into two, one per active-X
+  group, with \code{active_x} (the expressed X, "X1" or "X2") added. A group
+  with no molecules is still reported, as coverage zero rather than being
+  absent.
 }
 \description{
 Counts each molecule once per gene regardless of how many of the gene's

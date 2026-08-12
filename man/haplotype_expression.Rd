@@ -10,6 +10,7 @@ haplotype_expression(
   escape_threshold = 0.1,
   xci_informative_only = FALSE,
   by_snp = FALSE,
+  by_active_x = FALSE,
   inverted_phase_genes = "XIST"
 )
 
@@ -18,6 +19,7 @@ haplotype_expression(
   escape_threshold = 0.1,
   xci_informative_only = FALSE,
   by_snp = FALSE,
+  by_active_x = FALSE,
   inverted_phase_genes = "XIST"
 )
 }
@@ -26,8 +28,9 @@ haplotype_expression(
 \code{\link{assign_xci}} or \code{\link{assign_xci_by_clonotype}}.}
 
 \item{escape_threshold}{Numeric, in \code{[0, 1]} (default 0.1).
-Inactive-haplotype fraction at or above which a group is flagged as
-escaping in \code{escapes}.}
+Inactive-haplotype fraction at or above which a row is flagged as
+escaping in \code{escapes}, applied to the pooled \code{escape_fraction}
+unless \code{by_active_x = TRUE}.}
 
 \item{xci_informative_only}{Logical (default \code{FALSE}, reporting every
 SNP with a stored phase). If \code{TRUE}, restrict to SNPs that drove
@@ -40,6 +43,13 @@ requires gene annotation). If \code{TRUE}, report every phased SNP
 rather than selecting one representative per gene, changing what each
 output row represents (see Value).}
 
+\item{by_active_x}{Logical (default \code{FALSE}, i.e. the X1-active and
+X2-active cell groups pooled into one row). If \code{TRUE}, report the
+two groups on separate rows, adding \code{active_x},
+\code{dominant_allele} and \code{phase_contradiction}. Independent of
+\code{by_snp}: it changes how the cells are split, not whether rows are
+SNPs or genes.}
+
 \item{inverted_phase_genes}{Character vector (default \code{"XIST"}).
 Gene names known to be transcribed predominantly from the
 \emph{inactive} X, whose stored phase is therefore expected to be
@@ -51,37 +61,44 @@ measurement, and the default is deliberately minimal because \code{XIST}
 is the only such gene well established in human somatic cells.}
 }
 \value{
-A tibble with one row per donor, gene, and active-X group (two rows
-  per gene) with columns \code{donor} (when the object carries donor
-  assignments), \code{snp_id} (the selected representative),
-  \code{gene_name}, \code{active_x} (the expressed X, "X1" or "X2"),
-  \code{n_cells} (cells in the group), \code{active_count},
-  \code{inactive_count}, \code{coverage}, \code{dominant_allele} (the physical
-  allele, "REF"/"ALT", with more reads in this group; \code{NA} when
-  uncovered), \code{escape_fraction} (\code{inactive_count / coverage}), and
-  \code{escapes} (\code{escape_fraction >= escape_threshold}), and
+A tibble with one row per donor and gene, with columns \code{donor}
+  (when the object carries donor assignments), \code{snp_id} (the selected
+  representative), \code{gene_name}, \code{n_cells} (cells contributing),
+  \code{active_count}, \code{inactive_count}, \code{coverage},
+  \code{escape_fraction} (\code{inactive_count / coverage}), \code{escapes}
+  (\code{escape_fraction >= escape_threshold}) and
   \code{phase_likely_inverted} (\code{TRUE} when \code{gene_name} is in
   \code{inverted_phase_genes}). SNPs with no gene annotation (\code{NA}
-  \code{gene_name}) are excluded, as are genes with no qualifying SNP.
+  \code{gene_name}) are excluded, as are genes with no qualifying SNP. This
+  is the grain \code{\link{test_escape}} expects, so the result can be
+  passed to it directly.
 
-  With \code{by_snp = TRUE} each row instead represents one donor, phased
-  SNP, and active-X group, and two further columns are reported:
+  With \code{by_snp = TRUE} each row instead represents one donor and phased
+  SNP, with \code{same_allele_dominant} added (per SNP; \code{TRUE} when
+  both covered groups favour the same physical allele).
+
+  With \code{by_active_x = TRUE} each row is split in two, one per active-X
+  group, and three further columns are reported: \code{active_x} (the
+  expressed X, "X1" or "X2"), \code{dominant_allele} (the physical allele,
+  "REF"/"ALT", with more reads in this group; \code{NA} when uncovered) and
   \code{phase_contradiction} (per group; \code{TRUE} when
   \code{escape_fraction > 0.5}, i.e. the "inactive" haplotype outnumbers the
-  "active" one, see Details) and \code{same_allele_dominant} (per SNP;
-  \code{TRUE} when both covered groups favour the same physical allele). No
-  group is dropped for contradicting the phase; both flags are reported for
-  you to act on. When the object carries no gene annotation,
-  \code{gene_name} and \code{phase_likely_inverted} are both omitted.
+  "active" one, see Details). No group is dropped for contradicting the
+  phase; the flags are reported for you to act on.
+
+  When the object carries no gene annotation, \code{gene_name} and
+  \code{phase_likely_inverted} are both omitted.
 }
 \description{
 Splits phased het SNPs' ALT/REF counts into active- and inactive-haplotype
 reads using the per-SNP phase that \code{\link{assign_xci}} assigned,
 computed separately within the X1-active and X2-active cell groups it
 called, then reports one selected representative SNP per donor and gene (see
-\sQuote{Gene-level representative selection}). \code{by_snp = TRUE} reports every SNP instead,
-useful for working out why a gene is missing from the gene-level output, or
-for double-checking one whose result looks wrong.
+\sQuote{Gene-level representative selection}), with the two groups pooled
+into a single row. \code{by_snp = TRUE} reports every SNP instead, useful
+for working out why a gene is missing from the gene-level output, or for
+double-checking one whose result looks wrong; \code{by_active_x = TRUE} keeps
+the two active-X groups on separate rows.
 }
 \details{
 Unlike a per-group \code{pmin}/\code{pmax} on raw counts, the
@@ -97,12 +114,26 @@ escaping, unless \code{xci_informative_only = TRUE}.
 
 For each SNP and donor, the stored phase assigns REF or ALT to X1 (see
 \sQuote{Phase is inferred from expression, not genotyped}); the other
-allele is X2. \code{active_x} names the expected-active haplotype (X1 in
-the X1-active group, X2 in the X2-active group), and counts are split into
-\code{active_count}/\code{inactive_count} accordingly.
+allele is X2. Within each active-X group the expected-active haplotype (X1
+in the X1-active group, X2 in the X2-active group) determines how counts are
+split into \code{active_count}/\code{inactive_count}. The two groups are
+then summed into one row per gene unless \code{by_active_x = TRUE}: they are
+disjoint sets of cells, so the sum double-counts nothing, and the pooled
+\code{escape_fraction} is better powered than either group's own. Pooling
+also matches the grain \code{\link{test_escape}} tests at and that
+\code{donor_info(x)$xci_rho} is fitted at, so the default output can be
+tested directly.
 
-\code{same_allele_dominant} is \code{TRUE} when the same physical allele
-dominates in both groups, flagging escape or XCI-independent imbalance
+Columns meaningful only within a single group are dropped when pooling:
+\code{active_x}, \code{dominant_allele} (which flips between the groups by
+construction) and \code{phase_contradiction}. Pass \code{by_active_x = TRUE}
+to inspect them, or to compare the two cell populations against each other.
+
+\code{same_allele_dominant} summarises both groups rather than describing
+one, so it survives pooling and is reported under \code{by_snp = TRUE}
+whichever way \code{by_active_x} is set. It is \code{TRUE} when the same
+physical allele dominates in both groups, flagging escape or
+XCI-independent imbalance
 rather than hiding it. Under canonical XCI the dominant allele should flip
 between groups (X1's allele in X1-active cells, X2's in X2-active cells),
 so a failure to flip is what triggers the flag. \code{escape_fraction}
@@ -271,6 +302,10 @@ hap_by_snp <- haplotype_expression(snp_data, by_snp = TRUE)
 
 # SNPs whose dominant allele failed to flip between the active-X groups
 dplyr::filter(hap_by_snp, same_allele_dominant)
+
+# The X1-active and X2-active cell populations kept apart, for comparing
+# them against each other rather than testing the gene
+hap_by_active_x <- haplotype_expression(snp_data, by_active_x = TRUE)
 
 # Restrict to the narrower set that drove active-X calling
 hap_informative <- haplotype_expression(snp_data, xci_informative_only = TRUE)

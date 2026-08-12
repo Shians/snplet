@@ -157,7 +157,7 @@ test_that("haplotype_expression_by_molecule() counts a multi-SNP molecule once, 
         "+"
     )
 
-    result <- haplotype_expression_by_molecule(with_molecule_calls(fixture$obj, molecule_calls))
+    result <- haplotype_expression_by_molecule(with_molecule_calls(fixture$obj, molecule_calls), by_active_x = TRUE)
     x1_row <- dplyr::filter(result, gene_name == "GENE1", active_x == "X1")
 
     # Verify one molecule spanning two SNPs of the dominant block contributes
@@ -255,7 +255,7 @@ test_that("haplotype_expression_by_molecule() drops a molecule with a tied haplo
     expect_equal(sum(result$coverage), 0)
 })
 
-test_that("haplotype_expression_by_molecule() reports both active_x groups even with zero coverage", {
+test_that("haplotype_expression_by_molecule() reports both active_x groups under by_active_x", {
     fixture <- make_molecule_hap_fixture()
     snpA <- fixture$snp_ids[["snpA"]]
     snpB <- fixture$snp_ids[["snpB"]]
@@ -282,7 +282,10 @@ test_that("haplotype_expression_by_molecule() reports both active_x groups even 
         "+"
     )
 
-    result <- haplotype_expression_by_molecule(with_molecule_calls(fixture$obj, molecule_calls))
+    result <- haplotype_expression_by_molecule(
+        with_molecule_calls(fixture$obj, molecule_calls),
+        by_active_x = TRUE
+    )
 
     # Verify both groups appear even though one has no supporting molecules
     expect_equal(nrow(result), 2)
@@ -290,6 +293,12 @@ test_that("haplotype_expression_by_molecule() reports both active_x groups even 
     # Check the zero-coverage group reads as coverage zero, not NA or missing
     expect_equal(x2_row$coverage, 0)
     expect_true(is.na(x2_row$escape_fraction))
+
+    # Confirm the default pools that empty group into the gene's single row
+    # rather than leaving a half-covered row to be tested on its own
+    pooled <- haplotype_expression_by_molecule(with_molecule_calls(fixture$obj, molecule_calls))
+    expect_equal(nrow(pooled), 1L)
+    expect_equal(pooled$coverage, sum(result$coverage))
 })
 
 test_that("haplotype_expression_by_molecule() errors on missing molecule_calls columns", {
@@ -425,7 +434,7 @@ test_that("haplotype_expression_by_molecule() attributes an ambiguous SNP by mol
         "-"
     )
 
-    result <- haplotype_expression_by_molecule(with_molecule_calls(fixture$obj, molecule_calls))
+    result <- haplotype_expression_by_molecule(with_molecule_calls(fixture$obj, molecule_calls), by_active_x = TRUE)
 
     # Verify each molecule is attributed only to the gene matching its own strand
     plus_row <- dplyr::filter(result, gene_name == "GENE_PLUS", active_x == "X1")

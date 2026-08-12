@@ -105,7 +105,8 @@ utils::globalVariables(c(
     "snps",
     "strand",
     "transcript_strand",
-    "xci_median_pi_g"
+    "xci_median_pi_g",
+    "n_cells"
 ))
 
 percentile_summary <- function(x, percentiles = c(0.1, 0.25, 0.75, 0.9, 0.95, 0.99)) {
