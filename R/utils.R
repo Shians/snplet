@@ -291,12 +291,30 @@ betabinom_test <- function(x, n, p, rho, alternative = c("greater", "less")) {
         stop("rho must be in [0, 1)")
     }
 
-    if (alternative == "greater") {
-        p_val <- 1 - VGAM::pbetabinom(x - 1, n, p, rho)
-        p_val[x == 0] <- 1
-    } else {
-        p_val <- VGAM::pbetabinom(x, n, p, rho)
-        p_val[x == n] <- 1
+    # The boundary quantile is pinned to 1 rather than evaluated: P(X >= 0) and
+    # P(X <= n) are 1 by definition, and passing the out-of-support quantile
+    # (x - 1 = -1, or x = n for "less") to VGAM makes it warn from its own
+    # internal indexing. Recycle first so the mask lines up with the result.
+    arg_lengths <- lengths(list(x, n, p, rho))
+    # R's own recycling rule: any zero-length argument makes the result empty,
+    # rather than the longest argument's length.
+    len <- if (any(arg_lengths == 0)) 0L else max(arg_lengths)
+    x <- rep_len(x, len)
+    n <- rep_len(n, len)
+    p <- rep_len(p, len)
+    rho <- rep_len(rho, len)
+
+    # An NA count is not on the boundary; it falls through to VGAM and comes
+    # back NA, as it did before this branch existed.
+    at_boundary <- if (alternative == "greater") x == 0 else x == n
+    boundary <- !is.na(at_boundary) & at_boundary
+
+    p_val <- rep(1, len)
+    if (any(!boundary)) {
+        keep <- !boundary
+        quantile <- if (alternative == "greater") x[keep] - 1 else x[keep]
+        cdf <- VGAM::pbetabinom(quantile, n[keep], p[keep], rho[keep])
+        p_val[keep] <- if (alternative == "greater") 1 - cdf else cdf
     }
 
     # VGAM::pbetabinom can overshoot 1 by floating-point error (observed up to
