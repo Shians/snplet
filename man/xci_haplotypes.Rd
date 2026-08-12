@@ -80,6 +80,7 @@ Other X-chromosome inactivation functions:
 \code{\link[=haplotype_expression]{haplotype_expression()}},
 \code{\link[=haplotype_expression_by_molecule]{haplotype_expression_by_molecule()}},
 \code{\link[=plot_xci_heatmap]{plot_xci_heatmap()}},
+\code{\link[=test_escape]{test_escape()}},
 \code{\link[=xci_assignments]{xci_assignments()}}
 }
 \concept{X-chromosome inactivation functions}

@@ -187,10 +187,10 @@ test_that("test_escape produces different p-values for different null hypotheses
 })
 
 test_that("test_escape throws error when input is a string", {
-    # Verify error for string input
+    # Verify no method dispatches for a type that is neither counts nor an object
     expect_error(
         test_escape("not_a_dataframe"),
-        "is\\(x, \"data\\.frame\"\\) is not TRUE"
+        "unable to find an inherited method"
     )
 })
 
@@ -198,7 +198,7 @@ test_that("test_escape throws error when input is NULL", {
     # Verify error for NULL input
     expect_error(
         test_escape(NULL),
-        "is\\(x, \"data\\.frame\"\\) is not TRUE"
+        "unable to find an inherited method"
     )
 })
 
@@ -267,8 +267,13 @@ test_that("test_escape handles all-zero counts in a row", {
     # Verify coverage is zero for the all-zero rows
     expect_equal(result$coverage[1], 0)
     expect_equal(result$coverage[3], 0)
-    # Verify p-value is 1 for a row with zero inactive reads (no evidence of escape)
-    expect_equal(result$p_val[1], 1)
+    # An uncovered row carries no evidence either way, so it is untested rather
+    # than assigned a p-value of 1, which would otherwise pad the BH denominator
+    # and cost the testable rows power
+    expect_true(is.na(result$p_val[1]))
+    expect_true(is.na(result$adj_p_val[1]))
+    # Confirm the covered row is corrected as the only test, not one of three
+    expect_equal(result$adj_p_val[2], result$p_val[2])
 })
 
 test_that("test_escape returns empty data frame with correct structure for empty input", {
@@ -316,4 +321,157 @@ test_that("test_escape flags a gene with strong biallelic signal as more signifi
 
     # Verify the near-biallelic gene gets a smaller (more significant) p-value
     expect_true(escaping_result$p_val < silenced_result$p_val)
+})
+
+# ------------------------------------------------------------------------------
+# SNPData method: counts, null and correction all taken from the object
+# ------------------------------------------------------------------------------
+
+# Two donors x two genes, one SNP each, with the XCI diagnostics written by hand
+# rather than fitted: the point here is what test_escape() does with a stored
+# fit, not whether the EM recovers one. X1 carries REF everywhere; cells 1-2 are
+# X1-active and cells 3-4 X2-active in both donors.
+#
+# geneA leaks 2/10 reads from the silenced haplotype in each group, geneB none.
+make_escape_fixture <- function(rho = 0.05, median_pi_g = 0.05) {
+    ref <- rbind(
+        c(8L, 8L, 2L, 2L, 8L, 8L, 2L, 2L),
+        c(10L, 10L, 0L, 0L, 10L, 10L, 0L, 0L)
+    )
+    alt <- rbind(
+        c(2L, 2L, 8L, 8L, 2L, 2L, 8L, 8L),
+        c(0L, 0L, 10L, 10L, 0L, 0L, 10L, 10L)
+    )
+    snp_info <- data.frame(
+        chrom = "X",
+        pos = c(1000L, 2000L),
+        ref = "A",
+        alt = "G",
+        gene_name = c("geneA", "geneB"),
+        stringsAsFactors = FALSE
+    )
+    barcode_info <- data.frame(
+        barcode = paste0("cell", 1:8),
+        donor = rep(c("donor0", "donor1"), each = 4),
+        stringsAsFactors = FALSE
+    )
+
+    obj <- SNPData(
+        ref_count = Matrix(ref, sparse = TRUE),
+        alt_count = Matrix(alt, sparse = TRUE),
+        snp_info = snp_info,
+        barcode_info = barcode_info
+    )
+
+    obj <- add_donor_snp_metadata(
+        obj,
+        expand.grid(
+            snp_id = snp_info(obj)$snp_id,
+            donor = c("donor0", "donor1"),
+            stringsAsFactors = FALSE
+        ) %>%
+            dplyr::mutate(xci_informative = TRUE, allele_on_x1 = "REF"),
+        join_by = c("snp_id", "donor"),
+        overwrite = TRUE
+    )
+    obj <- add_barcode_metadata(
+        obj,
+        data.frame(
+            cell_id = barcode_info(obj)$cell_id,
+            active_x = rep(c("X1", "X1", "X2", "X2"), 2),
+            stringsAsFactors = FALSE
+        ),
+        join_by = "cell_id",
+        overwrite = TRUE
+    )
+    add_donor_metadata(
+        obj,
+        data.frame(
+            donor = c("donor0", "donor1"),
+            xci_median_pi_g = median_pi_g,
+            xci_rho = rho,
+            stringsAsFactors = FALSE
+        ),
+        join_by = "donor",
+        overwrite = TRUE
+    )
+}
+
+test_that("test_escape() on a SNPData tests one row per donor and gene", {
+    obj <- make_escape_fixture()
+
+    result <- test_escape(obj)
+
+    # Confirm the grain is one row per (donor, gene): testing the two active-X
+    # groups separately would double the tests and halve each row's coverage
+    expect_equal(nrow(result), 4L)
+    expect_equal(nrow(dplyr::distinct(result, donor, gene_name)), nrow(result))
+    # Verify the counts are pooled over both groups (geneA: 4 cells x 10 reads
+    # per donor, which is the two 20-read groups summed)
+    expect_equal(dplyr::filter(result, gene_name == "geneA")$coverage, c(40, 40))
+    expect_valid_escape_result(result)
+})
+
+test_that("test_escape() on a SNPData takes the null from each donor's own fit", {
+    lenient <- test_escape(make_escape_fixture(median_pi_g = 0.4))
+    strict <- test_escape(make_escape_fixture(median_pi_g = 0.01))
+
+    # Verify the stored per-donor null is used rather than a fixed default: the
+    # same counts tested against a higher null escape fraction are less significant
+    expect_true(all(lenient$p_val >= strict$p_val))
+    expect_false(identical(lenient$p_val, strict$p_val))
+})
+
+test_that("test_escape() on a SNPData corrects within each donor by default", {
+    obj <- make_escape_fixture()
+
+    within <- test_escape(obj)
+    across <- test_escape(obj, by_donor = FALSE)
+
+    # Each donor contributes 2 genes, so correcting within a donor divides by 2
+    # while correcting across the table divides by 4; the raw p-values are
+    # untouched either way
+    expect_equal(within$p_val, across$p_val)
+    expect_true(all(across$adj_p_val >= within$adj_p_val))
+})
+
+test_that("test_escape() on a SNPData reports where the counts came from", {
+    result <- test_escape(make_escape_fixture())
+
+    # Without stored molecule phase the counts come from per-SNP reads, and the
+    # column says so: the same call on the same data after add_molecule_phase()
+    # counts differently, so the source cannot be left implicit
+    expect_equal(unique(result$count_source), "snp")
+})
+
+test_that("test_escape() on a SNPData returns a donor with no stored fit untested", {
+    obj <- make_escape_fixture()
+    obj <- add_donor_metadata(
+        obj,
+        data.frame(donor = "donor1", xci_rho = NA_real_, stringsAsFactors = FALSE),
+        join_by = "donor",
+        overwrite = TRUE
+    )
+
+    # Verify the donor is named rather than silently producing bad p-values
+    expect_warning(result <- test_escape(obj), NA)
+
+    # donor1 has no overdispersion to test against, so its genes come back NA
+    # rather than being dropped from the output or tested against a guess
+    expect_true(all(is.na(dplyr::filter(result, donor == "donor1")$p_val)))
+    # Confirm donor0 is unaffected
+    expect_false(any(is.na(dplyr::filter(result, donor == "donor0")$p_val)))
+})
+
+test_that("test_escape() on a SNPData requires stored XCI diagnostics", {
+    ref <- Matrix(matrix(1L, 2, 2), sparse = TRUE)
+    obj <- SNPData(
+        ref_count = ref,
+        alt_count = ref,
+        snp_info = data.frame(chrom = "X", pos = c(1L, 2L), ref = "A", alt = "G"),
+        barcode_info = data.frame(barcode = c("c1", "c2"))
+    )
+
+    # Verify the error names the step that produces what is missing
+    expect_error(test_escape(obj), "Run assign_xci")
 })

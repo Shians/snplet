@@ -471,3 +471,47 @@ test_that("haplotype_expression_by_molecule() drops an ambiguous SNP's molecule 
         "No molecule calls"
     )
 })
+
+test_that("test_escape() prefers molecule counts once the object carries them", {
+    fixture <- make_molecule_hap_fixture()
+    snpA <- fixture$snp_ids[["snpA"]]
+    snpB <- fixture$snp_ids[["snpB"]]
+
+    # One molecule spanning both of the dominant block's SNPs
+    molecule_calls <- tibble::tribble(
+        ~donor,
+        ~barcode,
+        ~umi,
+        ~snp_id,
+        ~allele,
+        ~transcript_strand,
+        "donor0",
+        "cell1",
+        "u1",
+        snpA,
+        "REF",
+        "+",
+        "donor0",
+        "cell1",
+        "u1",
+        snpB,
+        "REF",
+        "+"
+    )
+    obj <- with_molecule_calls(fixture$obj, molecule_calls)
+    obj <- add_donor_metadata(
+        obj,
+        data.frame(donor = "donor0", xci_median_pi_g = 0.05, xci_rho = 0.05, stringsAsFactors = FALSE),
+        join_by = "donor",
+        overwrite = TRUE
+    )
+
+    result <- test_escape(obj)
+
+    # Verify the read-backed counts are used, which count the two-SNP molecule
+    # once rather than once per SNP
+    expect_equal(unique(result$count_source), "molecule")
+    expect_equal(result$coverage, 1)
+    # Confirm the gene is tested once, not once per active-X group
+    expect_equal(nrow(result), 1L)
+})

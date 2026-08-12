@@ -106,6 +106,7 @@ utils::globalVariables(c(
     "strand",
     "transcript_strand",
     "xci_median_pi_g",
+    "xci_rho",
     "n_cells"
 ))
 

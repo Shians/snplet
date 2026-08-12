@@ -163,6 +163,7 @@ Other X-chromosome inactivation functions:
 \code{\link[=assign_xci_by_clonotype]{assign_xci_by_clonotype()}},
 \code{\link[=haplotype_expression]{haplotype_expression()}},
 \code{\link[=haplotype_expression_by_molecule]{haplotype_expression_by_molecule()}},
+\code{\link[=test_escape]{test_escape()}},
 \code{\link[=xci_assignments]{xci_assignments()}},
 \code{\link[=xci_haplotypes]{xci_haplotypes()}}
 }
