@@ -1,6 +1,6 @@
 #' Add metadata to a SNPData object's info tables
 #'
-#' These functions provide a standardized interface for adding new columns (and, for
+#' These functions provide a standardised interface for adding new columns (and, for
 #' \code{add_donor_snp_metadata}, new rows) to the \code{barcode_info}, \code{snp_info},
 #' \code{donor_info}, or \code{donor_snp_info} tables of a SNPData object. The functions
 #' ensure data integrity by validating dimensions and preserving automatically
@@ -25,6 +25,8 @@
 #'
 #' @examples
 #' \dontrun{
+#' snpdata <- get_example_snpdata()
+#'
 #' # Add new columns to barcode_info
 #' new_barcode_info <- data.frame(
 #'   cell_id = c("cell_1", "cell_2"),

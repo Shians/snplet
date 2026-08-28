@@ -18,7 +18,7 @@ A filtered SNPData object with doublets removed
 \description{
 This function filters out cells that are identified as doublets from a SNPData object.
 Doublets are identified based on the 'donor' column in the barcode_info slot, where
-cells labeled as 'doublet' are removed.
+cells labelled as 'doublet' are removed.
 }
 \examples{
 \dontrun{

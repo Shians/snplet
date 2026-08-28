@@ -7,56 +7,60 @@
 \usage{
 haplotype_expression_by_molecule(
   x,
-  molecule_calls,
-  snp_gene_map,
-  escape_threshold = 0.1
+  escape_threshold = 0.1,
+  by_active_x = FALSE,
+  pool_blocks = TRUE
 )
 
 \S4method{haplotype_expression_by_molecule}{SNPData}(
   x,
-  molecule_calls,
-  snp_gene_map,
-  escape_threshold = 0.1
+  escape_threshold = 0.1,
+  by_active_x = FALSE,
+  pool_blocks = TRUE
 )
 }
 \arguments{
 \item{x}{A SNPData object, required, that has had XCI diagnostics stored
 by \code{\link{assign_xci}} (or \code{\link{assign_xci_by_clonotype}})
 and subsequently had read-backed phase added by
-\code{\link{add_molecule_phase}}.}
-
-\item{molecule_calls}{A tibble, required, with columns \code{donor},
-\code{barcode}, \code{umi}, \code{snp_id}, \code{allele},
-\code{transcript_strand}: the union, across every donor, of
-\code{\link{add_molecule_phase}}'s \code{"molecule_calls"} attribute (or
-\code{\link{molecule_snp_alleles}} plus a \code{transcript_strand}
-column from \code{\link{molecule_read_strand}}, bind rows and add a
-\code{donor} column).}
-
-\item{snp_gene_map}{A tibble, required, with columns \code{snp_id},
-\code{gene_name}, \code{gene_strand}, \code{ambiguous}, as returned by
-\code{\link{assign_snp_genes}}. A SNP with \code{ambiguous = TRUE}
-overlaps more than one gene and is only counted towards a given
-candidate's \code{gene_name} for molecules whose own
-\code{transcript_strand} matches that candidate's \code{gene_strand};
-molecules with no strand information (\code{NA}) or the wrong strand are
-dropped for that SNP rather than guessed. \code{ambiguous = FALSE} rows
-apply regardless of strand.}
+\code{\link{add_molecule_phase}}, which is also where the per-molecule
+allele calls come from (see \sQuote{Where the molecule calls come from}).}
 
 \item{escape_threshold}{Numeric, in \code{[0, 1]} (default 0.1).
-Inactive-haplotype fraction at or above which a group is flagged as
+Inactive-haplotype fraction at or above which a row is flagged as
 escaping.}
+
+\item{by_active_x}{Logical (default \code{FALSE}, i.e. the X1-active and
+X2-active cell groups pooled into one row per gene, matching
+\code{\link{haplotype_expression}} and the grain
+\code{\link{test_escape}} tests at). If \code{TRUE}, report the two
+groups on separate rows, adding \code{active_x}.}
+
+\item{pool_blocks}{Logical (default \code{TRUE}). If \code{TRUE}, count
+molecules from every one of a gene's phase blocks. If \code{FALSE}, count
+only the gene's largest block, leaving the rest reported but uncounted in
+\code{n_stranded_molecules}. See \sQuote{Pooling a gene's phase blocks}.}
 }
 \value{
-A tibble with one row per (\code{gene_name}, \code{donor},
-  \code{active_x}) triple, with columns \code{donor}, \code{gene_name},
-  \code{active_x} (the expressed X, "X1" or "X2"), \code{active_count},
+A tibble with one row per (\code{donor}, \code{gene_name}) pair,
+  with columns \code{donor}, \code{gene_name}, \code{active_count},
   \code{inactive_count}, \code{coverage}, \code{escape_fraction}
   (\code{inactive_count / coverage}), \code{escapes}
   (\code{escape_fraction >= escape_threshold}), \code{phase_block_used}
-  (the phase block whose molecules were pooled), \code{dominant_molecules}
-  (molecules backing the pooled block), and \code{n_stranded_molecules}
-  (molecules of the same gene in a different, unpooled block).
+  (the gene's largest phase block), \code{dominant_molecules}
+  (molecules backing that block), \code{n_stranded_molecules}
+  (molecules of the same gene in any other block -- counted when
+  \code{pool_blocks} is \code{TRUE}, reported but uncounted when it is
+  \code{FALSE}), \code{n_blocks_pooled} (blocks actually counted, always 1
+  when \code{pool_blocks} is \code{FALSE}), and
+  \code{discordant_block_molecules} (counted molecules sitting in a block
+  whose own inactive fraction exceeds 0.5, i.e. one that looks oriented
+  backwards; see \sQuote{Pooling a gene's phase blocks}).
+
+  With \code{by_active_x = TRUE} each row is split into two, one per active-X
+  group, with \code{active_x} (the expressed X, "X1" or "X2") added. A group
+  with no molecules is still reported, as coverage zero rather than being
+  absent.
 }
 \description{
 Counts each molecule once per gene regardless of how many of the gene's
@@ -91,6 +95,72 @@ to single-SNP genes. Only a single-SNP gene with \emph{no} EM-derived
 phase at all has no way to be oriented, and is left to
 \code{haplotype_expression}, which already handles it correctly.
 }
+\section{Pooling a gene's phase blocks}{
+
+\code{\link{phase_snps}} cannot link two SNPs no single molecule spans, so
+one gene routinely ends up split across several phase blocks. Every SNP
+counted here nonetheless carries a globally oriented \code{allele_on_x1} --
+either the EM's own call, or an orientation \code{\link{add_molecule_phase}}
+propagated to the block from an EM anchor -- so a molecule's haplotype means
+the same thing in every block, and pooling blocks is arithmetically sound
+rather than a mixing of incompatible labels.
+
+What pooling stakes is that each block's orientation is individually
+correct. Within a block, relative phase is physical: two SNPs seen on one
+molecule sit on one chromosome, which is observed rather than inferred.
+Across blocks it is inherited from the EM anchors, which are
+expression-derived, so a block oriented backwards contributes its molecules
+to the wrong haplotype and inflates \code{escape_fraction}. Counting only
+the largest block (\code{pool_blocks = FALSE}) makes that impossible, at the
+cost of discarding the smaller blocks entirely.
+
+Because \code{escape_fraction} is bounded above by 0.5 by construction (see
+\code{\link{haplotype_expression}}), a block whose own inactive fraction
+exceeds 0.5 is not an extreme escapee but a block oriented the wrong way
+round. The molecules in such blocks are counted, but reported separately as
+\code{discordant_block_molecules} so the one failure mode pooling introduces
+is visible rather than silently averaged in.
+}
+
+\section{Where the inputs come from}{
+
+Beyond \code{x}, there is nothing to supply. Both inputs this function needs
+are already on the object:
+
+\describe{
+  \item{The per-molecule allele calls}{Read from the
+    \code{"molecule_calls"} attribute \code{\link{add_molecule_phase}} left
+    there when it extracted them from the BAM files. They are an attribute
+    rather than a slot because they are BAM-derived working data keyed by
+    molecule, not part of the object's SNP-by-cell counts, and so are lost
+    by operations that rebuild the object: pass the object
+    \code{add_molecule_phase()} returned, and subset \emph{before} that call
+    rather than after.}
+  \item{The SNP-to-gene map}{Read from \code{\link{snp_gene_map}}, built by
+    \code{\link{import_cellsnp}} from the gene annotation it was given, and
+    carried through subsetting and merging with its SNPs. It is distinct
+    from \code{snp_info$gene_name}, which comma-joins overlapping genes into
+    one label: attributing a molecule at a SNP overlapping two genes needs
+    each candidate as its own row with its strand. An annotation without a
+    \code{strand} column cannot supply that, so an object imported with one
+    has an empty map; \code{snp_gene_map(x) <- assign_snp_genes(snp_info(x),
+    gene_anno)} fills it in without re-importing.}
+}
+
+A missing input is an error naming the step that produces it, rather than a
+silently empty result.
+}
+
+\section{How the map resolves multi-gene SNPs}{
+
+A SNP that \code{\link{assign_snp_genes}} flagged \code{ambiguous} overlaps
+more than one gene, and is only counted towards a given candidate's
+\code{gene_name} for molecules whose own \code{transcript_strand} matches
+that candidate's \code{gene_strand}; molecules with no strand information
+(\code{NA}) or the wrong strand are dropped for that SNP rather than
+guessed. Unambiguous rows apply regardless of strand.
+}
+
 \section{Phase is inferred from expression, not genotyped}{
 
 snplet infers phase from scRNA-seq allelic counts alone: no DNA-based
@@ -132,8 +202,14 @@ within a gene without escaping this constraint.
 \examples{
 \dontrun{
 snp_data <- assign_xci(snp_data)
-snp_data <- add_molecule_phase(snp_data, bam_files = c(donor0 = "donor0.bam"))
-hap <- haplotype_expression_by_molecule(snp_data, molecule_calls, snp_gene_map)
+# the molecule calls ride along on snp_data from here on
+snp_data <- add_molecule_phase(snp_data, bam_files = c(lib1 = "lib1.bam"))
+
+hap <- haplotype_expression_by_molecule(snp_data)
+
+# Only needed if the annotation given to import_cellsnp() had no strand
+# column, leaving snp_gene_map(snp_data) empty
+snp_gene_map(snp_data) <- assign_snp_genes(snp_info(snp_data), gene_anno)
 }
 }
 \seealso{
@@ -143,6 +219,7 @@ Other X-chromosome inactivation functions:
 \code{\link[=assign_xci_by_clonotype]{assign_xci_by_clonotype()}},
 \code{\link[=haplotype_expression]{haplotype_expression()}},
 \code{\link[=plot_xci_heatmap]{plot_xci_heatmap()}},
+\code{\link[=test_escape]{test_escape()}},
 \code{\link[=xci_assignments]{xci_assignments()}},
 \code{\link[=xci_haplotypes]{xci_haplotypes()}}
 }

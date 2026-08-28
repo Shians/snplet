@@ -13,12 +13,12 @@ plot_snp_cov_distribution(snp_data)
 A ggplot object showing the density distribution of SNP coverage on a log10 scale
 }
 \description{
-This function visualizes the distribution of coverage values across all SNPs
+This function visualises the distribution of coverage values across all SNPs
 in the SNP data object using a density plot with a log10-transformed x-axis.
 }
 \examples{
 \dontrun{
-snp_data <- read_cellsnp("/path/to/cellsnp")
+snp_data <- get_example_snpdata()
 plot_snp_cov_distribution(snp_data)
 }
 }

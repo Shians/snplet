@@ -374,6 +374,34 @@ test_that("betabinom_test handles boundary cases x = 0 and x = n", {
     expect_equal(betabinom_test(10, 10, 0.5, rho = 0.2, alternative = "less"), 1)
 })
 
+test_that("betabinom_test evaluates boundary rows without warning alongside interior ones", {
+    # The boundary p-value is pinned rather than evaluated, because the quantile
+    # it would need (x - 1 = -1) is outside the distribution's support and makes
+    # VGAM warn from its own indexing. A vector mixing boundary and interior
+    # rows is the case that surfaced it.
+    expect_no_warning(result <- betabinom_test(c(0, 8, 0, 8), 40, 0.05, 0.05))
+
+    # Verify the pinned rows and evaluated rows are both correct
+    expect_equal(result[c(1, 3)], c(1, 1))
+    expect_equal(result[c(2, 4)], rep(1 - VGAM::pbetabinom(7, 40, 0.05, 0.05), 2))
+})
+
+test_that("betabinom_test propagates NA counts rather than treating them as boundaries", {
+    result <- betabinom_test(c(0, NA, 5), 10, 0.1, 0.05)
+
+    # Verify an NA count returns NA, not the boundary value of 1
+    expect_true(is.na(result[2]))
+    # Confirm the genuine boundary and interior rows are unaffected
+    expect_equal(result[1], 1)
+    expect_false(is.na(result[3]))
+})
+
+test_that("betabinom_test returns an empty vector for empty input", {
+    # Scalar p and rho must not recycle a zero-length x up to length 1, which
+    # would turn an empty table into one spurious NA p-value
+    expect_length(betabinom_test(numeric(0), numeric(0), 0.1, 0.05), 0)
+})
+
 test_that("betabinom_test produces larger p-values than binom_test for the same skewed observation", {
     # Higher overdispersion should widen the null distribution's tails, so an
     # observation that looks significant under a binomial null looks less so

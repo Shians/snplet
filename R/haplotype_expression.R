@@ -4,9 +4,11 @@
 #' reads using the per-SNP phase that \code{\link{assign_xci}} assigned,
 #' computed separately within the X1-active and X2-active cell groups it
 #' called, then reports one selected representative SNP per donor and gene (see
-#' \sQuote{Gene-level representative selection}). \code{by_snp = TRUE} reports every SNP instead,
-#' useful for working out why a gene is missing from the gene-level output, or
-#' for double-checking one whose result looks wrong.
+#' \sQuote{Gene-level representative selection}), with the two groups pooled
+#' into a single row. \code{by_snp = TRUE} reports every SNP instead, useful
+#' for working out why a gene is missing from the gene-level output, or for
+#' double-checking one whose result looks wrong; \code{by_active_x = TRUE} keeps
+#' the two active-X groups on separate rows.
 #'
 #' Unlike a per-group \code{pmin}/\code{pmax} on raw counts, the
 #' allele-to-haplotype assignment comes from the stored per-donor phase
@@ -21,12 +23,26 @@
 #' @details
 #' For each SNP and donor, the stored phase assigns REF or ALT to X1 (see
 #' \sQuote{Phase is inferred from expression, not genotyped}); the other
-#' allele is X2. \code{active_x} names the expected-active haplotype (X1 in
-#' the X1-active group, X2 in the X2-active group), and counts are split into
-#' \code{active_count}/\code{inactive_count} accordingly.
+#' allele is X2. Within each active-X group the expected-active haplotype (X1
+#' in the X1-active group, X2 in the X2-active group) determines how counts are
+#' split into \code{active_count}/\code{inactive_count}. The two groups are
+#' then summed into one row per gene unless \code{by_active_x = TRUE}: they are
+#' disjoint sets of cells, so the sum double-counts nothing, and the pooled
+#' \code{escape_fraction} is better powered than either group's own. Pooling
+#' also matches the grain \code{\link{test_escape}} tests at and that
+#' \code{donor_info(x)$xci_rho} is fitted at, so the default output can be
+#' tested directly.
 #'
-#' \code{same_allele_dominant} is \code{TRUE} when the same physical allele
-#' dominates in both groups, flagging escape or XCI-independent imbalance
+#' Columns meaningful only within a single group are dropped when pooling:
+#' \code{active_x}, \code{dominant_allele} (which flips between the groups by
+#' construction) and \code{phase_contradiction}. Pass \code{by_active_x = TRUE}
+#' to inspect them, or to compare the two cell populations against each other.
+#'
+#' \code{same_allele_dominant} summarises both groups rather than describing
+#' one, so it survives pooling and is reported under \code{by_snp = TRUE}
+#' whichever way \code{by_active_x} is set. It is \code{TRUE} when the same
+#' physical allele dominates in both groups, flagging escape or
+#' XCI-independent imbalance
 #' rather than hiding it. Under canonical XCI the dominant allele should flip
 #' between groups (X1's allele in X1-active cells, X2's in X2-active cells),
 #' so a failure to flip is what triggers the flag. \code{escape_fraction}
@@ -64,8 +80,9 @@
 #' @param x A SNPData object, required, that had XCI diagnostics stored by
 #'   \code{\link{assign_xci}} or \code{\link{assign_xci_by_clonotype}}.
 #' @param escape_threshold Numeric, in \code{[0, 1]} (default 0.1).
-#'   Inactive-haplotype fraction at or above which a group is flagged as
-#'   escaping in \code{escapes}.
+#'   Inactive-haplotype fraction at or above which a row is flagged as
+#'   escaping in \code{escapes}, applied to the pooled \code{escape_fraction}
+#'   unless \code{by_active_x = TRUE}.
 #' @param xci_informative_only Logical (default \code{FALSE}, reporting every
 #'   SNP with a stored phase). If \code{TRUE}, restrict to SNPs that drove
 #'   active-X calling in \code{assign_xci}
@@ -75,6 +92,12 @@
 #'   requires gene annotation). If \code{TRUE}, report every phased SNP
 #'   rather than selecting one representative per gene, changing what each
 #'   output row represents (see Value).
+#' @param by_active_x Logical (default \code{FALSE}, i.e. the X1-active and
+#'   X2-active cell groups pooled into one row). If \code{TRUE}, report the
+#'   two groups on separate rows, adding \code{active_x},
+#'   \code{dominant_allele} and \code{phase_contradiction}. Independent of
+#'   \code{by_snp}: it changes how the cells are split, not whether rows are
+#'   SNPs or genes.
 #' @param inverted_phase_genes Character vector (default \code{"XIST"}).
 #'   Gene names known to be transcribed predominantly from the
 #'   \emph{inactive} X, whose stored phase is therefore expected to be
@@ -164,34 +187,42 @@
 #' read-backed phase via \code{\link{haplotype_expression_by_molecule}}, to
 #' settle whether such a SNP is an escapee or an artefact.
 #'
-#' @return A tibble with one row per donor, gene, and active-X group (two rows
-#'   per gene) with columns \code{donor} (when the object carries donor
-#'   assignments), \code{snp_id} (the selected representative),
-#'   \code{gene_name}, \code{active_x} (the expressed X, "X1" or "X2"),
-#'   \code{n_cells} (cells in the group), \code{active_count},
-#'   \code{inactive_count}, \code{coverage}, \code{dominant_allele} (the physical
-#'   allele, "REF"/"ALT", with more reads in this group; \code{NA} when
-#'   uncovered), \code{escape_fraction} (\code{inactive_count / coverage}), and
-#'   \code{escapes} (\code{escape_fraction >= escape_threshold}), and
+#' @return A tibble with one row per donor and gene, with columns \code{donor}
+#'   (when the object carries donor assignments), \code{snp_id} (the selected
+#'   representative), \code{gene_name}, \code{n_cells} (cells contributing),
+#'   \code{active_count}, \code{inactive_count}, \code{coverage},
+#'   \code{escape_fraction} (\code{inactive_count / coverage}), \code{escapes}
+#'   (\code{escape_fraction >= escape_threshold}) and
 #'   \code{phase_likely_inverted} (\code{TRUE} when \code{gene_name} is in
 #'   \code{inverted_phase_genes}). SNPs with no gene annotation (\code{NA}
-#'   \code{gene_name}) are excluded, as are genes with no qualifying SNP.
+#'   \code{gene_name}) are excluded, as are genes with no qualifying SNP. This
+#'   is the grain \code{\link{test_escape}} expects, so the result can be
+#'   passed to it directly.
 #'
-#'   With \code{by_snp = TRUE} each row instead represents one donor, phased
-#'   SNP, and active-X group, and two further columns are reported:
+#'   With \code{by_snp = TRUE} each row instead represents one donor and phased
+#'   SNP, with \code{same_allele_dominant} added (per SNP; \code{TRUE} when
+#'   both covered groups favour the same physical allele).
+#'
+#'   With \code{by_active_x = TRUE} each row is split in two, one per active-X
+#'   group, and three further columns are reported: \code{active_x} (the
+#'   expressed X, "X1" or "X2"), \code{dominant_allele} (the physical allele,
+#'   "REF"/"ALT", with more reads in this group; \code{NA} when uncovered) and
 #'   \code{phase_contradiction} (per group; \code{TRUE} when
 #'   \code{escape_fraction > 0.5}, i.e. the "inactive" haplotype outnumbers the
-#'   "active" one, see Details) and \code{same_allele_dominant} (per SNP;
-#'   \code{TRUE} when both covered groups favour the same physical allele). No
-#'   group is dropped for contradicting the phase; both flags are reported for
-#'   you to act on. When the object carries no gene annotation,
-#'   \code{gene_name} and \code{phase_likely_inverted} are both omitted.
+#'   "active" one, see Details). No group is dropped for contradicting the
+#'   phase; the flags are reported for you to act on.
+#'
+#'   When the object carries no gene annotation, \code{gene_name} and
+#'   \code{phase_likely_inverted} are both omitted.
 #'
 #' @family X-chromosome inactivation functions
 #' @export
 #'
 #' @examples
 #' \dontrun{
+#' # Requires a snp_data object already processed by assign_xci() (see its
+#' # examples), which in turn needs enough X-linked heterozygous SNP coverage
+#' # to fit the model.
 #' snp_data <- assign_xci(snp_data)
 #'
 #' # One representative SNP per gene, safe to carry into test_escape()
@@ -204,6 +235,10 @@
 #' # SNPs whose dominant allele failed to flip between the active-X groups
 #' dplyr::filter(hap_by_snp, same_allele_dominant)
 #'
+#' # The X1-active and X2-active cell populations kept apart, for comparing
+#' # them against each other rather than testing the gene
+#' hap_by_active_x <- haplotype_expression(snp_data, by_active_x = TRUE)
+#'
 #' # Restrict to the narrower set that drove active-X calling
 #' hap_informative <- haplotype_expression(snp_data, xci_informative_only = TRUE)
 #' }
@@ -214,6 +249,7 @@ setGeneric(
         escape_threshold = 0.1,
         xci_informative_only = FALSE,
         by_snp = FALSE,
+        by_active_x = FALSE,
         inverted_phase_genes = "XIST"
     ) {
         standardGeneric("haplotype_expression")
@@ -230,6 +266,7 @@ setMethod(
         escape_threshold = 0.1,
         xci_informative_only = FALSE,
         by_snp = FALSE,
+        by_active_x = FALSE,
         inverted_phase_genes = "XIST"
     ) {
         barcode_info <- barcode_info(x)
@@ -381,6 +418,12 @@ setMethod(
             result <- .elect_gene_representative_snps(result)
         }
 
+        # Both the election above and the flip diagnostics need the two groups
+        # apart, so pooling is the last step rather than the first.
+        if (!by_active_x) {
+            result <- .pool_active_x_groups(result, escape_threshold)
+        }
+
         if (!has_donor) {
             result <- dplyr::select(result, -donor)
         }
@@ -462,6 +505,57 @@ setMethod(
         dplyr::arrange(donor, gene_name, active_x)
 }
 
+#' Pool the two active-X groups into one row
+#'
+#' Sums \code{active_count}/\code{inactive_count} across the X1-active and
+#' X2-active groups, giving one row per gene (or per SNP under
+#' \code{by_snp = TRUE}). The two groups are disjoint sets of cells, so the sum
+#' double-counts nothing; it is the same pooling
+#' \code{\link{.fit_pooled_rho_by_donor}} fits \code{xci_rho} against.
+#'
+#' Columns that only mean something within a single group are dropped:
+#' \code{active_x} itself, \code{dominant_allele} (which flips between the
+#' groups by construction, so a pooled value would be an artefact of whichever
+#' group had more reads) and \code{phase_contradiction} (defined per group).
+#' \code{same_allele_dominant} is already a per-SNP summary of both groups and
+#' survives.
+#'
+#' @param result A per-group tibble assembled by
+#'   \code{\link{haplotype_expression}}, after any representative election.
+#' @param escape_threshold Numeric, in \code{[0, 1]}, required. Applied to the
+#'   pooled \code{escape_fraction}, which is a better-powered estimate than
+#'   either group's own.
+#'
+#' @return \code{result} with one row per donor and SNP, ordered by donor and
+#'   gene where those columns are present.
+#'
+#' @keywords internal
+.pool_active_x_groups <- function(result, escape_threshold) {
+    id_cols <- intersect(
+        c("donor", "snp_id", "gene_name", "phase_likely_inverted", "same_allele_dominant"),
+        colnames(result)
+    )
+
+    pooled <- result %>%
+        dplyr::summarise(
+            n_cells = sum(n_cells),
+            active_count = sum(active_count),
+            inactive_count = sum(inactive_count),
+            .by = dplyr::all_of(id_cols)
+        ) %>%
+        dplyr::mutate(
+            coverage = active_count + inactive_count,
+            escape_fraction = dplyr::if_else(coverage > 0, inactive_count / coverage, NA_real_),
+            escapes = escape_fraction >= escape_threshold
+        ) %>%
+        # The two flags are per-SNP metadata rather than measurements, so they
+        # trail the counts as they do in the per-group output.
+        dplyr::relocate(dplyr::any_of(c("phase_likely_inverted", "same_allele_dominant")), .after = dplyr::last_col())
+
+    sort_cols <- intersect(c("donor", "gene_name", "snp_id"), colnames(pooled))
+    dplyr::arrange(pooled, dplyr::pick(dplyr::all_of(sort_cols)))
+}
+
 #' Phased active/inactive haplotype expression per gene, pooling molecules across SNPs
 #'
 #' Counts each molecule once per gene regardless of how many of the gene's
@@ -501,36 +595,100 @@ setMethod(
 #' @param x A SNPData object, required, that has had XCI diagnostics stored
 #'   by \code{\link{assign_xci}} (or \code{\link{assign_xci_by_clonotype}})
 #'   and subsequently had read-backed phase added by
-#'   \code{\link{add_molecule_phase}}.
-#' @param molecule_calls A tibble, required, with columns \code{donor},
-#'   \code{barcode}, \code{umi}, \code{snp_id}, \code{allele},
-#'   \code{transcript_strand}: the union, across every donor, of
-#'   \code{\link{add_molecule_phase}}'s \code{"molecule_calls"} attribute (or
-#'   \code{\link{molecule_snp_alleles}} plus a \code{transcript_strand}
-#'   column from \code{\link{molecule_read_strand}}, bind rows and add a
-#'   \code{donor} column).
-#' @param snp_gene_map A tibble, required, with columns \code{snp_id},
-#'   \code{gene_name}, \code{gene_strand}, \code{ambiguous}, as returned by
-#'   \code{\link{assign_snp_genes}}. A SNP with \code{ambiguous = TRUE}
-#'   overlaps more than one gene and is only counted towards a given
-#'   candidate's \code{gene_name} for molecules whose own
-#'   \code{transcript_strand} matches that candidate's \code{gene_strand};
-#'   molecules with no strand information (\code{NA}) or the wrong strand are
-#'   dropped for that SNP rather than guessed. \code{ambiguous = FALSE} rows
-#'   apply regardless of strand.
+#'   \code{\link{add_molecule_phase}}, which is also where the per-molecule
+#'   allele calls come from (see \sQuote{Where the molecule calls come from}).
 #' @param escape_threshold Numeric, in \code{[0, 1]} (default 0.1).
-#'   Inactive-haplotype fraction at or above which a group is flagged as
+#'   Inactive-haplotype fraction at or above which a row is flagged as
 #'   escaping.
+#' @param by_active_x Logical (default \code{FALSE}, i.e. the X1-active and
+#'   X2-active cell groups pooled into one row per gene, matching
+#'   \code{\link{haplotype_expression}} and the grain
+#'   \code{\link{test_escape}} tests at). If \code{TRUE}, report the two
+#'   groups on separate rows, adding \code{active_x}.
+#' @param pool_blocks Logical (default \code{TRUE}). If \code{TRUE}, count
+#'   molecules from every one of a gene's phase blocks. If \code{FALSE}, count
+#'   only the gene's largest block, leaving the rest reported but uncounted in
+#'   \code{n_stranded_molecules}. See \sQuote{Pooling a gene's phase blocks}.
 #'
-#' @return A tibble with one row per (\code{gene_name}, \code{donor},
-#'   \code{active_x}) triple, with columns \code{donor}, \code{gene_name},
-#'   \code{active_x} (the expressed X, "X1" or "X2"), \code{active_count},
+#' @section Pooling a gene's phase blocks:
+#' \code{\link{phase_snps}} cannot link two SNPs no single molecule spans, so
+#' one gene routinely ends up split across several phase blocks. Every SNP
+#' counted here nonetheless carries a globally oriented \code{allele_on_x1} --
+#' either the EM's own call, or an orientation \code{\link{add_molecule_phase}}
+#' propagated to the block from an EM anchor -- so a molecule's haplotype means
+#' the same thing in every block, and pooling blocks is arithmetically sound
+#' rather than a mixing of incompatible labels.
+#'
+#' What pooling stakes is that each block's orientation is individually
+#' correct. Within a block, relative phase is physical: two SNPs seen on one
+#' molecule sit on one chromosome, which is observed rather than inferred.
+#' Across blocks it is inherited from the EM anchors, which are
+#' expression-derived, so a block oriented backwards contributes its molecules
+#' to the wrong haplotype and inflates \code{escape_fraction}. Counting only
+#' the largest block (\code{pool_blocks = FALSE}) makes that impossible, at the
+#' cost of discarding the smaller blocks entirely.
+#'
+#' Because \code{escape_fraction} is bounded above by 0.5 by construction (see
+#' \code{\link{haplotype_expression}}), a block whose own inactive fraction
+#' exceeds 0.5 is not an extreme escapee but a block oriented the wrong way
+#' round. The molecules in such blocks are counted, but reported separately as
+#' \code{discordant_block_molecules} so the one failure mode pooling introduces
+#' is visible rather than silently averaged in.
+#'
+#' @section Where the inputs come from:
+#' Beyond \code{x}, there is nothing to supply. Both inputs this function needs
+#' are already on the object:
+#'
+#' \describe{
+#'   \item{The per-molecule allele calls}{Read from the
+#'     \code{"molecule_calls"} attribute \code{\link{add_molecule_phase}} left
+#'     there when it extracted them from the BAM files. They are an attribute
+#'     rather than a slot because they are BAM-derived working data keyed by
+#'     molecule, not part of the object's SNP-by-cell counts, and so are lost
+#'     by operations that rebuild the object: pass the object
+#'     \code{add_molecule_phase()} returned, and subset \emph{before} that call
+#'     rather than after.}
+#'   \item{The SNP-to-gene map}{Read from \code{\link{snp_gene_map}}, built by
+#'     \code{\link{import_cellsnp}} from the gene annotation it was given, and
+#'     carried through subsetting and merging with its SNPs. It is distinct
+#'     from \code{snp_info$gene_name}, which comma-joins overlapping genes into
+#'     one label: attributing a molecule at a SNP overlapping two genes needs
+#'     each candidate as its own row with its strand. An annotation without a
+#'     \code{strand} column cannot supply that, so an object imported with one
+#'     has an empty map; \code{snp_gene_map(x) <- assign_snp_genes(snp_info(x),
+#'     gene_anno)} fills it in without re-importing.}
+#' }
+#'
+#' A missing input is an error naming the step that produces it, rather than a
+#' silently empty result.
+#'
+#' @section How the map resolves multi-gene SNPs:
+#' A SNP that \code{\link{assign_snp_genes}} flagged \code{ambiguous} overlaps
+#' more than one gene, and is only counted towards a given candidate's
+#' \code{gene_name} for molecules whose own \code{transcript_strand} matches
+#' that candidate's \code{gene_strand}; molecules with no strand information
+#' (\code{NA}) or the wrong strand are dropped for that SNP rather than
+#' guessed. Unambiguous rows apply regardless of strand.
+#'
+#' @return A tibble with one row per (\code{donor}, \code{gene_name}) pair,
+#'   with columns \code{donor}, \code{gene_name}, \code{active_count},
 #'   \code{inactive_count}, \code{coverage}, \code{escape_fraction}
 #'   (\code{inactive_count / coverage}), \code{escapes}
 #'   (\code{escape_fraction >= escape_threshold}), \code{phase_block_used}
-#'   (the phase block whose molecules were pooled), \code{dominant_molecules}
-#'   (molecules backing the pooled block), and \code{n_stranded_molecules}
-#'   (molecules of the same gene in a different, unpooled block).
+#'   (the gene's largest phase block), \code{dominant_molecules}
+#'   (molecules backing that block), \code{n_stranded_molecules}
+#'   (molecules of the same gene in any other block -- counted when
+#'   \code{pool_blocks} is \code{TRUE}, reported but uncounted when it is
+#'   \code{FALSE}), \code{n_blocks_pooled} (blocks actually counted, always 1
+#'   when \code{pool_blocks} is \code{FALSE}), and
+#'   \code{discordant_block_molecules} (counted molecules sitting in a block
+#'   whose own inactive fraction exceeds 0.5, i.e. one that looks oriented
+#'   backwards; see \sQuote{Pooling a gene's phase blocks}).
+#'
+#'   With \code{by_active_x = TRUE} each row is split into two, one per active-X
+#'   group, with \code{active_x} (the expressed X, "X1" or "X2") added. A group
+#'   with no molecules is still reported, as coverage zero rather than being
+#'   absent.
 #'
 #' @family X-chromosome inactivation functions
 #' @export
@@ -538,12 +696,18 @@ setMethod(
 #' @examples
 #' \dontrun{
 #' snp_data <- assign_xci(snp_data)
-#' snp_data <- add_molecule_phase(snp_data, bam_files = c(donor0 = "donor0.bam"))
-#' hap <- haplotype_expression_by_molecule(snp_data, molecule_calls, snp_gene_map)
+#' # the molecule calls ride along on snp_data from here on
+#' snp_data <- add_molecule_phase(snp_data, bam_files = c(lib1 = "lib1.bam"))
+#'
+#' hap <- haplotype_expression_by_molecule(snp_data)
+#'
+#' # Only needed if the annotation given to import_cellsnp() had no strand
+#' # column, leaving snp_gene_map(snp_data) empty
+#' snp_gene_map(snp_data) <- assign_snp_genes(snp_info(snp_data), gene_anno)
 #' }
 setGeneric(
     "haplotype_expression_by_molecule",
-    function(x, molecule_calls, snp_gene_map, escape_threshold = 0.1) {
+    function(x, escape_threshold = 0.1, by_active_x = FALSE, pool_blocks = TRUE) {
         standardGeneric("haplotype_expression_by_molecule")
     }
 )
@@ -553,7 +717,7 @@ setGeneric(
 setMethod(
     "haplotype_expression_by_molecule",
     signature(x = "SNPData"),
-    function(x, molecule_calls, snp_gene_map, escape_threshold = 0.1) {
+    function(x, escape_threshold = 0.1, by_active_x = FALSE, pool_blocks = TRUE) {
         barcode_info <- barcode_info(x)
         donor_snp_info <- donor_snp_info(x)
 
@@ -563,15 +727,35 @@ setMethod(
         if (!all(c("phase_block", "allele_on_x1") %in% colnames(donor_snp_info))) {
             stop("No stored molecule phase found. Run add_molecule_phase(x) first.")
         }
+        # The molecule calls are BAM-derived working data that add_molecule_phase()
+        # already extracted, so they are taken from the object rather than asked
+        # for: there is no other way to derive them that would agree with the
+        # phase blocks stored alongside. Being an attribute, they do not survive
+        # operations that rebuild the object, hence a named error rather than an
+        # empty result.
+        molecule_calls <- attr(x, "molecule_calls")
+        if (is.null(molecule_calls)) {
+            stop(
+                "This object carries no molecule calls; they are attached by add_molecule_phase(x). ",
+                "Attributes are lost by operations that rebuild the object, so re-run it, ",
+                "or subset before it rather than after."
+            )
+        }
         required_call_cols <- c("donor", "barcode", "umi", "snp_id", "allele", "transcript_strand")
         missing_call_cols <- setdiff(required_call_cols, colnames(molecule_calls))
         if (length(missing_call_cols) > 0) {
             stop("molecule_calls is missing required column(s): ", paste(missing_call_cols, collapse = ", "))
         }
-        required_gene_cols <- c("snp_id", "gene_name", "gene_strand", "ambiguous")
-        missing_gene_cols <- setdiff(required_gene_cols, colnames(snp_gene_map))
-        if (length(missing_gene_cols) > 0) {
-            stop("snp_gene_map is missing required column(s): ", paste(missing_gene_cols, collapse = ", "))
+        # Built at import from the gene annotation, where strand is available;
+        # snp_info$gene_name cannot stand in for it, being a comma-joined label
+        # with no strand and no per-candidate rows.
+        snp_gene_map <- snp_gene_map(x)
+        if (nrow(snp_gene_map) == 0) {
+            stop(
+                "This object carries no SNP-to-gene map. It is built by import_cellsnp() from a gene ",
+                "annotation with a strand column; set it on an existing object with ",
+                "snp_gene_map(x) <- assign_snp_genes(snp_info(x), gene_anno)."
+            )
         }
 
         phase <- donor_snp_info %>%
@@ -607,20 +791,60 @@ setMethod(
             dplyr::anti_join(best_block, by = c("donor", "gene_name", "phase_block")) %>%
             dplyr::summarise(n_stranded_molecules = sum(molecules), .by = c(donor, gene_name))
 
-        # A molecule votes across every SNP it covers within the dominant block
-        # only; majority wins, a tie is ambiguous (residual base-calling noise
-        # once phase is accounted for) and dropped rather than guessed.
-        molecules <- calls %>%
-            dplyr::semi_join(best_block, by = c("donor", "gene_name", "phase_block")) %>%
+        # Pooling is the default because every SNP reaching this point already
+        # carries a globally oriented allele_on_x1, so the blocks of one gene
+        # share a scale; counting only the largest is the conservative option
+        # rather than the correct one (see 'Pooling a gene's phase blocks').
+        counted <- calls
+        if (!pool_blocks) {
+            counted <- dplyr::semi_join(counted, best_block, by = c("donor", "gene_name", "phase_block"))
+        }
+        blocks_counted <- counted %>%
+            dplyr::distinct(donor, gene_name, phase_block) %>%
+            dplyr::summarise(n_blocks_pooled = dplyr::n(), .by = c(donor, gene_name))
+
+        cell_groups <- barcode_info %>%
+            dplyr::filter(active_x %in% c("X1", "X2")) %>%
+            dplyr::select(barcode, donor, active_x)
+
+        # A molecule votes across every SNP it covers in the blocks being
+        # counted; majority wins, a tie is ambiguous (residual base-calling
+        # noise once phase is accounted for) and dropped rather than guessed.
+        # Under pooling a molecule spanning two of the gene's blocks votes with
+        # all of its SNPs at once: the same rule over a wider set, not a new one.
+        molecules <- counted %>%
             dplyr::summarise(n_x1 = sum(is_x1), n_x2 = sum(!is_x1), .by = c(donor, gene_name, barcode, umi)) %>%
             dplyr::mutate(
                 haplotype = dplyr::case_when(n_x1 > n_x2 ~ "X1", n_x2 > n_x1 ~ "X2", TRUE ~ "ambiguous")
             ) %>%
             dplyr::filter(haplotype != "ambiguous")
 
-        cell_groups <- barcode_info %>%
-            dplyr::filter(active_x %in% c("X1", "X2")) %>%
-            dplyr::select(barcode, donor, active_x)
+        # The same vote taken per block, purely to audit orientation:
+        # escape_fraction cannot exceed 0.5 by construction, so a block whose
+        # own inactive fraction does is oriented backwards rather than
+        # escaping. Its molecules are still counted -- flipping them here would
+        # be guessing which of the two orientations is the wrong one -- but the
+        # count is surfaced so the gene can be re-examined or excluded.
+        discordant <- counted %>%
+            dplyr::summarise(
+                n_x1 = sum(is_x1),
+                n_x2 = sum(!is_x1),
+                .by = c(donor, gene_name, phase_block, barcode, umi)
+            ) %>%
+            dplyr::mutate(
+                haplotype = dplyr::case_when(n_x1 > n_x2 ~ "X1", n_x2 > n_x1 ~ "X2", TRUE ~ "ambiguous")
+            ) %>%
+            dplyr::filter(haplotype != "ambiguous") %>%
+            dplyr::inner_join(cell_groups, by = c("donor", "barcode")) %>%
+            dplyr::summarise(
+                block_molecules = dplyr::n(),
+                block_inactive = sum(haplotype != active_x),
+                .by = c(donor, gene_name, phase_block)
+            ) %>%
+            dplyr::summarise(
+                discordant_block_molecules = sum(block_molecules[block_inactive * 2 > block_molecules]),
+                .by = c(donor, gene_name)
+            )
 
         # Pool molecules per (donor, gene, active-X group): active_count is
         # molecules landing on the haplotype the group's own active_x names,
@@ -643,7 +867,7 @@ setMethod(
         # Every (donor, gene) gets both active_x groups reported, even one with
         # zero molecules, so a completely silenced haplotype reads as coverage
         # zero rather than being silently absent from the output.
-        tidyr::expand_grid(
+        by_gene <- tidyr::expand_grid(
             dplyr::distinct(counts, donor, gene_name),
             active_x = c("X1", "X2")
         ) %>%
@@ -651,14 +875,36 @@ setMethod(
             dplyr::mutate(
                 active_count = dplyr::coalesce(active_count, 0L),
                 inactive_count = dplyr::coalesce(inactive_count, 0L),
-                coverage = dplyr::coalesce(coverage, 0L),
+                coverage = dplyr::coalesce(coverage, 0L)
+            )
+
+        # Pooling the disjoint groups is the default here for the same reason as
+        # in haplotype_expression(): one row per (donor, gene) is the grain
+        # test_escape() tests at.
+        if (!by_active_x) {
+            by_gene <- by_gene %>%
+                dplyr::summarise(
+                    active_count = sum(active_count),
+                    inactive_count = sum(inactive_count),
+                    coverage = sum(coverage),
+                    .by = c(donor, gene_name)
+                )
+        }
+
+        by_gene %>%
+            dplyr::mutate(
                 escape_fraction = dplyr::if_else(coverage > 0, inactive_count / coverage, NA_real_),
                 escapes = escape_fraction >= escape_threshold
             ) %>%
             dplyr::left_join(best_block, by = c("donor", "gene_name")) %>%
             dplyr::left_join(stranded, by = c("donor", "gene_name")) %>%
-            dplyr::mutate(n_stranded_molecules = dplyr::coalesce(n_stranded_molecules, 0L)) %>%
+            dplyr::left_join(blocks_counted, by = c("donor", "gene_name")) %>%
+            dplyr::left_join(discordant, by = c("donor", "gene_name")) %>%
+            dplyr::mutate(
+                n_stranded_molecules = dplyr::coalesce(n_stranded_molecules, 0L),
+                discordant_block_molecules = dplyr::coalesce(discordant_block_molecules, 0L)
+            ) %>%
             dplyr::rename(phase_block_used = phase_block) %>%
-            dplyr::arrange(donor, gene_name, active_x)
+            dplyr::arrange(dplyr::pick(dplyr::any_of(c("donor", "gene_name", "active_x"))))
     }
 )

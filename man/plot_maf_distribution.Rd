@@ -13,7 +13,7 @@ plot_maf_distribution(df)
 A ggplot object showing the density distribution of MAF
 }
 \description{
-This function visualizes the distribution of minor allele frequencies (MAF)
+This function visualises the distribution of minor allele frequencies (MAF)
 in a given data frame using a density plot.
 }
 \examples{

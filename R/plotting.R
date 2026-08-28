@@ -42,9 +42,10 @@ plot_gene_anno_track <- function(gene_anno, x_range) {
 #' a genomic region, with optional faceting by a grouping variable.
 #'
 #' @param allele_count_df A data.frame, required, with columns \code{pos}
-#'   (position), \code{maf} (minor allele frequency), and \code{donor_id} for
-#'   faceting. SNP information.
-#' @param facet Required. Variable to use for faceting the plot.
+#'   (position), \code{maf} (minor allele frequency), and a column to facet by
+#'   (see \code{facet}). SNP information.
+#' @param facet Bare column name (unquoted), required. Variable in
+#'   \code{allele_count_df} to facet the plot by.
 #' @param x_range Numeric vector of length 2, required. Genomic range limits to display.
 #' @return A ggplot object showing MAF values across the genomic region
 #' @family genomic track plotting functions
@@ -52,15 +53,16 @@ plot_gene_anno_track <- function(gene_anno, x_range) {
 #'
 #' @examples
 #' \dontrun{
-#' allele_df <- get_allele_counts(snp_data)
-#' plot_maf_track(allele_df, facet = donor_id, x_range = c(1000000, 2000000))
+#' snp_data <- get_example_snpdata()
+#' allele_df <- donor_count_df(snp_data)
+#' plot_maf_track(allele_df, facet = donor, x_range = c(1000000, 2000000))
 #' }
 plot_maf_track <- function(allele_count_df, facet, x_range) {
     allele_count_df %>%
         ggplot2::ggplot(aes(x = pos, y = maf)) +
         ggplot2::geom_hline(yintercept = 0.1, linetype = "dashed", color = "red", linewidth = 0.5) +
         ggplot2::geom_point(size = 1, alpha = 0.10) +
-        ggplot2::facet_grid(rows = ggplot2::vars(donor_id)) +
+        ggplot2::facet_grid(rows = ggplot2::vars({{ facet }})) +
         ggplot2::scale_x_continuous(
             labels = scales::label_number(scale_cut = scales::cut_short_scale(), suffix = "b"),
             limits = x_range,
@@ -92,9 +94,10 @@ plot_maf_track <- function(allele_count_df, facet, x_range) {
 #' of minor allele frequency differences across a genomic region.
 #'
 #' @param allele_counts_df A data.frame, required, with columns \code{pos}
-#'   (position), \code{adj_p_val} (adjusted p-value), and a column for
-#'   faceting. SNP information.
-#' @param facet Required. Bare column name to use for faceting the plot.
+#'   (position), \code{adj_p_val} (adjusted p-value), and a column to facet by
+#'   (see \code{facet}). SNP information.
+#' @param facet Bare column name (unquoted), required. Variable in
+#'   \code{allele_counts_df} to facet the plot by.
 #' @param x_range Numeric vector of length 2, required. Genomic range limits to display.
 #' @return A ggplot object showing -log10(adjusted p-value) across the genomic region
 #' @family genomic track plotting functions
@@ -102,8 +105,9 @@ plot_maf_track <- function(allele_count_df, facet, x_range) {
 #'
 #' @examples
 #' \dontrun{
-#' snp_stats <- calculate_snp_significance(snp_data)
-#' plot_maf_pval_track(snp_stats, facet = donor_id, x_range = c(1000000, 2000000))
+#' snp_data <- get_example_snpdata()
+#' snp_stats <- donor_count_df(snp_data)
+#' plot_maf_pval_track(snp_stats, facet = donor, x_range = c(1000000, 2000000))
 #' }
 plot_maf_pval_track <- function(allele_counts_df, facet, x_range) {
     allele_counts_df %>%

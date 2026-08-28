@@ -95,7 +95,9 @@ within a gene without escaping this constraint.
 
 \examples{
 \dontrun{
-# Assign the active X chromosome to cells
+# Requires a dataset with enough X-linked heterozygous SNP coverage across
+# enough cells to fit the model; the small bundled get_example_snpdata()
+# dataset does not qualify.
 snp_data <- assign_xci(snp_data)
 
 # View results
@@ -113,6 +115,7 @@ Other X-chromosome inactivation functions:
 \code{\link[=haplotype_expression]{haplotype_expression()}},
 \code{\link[=haplotype_expression_by_molecule]{haplotype_expression_by_molecule()}},
 \code{\link[=plot_xci_heatmap]{plot_xci_heatmap()}},
+\code{\link[=test_escape]{test_escape()}},
 \code{\link[=xci_assignments]{xci_assignments()}},
 \code{\link[=xci_haplotypes]{xci_haplotypes()}}
 }

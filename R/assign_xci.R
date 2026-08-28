@@ -82,7 +82,9 @@
 #'
 #' @examples
 #' \dontrun{
-#' # Assign the active X chromosome to cells
+#' # Requires a dataset with enough X-linked heterozygous SNP coverage across
+#' # enough cells to fit the model; the small bundled get_example_snpdata()
+#' # dataset does not qualify.
 #' snp_data <- assign_xci(snp_data)
 #'
 #' # View results

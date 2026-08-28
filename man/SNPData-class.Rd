@@ -26,6 +26,11 @@
 \alias{library_info}
 \alias{library_info,SNPData-method}
 \alias{get_library_info}
+\alias{snp_gene_map}
+\alias{snp_gene_map,SNPData-method}
+\alias{get_snp_gene_map}
+\alias{snp_gene_map<-}
+\alias{snp_gene_map<-,SNPData,data.frame-method}
 \alias{donor_snp_info}
 \alias{donor_snp_info,SNPData-method}
 \alias{get_donor_snp_info}
@@ -60,7 +65,8 @@ SNPData(
   oth_count = NULL,
   donor_info = NULL,
   donor_snp_info = NULL,
-  donor_map = NULL
+  donor_map = NULL,
+  snp_gene_map = NULL
 )
 
 \S4method{SNPData}{Matrix,Matrix,data.frame,data.frame}(
@@ -71,7 +77,8 @@ SNPData(
   oth_count = NULL,
   donor_info = NULL,
   donor_snp_info = NULL,
-  donor_map = NULL
+  donor_map = NULL,
+  snp_gene_map = NULL
 )
 
 ref_count(x)
@@ -113,6 +120,16 @@ library_info(x)
 \S4method{library_info}{SNPData}(x)
 
 get_library_info(x)
+
+snp_gene_map(x)
+
+\S4method{snp_gene_map}{SNPData}(x)
+
+get_snp_gene_map(x)
+
+snp_gene_map(x) <- value
+
+\S4method{snp_gene_map}{SNPData,data.frame}(x) <- value
 
 donor_snp_info(x, source = NULL)
 
@@ -163,7 +180,7 @@ coverage(x)
 
 \item{i}{Numeric or logical vector, optional. Subsets SNPs (rows).}
 
-\item{j}{Numeric or logical vector, optional. Subsets samples (columns).}
+\item{j}{Numeric or logical vector, optional. Subsets barcodes/cells (columns).}
 
 \item{ref_count}{A sparse Matrix (SNPs x cells), required. Reference allele counts.}
 
@@ -198,13 +215,20 @@ object is built, useful since Vireo assigns arbitrary labels
 (\code{donor0}, \code{donor1}, ...) that this can relabel at import time
 rather than after the fact via \code{\link{rename_donor}}.}
 
+\item{snp_gene_map}{A data.frame, optional (default: an empty table).
+One row per (\code{snp_id}, candidate \code{gene_name}) with columns
+\code{snp_id}, \code{gene_name}, \code{gene_strand}, \code{ambiguous}, as
+returned by \code{\link{assign_snp_genes}}. Built at import from the gene
+annotation, when that annotation carries a \code{strand} column; rows for
+SNPs not in \code{snp_info} are dropped.}
+
+\item{value}{A data.frame, required. Replacement value for
+\code{barcode_info<-} or \code{snp_info<-}.}
+
 \item{source}{Character vector, optional (default \code{NULL}, meaning
 the object's active source; see \code{\link{zygosity_source}}).
 \code{zygosity_source} value(s) to filter \code{donor_snp_info(x)} to,
 or \code{"all"} to return every source unfiltered.}
-
-\item{value}{A data.frame, required. Replacement value for
-\code{barcode_info<-} or \code{snp_info<-}.}
 
 \item{object}{A SNPData object, required. Passed to the show method.}
 
@@ -216,7 +240,7 @@ logs which legacy slots it migrated.}
 \value{
 A subsetted SNPData object
 
-A numeric vector of length 2 giving the number of SNPs and samples
+A numeric vector of length 2 giving the number of SNPs and barcodes/cells
 }
 \description{
 An S4 class to store and manipulate single-cell SNP count matrices with associated metadata.
@@ -264,6 +288,18 @@ Never supplied at construction: which libraries an object holds is derived
 from its cells. A library that loses all of its cells loses its row, and
 its recorded paths with it.}
 
+\item{\code{snp_gene_map}}{A tibble with one row per (\code{snp_id}, candidate
+\code{gene_name}) pair, with columns \code{snp_id}, \code{gene_name},
+\code{gene_strand}, \code{ambiguous}, as \code{\link{assign_snp_genes}}
+returns them. Distinct from \code{snp_info$gene_name}, which comma-joins
+overlapping genes into one display label: this keeps each candidate as its
+own row with its strand, which is what
+\code{\link{haplotype_expression_by_molecule}} needs to attribute a
+molecule at a multi-gene SNP. Populated by \code{\link{import_cellsnp}}
+when the gene annotation carries a \code{strand} column, or afterwards via
+\code{snp_gene_map<-()}; empty otherwise. Rows follow their SNP, and are
+dropped when it is.}
+
 \item{\code{zygosity_source}}{Character string naming the \emph{active} zygosity-call source
 (a value of \code{donor_snp_info$zygosity_source}), or \code{NA_character_} if none
 is established yet. \code{\link{donor_snp_info}}, \code{\link{assign_xci}}, and other
@@ -280,10 +316,14 @@ importing Vireo genotypes) or by \code{\link{infer_zygosity}}.}
   \item{\code{oth_count(x)}}{Get other allele count matrix}
   \item{\code{snp_info(x)}}{Get SNP metadata data.frame (alias: \code{get_snp_info()})}
   \item{\code{barcode_info(x)}}{Get cell/barcode metadata data.frame (alias: \code{get_barcode_info()})}
-  \item{\code{get_sample_info(x)}}{Alias for barcode_info()}
+  \item{\code{get_sample_info(x)}}{Legacy alias for barcode_info(); prefer
+    \code{get_barcode_info()}/\code{barcode_info()} in new code}
   \item{\code{donor_info(x)}}{Get per-donor metadata tibble (alias: \code{get_donor_info()})}
   \item{\code{donor_snp_info(x, source = NULL)}}{Get per-(SNP, donor) metadata tibble,
     filtered to the active zygosity source by default (alias: \code{get_donor_snp_info()})}
+  \item{\code{snp_gene_map(x)}}{Get the per-(SNP, candidate gene) map used by
+    \code{\link{haplotype_expression_by_molecule}} (alias:
+    \code{get_snp_gene_map()}); set with \code{snp_gene_map<-()}}
   \item{\code{chr_style(x)}}{Get chromosome naming style}
   \item{\code{zygosity_source(x)}}{Get the active zygosity-call source; set with
     \code{zygosity_source<-()}}

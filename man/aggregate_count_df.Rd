@@ -10,11 +10,11 @@ aggregate_count_df(x, group_by, test_maf = TRUE)
 \S4method{aggregate_count_df}{SNPData}(x, group_by, test_maf = TRUE)
 }
 \arguments{
-\item{x}{A SNPData object}
+\item{x}{A SNPData object, required.}
 
-\item{group_by}{Character vector specifying the column name(s) in barcode_info to group by. When
-more than one column is given, counts are aggregated over each unique combination of values
-across those columns, and each grouping column is retained in the output.}
+\item{group_by}{Character vector, required. Column name(s) in \code{barcode_info} to group by.
+When more than one column is given, counts are aggregated over each unique combination of
+values across those columns, and each grouping column is retained in the output.}
 
 \item{test_maf}{Logical (default \code{TRUE}). Whether to include a test_maf column.}
 }

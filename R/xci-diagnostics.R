@@ -101,8 +101,8 @@ setMethod("xci_haplotypes", signature(x = "SNPData"), function(x) {
 #' \code{\link{.fit_pooled_rho_by_donor}}). \code{xci_rho} is instead refit
 #' directly at the donor-pooled level, against the population of informative
 #' (non-escaping) genes' pooled \code{active_count}/\code{inactive_count} from
-#' \code{\link{haplotype_expression}}, the aggregation level \code{test_escape}
-#' actually operates at.
+#' \code{\link{haplotype_expression}}, whose default grain is the aggregation
+#' level \code{test_escape} actually operates at.
 #'
 #' @keywords internal
 .store_xci_fit <- function(x, fit) {
@@ -191,18 +191,14 @@ setMethod("xci_haplotypes", signature(x = "SNPData"), function(x) {
     }
 
     logger::log_info("Aggregating haplotype expression for pooled rho fitting")
-    # The default grain elects one representative SNP per gene rather than
-    # summing across them: a read spanning several of a gene's het SNPs would
-    # otherwise be counted once per SNP, inflating well-covered multi-SNP genes
-    # and skewing the spread rho is fitted to. The summarise below is still
-    # needed, but only pools the two active-X groups -- disjoint cell sets, so no
-    # double-counting -- into a single row per gene.
+    # The default grain is already one row per (donor, gene): it elects one
+    # representative SNP per gene rather than summing across them (a read
+    # spanning several of a gene's het SNPs would otherwise be counted once per
+    # SNP, inflating well-covered multi-SNP genes and skewing the spread rho is
+    # fitted to), and pools the two active-X groups, which are disjoint cell
+    # sets. That is the grain test_escape() tests at, which is the whole point
+    # of fitting rho here rather than reusing the EM's per-cell value.
     hap_by_gene <- haplotype_expression(x, xci_informative_only = TRUE) %>%
-        dplyr::summarise(
-            active_count = sum(active_count),
-            inactive_count = sum(inactive_count),
-            .by = c(donor, gene_name)
-        ) %>%
         dplyr::left_join(dplyr::select(donor_info(x), donor, xci_median_pi_g), by = "donor") %>%
         dplyr::filter(!is.na(xci_median_pi_g))
 

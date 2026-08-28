@@ -8,10 +8,11 @@ plot_maf_pval_track(allele_counts_df, facet, x_range)
 }
 \arguments{
 \item{allele_counts_df}{A data.frame, required, with columns \code{pos}
-(position), \code{adj_p_val} (adjusted p-value), and a column for
-faceting. SNP information.}
+(position), \code{adj_p_val} (adjusted p-value), and a column to facet by
+(see \code{facet}). SNP information.}
 
-\item{facet}{Required. Bare column name to use for faceting the plot.}
+\item{facet}{Bare column name (unquoted), required. Variable in
+\code{allele_counts_df} to facet the plot by.}
 
 \item{x_range}{Numeric vector of length 2, required. Genomic range limits to display.}
 }
@@ -24,8 +25,9 @@ of minor allele frequency differences across a genomic region.
 }
 \examples{
 \dontrun{
-snp_stats <- calculate_snp_significance(snp_data)
-plot_maf_pval_track(snp_stats, facet = donor_id, x_range = c(1000000, 2000000))
+snp_data <- get_example_snpdata()
+snp_stats <- donor_count_df(snp_data)
+plot_maf_pval_track(snp_stats, facet = donor, x_range = c(1000000, 2000000))
 }
 }
 \seealso{

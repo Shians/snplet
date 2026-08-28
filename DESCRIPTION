@@ -23,7 +23,6 @@ Depends:
 Imports:
     BiocGenerics,
     Biostrings,
-    DelayedArray,
     dplyr,
     fs,
     GenomicAlignments,
@@ -35,10 +34,8 @@ Imports:
     IRanges,
     logger,
     magrittr,
-    mclust,
     plyranges,
     furrr,
-    future,
     purrr,
     R.utils,
     readr,
@@ -62,8 +59,8 @@ License: Apache License (>= 2)
 Encoding: UTF-8
 LazyData: false
 biocViews: SingleCell, RNASeq, Genetics, SNP, GeneExpression, Transcriptomics, Sequencing
-URL: https://github.com/shiansu/snplet
-BugReports: https://github.com/shiansu/snplet/issues
+URL: https://github.com/Shians/snplet
+BugReports: https://github.com/Shians/snplet/issues
 Collate:
     'SNPData-helpers.R'
     'SNPData-class.R'

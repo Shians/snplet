@@ -745,7 +745,7 @@ test_that("haplotype_expression() surfaces an escapee gene that assign_xci exclu
 
     # Verify the per-SNP grain reports the escapee at all, even though assign_xci
     # excluded it from calling and no gene-level election can pick it
-    hap_default <- haplotype_expression(stored, by_snp = TRUE)
+    hap_default <- haplotype_expression(stored, by_snp = TRUE, by_active_x = TRUE)
     expect_true(escapee_snp %in% hap_default$snp_id)
     # Confirm the escapee still reads as elevated inactive-haplotype expression
     # in at least one active-X group, even though assign_xci excluded it from

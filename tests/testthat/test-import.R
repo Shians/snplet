@@ -1076,3 +1076,36 @@ test_that("import_cellsnp(vireo_folder=) populates donor_snp_info from real Vire
     # the imported Vireo calls
     expect_equal(zygosity_source(snp_data), "vireo_gt")
 })
+
+test_that("import_cellsnp() builds the SNP-to-gene map when the annotation carries strand", {
+    snp_data <- get_example_snpdata()
+    map <- snp_gene_map(snp_data)
+
+    # Verify the map is populated at import, so haplotype_expression_by_molecule()
+    # need not be handed one
+    expect_gt(nrow(map), 0)
+    # Check it carries the per-candidate columns snp_info$gene_name cannot
+    expect_true(all(c("snp_id", "gene_name", "gene_strand", "ambiguous") %in% colnames(map)))
+    # Ensure every mapped SNP is one the object actually holds
+    expect_true(all(map$snp_id %in% snp_info(snp_data)$snp_id))
+
+    # Confirm the map follows its SNPs through subsetting rather than being
+    # dropped when the object is rebuilt
+    subset_data <- snp_data[seq_len(50), ]
+    expect_true(all(snp_gene_map(subset_data)$snp_id %in% snp_info(subset_data)$snp_id))
+    expect_gt(nrow(snp_gene_map(subset_data)), 0)
+})
+
+test_that("import_cellsnp() leaves the SNP-to-gene map empty for an unstranded annotation", {
+    cellsnp_dir <- system.file("extdata/example_snpdata", package = "snplet")
+    gene_annotation <- data.frame(chrom = "chr1", start = 1, end = 1e9, gene_name = "dummy")
+
+    snp_data <- import_cellsnp(
+        cellsnp_dir = cellsnp_dir,
+        gene_annotation = gene_annotation,
+        library_id = "lib1"
+    )
+
+    # Verify no map is guessed at without strand, which molecule attribution needs
+    expect_equal(nrow(snp_gene_map(snp_data)), 0)
+})

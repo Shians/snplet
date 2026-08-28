@@ -2,19 +2,19 @@
 % Please edit documentation in R/plots.R
 \name{plot_lib_size_distribution}
 \alias{plot_lib_size_distribution}
-\title{Plot distribution of library size across samples}
+\title{Plot distribution of library size across barcodes}
 \usage{
 plot_lib_size_distribution(snp_data)
 }
 \arguments{
-\item{snp_data}{A SNPData object, required, with sample information and library size data.}
+\item{snp_data}{A SNPData object, required, with barcode information and library size data.}
 }
 \value{
 A ggplot object showing the density distribution of library sizes
 }
 \description{
-This function visualizes the distribution of library sizes (total read counts)
-across all samples in the SNP data object using a density plot.
+This function visualises the distribution of library sizes (total read counts)
+across all barcodes in the SNP data object using a density plot.
 }
 \examples{
 \dontrun{

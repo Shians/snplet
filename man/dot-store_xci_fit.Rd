@@ -27,7 +27,7 @@ conservative once thousands of cells are pooled (see
 \code{\link{.fit_pooled_rho_by_donor}}). \code{xci_rho} is instead refit
 directly at the donor-pooled level, against the population of informative
 (non-escaping) genes' pooled \code{active_count}/\code{inactive_count} from
-\code{\link{haplotype_expression}}, the aggregation level \code{test_escape}
-actually operates at.
+\code{\link{haplotype_expression}}, whose default grain is the aggregation
+level \code{test_escape} actually operates at.
 }
 \keyword{internal}

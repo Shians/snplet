@@ -2,33 +2,55 @@
 % Please edit documentation in R/test_escape.R
 \name{test_escape}
 \alias{test_escape}
+\alias{test_escape,data.frame-method}
+\alias{test_escape,SNPData-method}
 \title{Test for XCI escape significance}
 \usage{
-test_escape(x, p = 0.1, rho = 0.05)
+test_escape(x, p = NULL, rho = NULL, by_donor = TRUE)
+
+\S4method{test_escape}{data.frame}(x, p = NULL, rho = NULL, by_donor = TRUE)
+
+\S4method{test_escape}{SNPData}(x, p = NULL, rho = NULL, by_donor = TRUE)
 }
 \arguments{
-\item{x}{A data.frame with integer columns \code{active_count} and
-\code{inactive_count}, one row per observation (required). Typically
-\code{\link{haplotype_expression}} output collapsed to one row per
-(donor, gene); see Details.}
+\item{x}{A SNPData object that \code{\link{assign_xci}} has annotated, or a
+data.frame with integer columns \code{active_count} and
+\code{inactive_count} and one row per gene (required).}
 
-\item{p}{Numeric, in \code{[0, 1]} (default 0.10). Null hypothesis escape
-fraction; \code{donor_info(x)$xci_median_pi_g} can be used as a
-per-donor empirical null.}
+\item{p}{Numeric, in \code{[0, 1]}, scalar or one value per row of \code{x}
+(default \code{NULL}). Null hypothesis escape fraction. \code{NULL} means
+each donor's own \code{xci_median_pi_g} for a SNPData, and 0.10 for a
+data.frame, which has no donor fit to draw on.}
 
-\item{rho}{Numeric, in \code{[0, 1)} (default 0.05). Beta-binomial
-overdispersion, typically \code{donor_info(x)$xci_rho} from
-\code{\link{assign_xci}} (a donor-pooled estimate, not the EM's per-cell
-overdispersion; see \code{\link{.fit_pooled_rho_by_donor}}).}
+\item{rho}{Numeric, in \code{[0, 1)}, scalar or one value per row of
+\code{x} (default \code{NULL}). Beta-binomial overdispersion. \code{NULL}
+means each donor's own \code{xci_rho} for a SNPData, and 0.05 for a
+data.frame. \code{xci_rho} is a donor-pooled estimate fitted at this
+function's own grain, not the EM's per-cell overdispersion; see
+\code{\link{.fit_pooled_rho_by_donor}}.}
+
+\item{by_donor}{Logical (default \code{TRUE}). Correct within each donor
+separately, treating donors as independent experiments, which matches the
+per-donor \code{p} and \code{rho}. \code{FALSE} corrects across the whole
+table at once, appropriate when donors are replicates of one experiment.
+Ignored when \code{x} carries no \code{donor} column.}
 }
 \value{
-The input \code{x} with three columns appended:
+For a data.frame, the input with three columns appended; for a
+  SNPData, the gene-level count table those same columns are appended to
+  (see \code{\link{haplotype_expression}}), plus \code{count_source}.
   \describe{
     \item{\code{coverage}}{\code{active_count + inactive_count} for each row.}
     \item{\code{p_val}}{One-sided exact beta-binomial p-value for observing at
       least \code{inactive_count} inactive-allele reads out of
-      \code{ceiling(coverage)} trials under \code{BetaBinomial(n, p, rho)}.}
-    \item{\code{adj_p_val}}{Benjamini-Hochberg (BH) adjusted p-value.}
+      \code{ceiling(coverage)} trials under \code{BetaBinomial(n, p, rho)};
+      \code{NA} for an untestable row (zero coverage, or a donor whose fit
+      yielded no \code{p}/\code{rho}).}
+    \item{\code{adj_p_val}}{Benjamini-Hochberg (BH) adjusted p-value, over
+      the testable rows of the donor (or of the whole table when
+      \code{by_donor = FALSE}).}
+    \item{\code{count_source}}{SNPData only: \code{"molecule"} or
+      \code{"snp"}, naming where the counts came from.}
   }
 }
 \description{
@@ -48,24 +70,33 @@ indistinguishable from a gene that escapes in every cell. Reorienting to
 active/inactive before pooling removes that confound.
 
 
-Testing \code{\link{haplotype_expression}}'s output directly over-counts:
-it returns one row per (donor, phased SNP, active-X group), i.e. multiple
-rows per gene whenever it has more than one informative SNP and always two
-rows per SNP, so testing that table as-is multiplies the number of tests
-(inflating the BH correction) and splits a single gene's evidence across
-redundant rows instead of pooling it. Collapse to one row per (donor,
-gene), summing \code{active_count}/\code{inactive_count}, before calling
-\code{test_escape()}; see the second example.
+Passing the SNPData object itself is the recommended path: it takes the
+counts at the right grain, the null from the donor's own fit, and the
+multiplicity correction within that donor, none of which the data.frame
+method can infer from a bare table. The data.frame method exists for
+hand-built or externally derived counts.
 
-The BH correction in \code{adj_p_val} is scoped to whatever rows are
-passed in a single call: passing every donor's genes in one call corrects
-across the whole multi-donor table, while calling once per donor (e.g. via
-\code{dplyr::group_by(donor) \%>\% dplyr::group_modify()}) corrects within
-each donor independently. Neither is more "correct" in general, since it
-depends whether donors should be treated as independent experiments or
-pooled, but the two give different \code{adj_p_val} for the same gene, so
-pick deliberately rather than defaulting to whichever grouping the input
-happens to arrive in.
+Every count must be pooled to one row per gene before testing. Two failure
+modes are worth naming, both of which the SNPData method avoids by
+construction:
+\itemize{
+  \item Testing the two active-X groups as separate rows doubles the number
+    of tests BH corrects over and splits a gene's evidence between two
+    half-coverage rows, so it can reach significance in one group and not
+    the other purely by which cells fell where.
+    \code{\link{haplotype_expression}} pools them by default; only
+    \code{by_active_x = TRUE} splits them.
+  \item Summing a gene's SNPs counts a read spanning several of them once
+    per SNP, inflating well-covered multi-SNP genes. Never sum the per-SNP
+    rows from \code{by_snp = TRUE}; the default output already elects one
+    representative SNP per gene, and
+    \code{\link{haplotype_expression_by_molecule}} is how to use a gene's
+    other SNPs without double-counting.
+}
+
+Rows with zero coverage cannot be tested and are given \code{NA} rather
+than a p-value of 1, which keeps them out of the BH denominator instead of
+inflating it.
 }
 \section{Phase is inferred from expression, not genotyped}{
 
@@ -112,11 +143,15 @@ df <- tibble::tibble(
     inactive_count = c(1, 6, 2)
 )
 
-# Fixed null escape fraction and overdispersion, shared across all rows
+# Fixed null escape fraction and overdispersion, shared across all rows.
+# donor0's two genes are corrected together, donor1's on its own.
 test_escape(df, p = 0.10, rho = 0.3)
 
+# One correction across every donor's genes instead
+test_escape(df, p = 0.10, rho = 0.3, by_donor = FALSE)
+
 # Donor-specific null and overdispersion, taken from assign_xci()'s fit
-# (here fabricated; normally donor_info(snp_data) after assign_xci(snp_data))
+# (here fabricated; the SNPData method reads these off the object itself)
 donor_null <- tibble::tibble(
     donor = c("donor0", "donor1"),
     xci_median_pi_g = c(0.02, 0.05),
@@ -126,24 +161,24 @@ df_with_null <- dplyr::left_join(df, donor_null, by = "donor")
 test_escape(df_with_null, p = df_with_null$xci_median_pi_g, rho = df_with_null$xci_rho)
 
 \dontrun{
-# Full recommended pipeline on real haplotype_expression() output: collapse
-# the SNP x active-X-group rows to one row per (donor, gene), attach each
-# donor's empirical null, then BH-correct within each donor separately.
+# The recommended path: counts, null and correction all taken from the object
 snp_data <- assign_xci(snp_data)
-hap_by_gene <- haplotype_expression(snp_data) \%>\%
-    dplyr::summarise(
-        active_count = sum(active_count),
-        inactive_count = sum(inactive_count),
-        .by = c(donor, gene_name)
-    ) \%>\%
-    dplyr::left_join(
-        dplyr::select(donor_info(snp_data), donor, xci_median_pi_g, xci_rho),
-        by = "donor"
-    )
+escape_result <- test_escape(snp_data)
 
-escape_result <- hap_by_gene \%>\%
-    dplyr::group_by(donor) \%>\%
-    dplyr::group_modify(~ test_escape(.x, p = .x$xci_median_pi_g, rho = .x$xci_rho)) \%>\%
-    dplyr::ungroup()
+# Uses read-backed molecule counts automatically once they are available
+snp_data <- add_molecule_phase(snp_data, bam_files = c(lib1 = "lib1.bam"))
+escape_result <- test_escape(snp_data)
 }
 }
+\seealso{
+Other X-chromosome inactivation functions:
+\code{\link[=add_molecule_phase]{add_molecule_phase()}},
+\code{\link[=assign_xci]{assign_xci()}},
+\code{\link[=assign_xci_by_clonotype]{assign_xci_by_clonotype()}},
+\code{\link[=haplotype_expression]{haplotype_expression()}},
+\code{\link[=haplotype_expression_by_molecule]{haplotype_expression_by_molecule()}},
+\code{\link[=plot_xci_heatmap]{plot_xci_heatmap()}},
+\code{\link[=xci_assignments]{xci_assignments()}},
+\code{\link[=xci_haplotypes]{xci_haplotypes()}}
+}
+\concept{X-chromosome inactivation functions}

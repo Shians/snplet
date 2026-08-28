@@ -2,7 +2,7 @@
 #'
 #' This function filters out cells that are identified as doublets from a SNPData object.
 #' Doublets are identified based on the 'donor' column in the barcode_info slot, where
-#' cells labeled as 'doublet' are removed.
+#' cells labelled as 'doublet' are removed.
 #'
 #' @param x A SNPData object, required.
 #' @param drop_na Logical (default \code{TRUE}). Whether to also remove

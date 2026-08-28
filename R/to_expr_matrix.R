@@ -15,7 +15,7 @@
 #'   \item \code{(REF - ALT) / (depth + 1)} represents the allelic proportion, ranging
 #'         from -1 (all ALT) to +1 (all REF), with 0 indicating balanced expression
 #'   \item \code{log(depth + 1)} weights the signal by sequencing depth, similar to
-#'         log-normalization in RNA-seq analysis
+#'         log-normalisation in RNA-seq analysis
 #'   \item The pseudocount of 1 prevents division by zero and log(0)
 #' }
 #'
@@ -24,7 +24,7 @@
 #'   \item SNPs with higher depth contribute more to the signal
 #'   \item Allelic imbalance direction is preserved (positive = REF bias, negative = ALT bias)
 #'   \item Low-depth SNPs are naturally down-weighted
-#'   \item The log transformation stabilizes variance across depth ranges
+#'   \item The log transformation stabilises variance across depth ranges
 #' }
 #'
 #' @param x A SNPData object, required.
@@ -32,6 +32,12 @@
 #'   or \code{"donor"} (default \code{"barcode"}). Aggregation level.
 #' @return Matrix with snp_id as rows and cell/clonotype/donor as columns
 #' @export
+#'
+#' @examples
+#' \dontrun{
+#' snp_data <- get_example_snpdata()
+#' expr_matrix <- to_expr_matrix(snp_data)
+#' }
 setGeneric("to_expr_matrix", function(x, level = c("barcode", "clonotype", "donor")) standardGeneric("to_expr_matrix"))
 
 #' @rdname to_expr_matrix

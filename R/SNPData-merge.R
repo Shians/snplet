@@ -5,19 +5,22 @@
 #' \code{(library_id, barcode)}, and unique entries are retained based on join
 #' type.
 #'
-#' @param x A SNPData object
-#' @param y A SNPData object to merge with x
-#' @param snp_join Join type for SNPs (rows). One of:
+#' @param x A SNPData object, required.
+#' @param y A SNPData object, required. Object to merge with \code{x}.
+#' @param snp_join Character scalar, one of \code{"union"}, \code{"intersect"},
+#'   \code{"left"}, \code{"right"} (default \code{"union"}). Join type for SNPs
+#'   (rows):
 #'   \describe{
 #'     \item{\code{"union"}}{Keep all SNPs from both objects (default)}
 #'     \item{\code{"intersect"}}{Keep only SNPs present in both objects}
 #'     \item{\code{"left"}}{Keep all SNPs from x, add y data where available}
 #'     \item{\code{"right"}}{Keep all SNPs from y, add x data where available}
 #'   }
-#' @param cell_join Join type for cells (columns). Two cells are "the same
-#'   cell" only when they share both a \code{library_id} and a
-#'   \code{barcode}; a cell in only one object is never merged into another,
-#'   regardless of this setting. One of:
+#' @param cell_join Character scalar, one of \code{"union"}, \code{"intersect"},
+#'   \code{"left"}, \code{"right"} (default \code{"union"}). Join type for
+#'   cells (columns). Two cells are "the same cell" only when they share both
+#'   a \code{library_id} and a \code{barcode}; a cell in only one object is
+#'   never merged into another, regardless of this setting:
 #'   \describe{
 #'     \item{\code{"union"}}{Keep all cells from both objects (default)}
 #'     \item{\code{"intersect"}}{Keep only cells present in both objects}
@@ -293,6 +296,7 @@ merge_snpdata <- function(
     )
     merged_obj@zygosity_source <- zygosity_source_merged
     merged_obj <- .merge_library_bams(merged_obj, x, y)
+    merged_obj <- .merge_snp_gene_map(merged_obj, x, y)
 
     logger::log_success(
         "Merged SNPData: {nrow(merged_obj)} SNPs x {ncol(merged_obj)} cells"

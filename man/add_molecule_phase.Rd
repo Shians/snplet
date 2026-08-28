@@ -62,8 +62,11 @@ A SNPData object with `donor_snp_info` gaining the columns
   `.infer_bam_strand_orientation()` and `molecule_read_strand()`, used by
   `haplotype_expression_by_molecule()` to resolve SNPs `assign_snp_genes()`
   flagged `ambiguous`), the per-donor `molecule_snp_alleles()` output
-  already computed here) so `haplotype_expression_by_molecule()` does not
-  need to re-extract from the BAM. A second attribute, `"bam_calibration"`,
+  already computed here), which `haplotype_expression_by_molecule()` reads
+  straight off the object it is given: nothing needs passing by hand or
+  re-extracting from the BAM. Being an attribute, it does not survive
+  operations that rebuild the object, so subset before this call rather than
+  after. A second attribute, `"bam_calibration"`,
   records one row per BAM file scanned with columns `bam_file`,
   `orientation` (`"sense"`/`"antisense"`/`NA` where it could not be
   inferred), `n_ts_reads`, `concordance`, and `n_scanned`, so the strand
@@ -130,6 +133,7 @@ Other X-chromosome inactivation functions:
 \code{\link[=haplotype_expression]{haplotype_expression()}},
 \code{\link[=haplotype_expression_by_molecule]{haplotype_expression_by_molecule()}},
 \code{\link[=plot_xci_heatmap]{plot_xci_heatmap()}},
+\code{\link[=test_escape]{test_escape()}},
 \code{\link[=xci_assignments]{xci_assignments()}},
 \code{\link[=xci_haplotypes]{xci_haplotypes()}}
 }

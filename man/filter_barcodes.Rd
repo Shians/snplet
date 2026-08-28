@@ -5,7 +5,7 @@
 \alias{filter_barcodes,SNPData-method}
 \alias{filter_samples}
 \alias{filter_samples,SNPData-method}
-\title{Filter SNPData object by sample/cell/barcode information}
+\title{Filter SNPData object by barcode/cell information}
 \usage{
 filter_barcodes(.data, ...)
 
@@ -25,7 +25,8 @@ filter_samples(.data, ...)
 A new filtered SNPData object
 }
 \description{
-Filter SNPData object by sample/cell/barcode information
+\code{filter_samples} is a legacy alias retained for backwards compatibility;
+prefer \code{filter_barcodes} in new code.
 }
 \examples{
 \dontrun{
@@ -34,7 +35,7 @@ snp_data <- get_example_snpdata()
 filtered_cells <- filter_barcodes(snp_data, library_size > 1000)
 
 # Filter cells from a specific donor
-filtered_cells <- filter_barcodes(snp_data, donor_id == "donor_1")
+filtered_cells <- filter_barcodes(snp_data, donor == "donor0")
 
 # Filter cells with multiple conditions
 filtered_cells <- filter_barcodes(snp_data, library_size > 1000, non_zero_snps > 50)

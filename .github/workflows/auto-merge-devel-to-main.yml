@@ -2,7 +2,7 @@ name: Auto-merge devel into main after R-CMD-check
 
 on:
   workflow_run:
-    workflows: ["R-CMD-check"]
+    workflows: ["R-CMD-check.yaml"]
     branches: ["devel"]
     types:
       - completed
@@ -35,5 +35,5 @@ jobs:
       - name: Sync main back into devel
         run: |
           git checkout devel
-          git merge --no-ff origin/main -m "Sync main back into devel"
+          git merge origin/main -m "Sync main back into devel"
           git push origin HEAD:devel

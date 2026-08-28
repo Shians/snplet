@@ -121,7 +121,7 @@ test_that("haplotype_expression() reports a clean XCI SNP as flipping alleles", 
     fixture <- make_hap_fixture()
     snp1 <- fixture$snp_ids[1]
 
-    res <- haplotype_expression(fixture$obj, by_snp = TRUE)
+    res <- haplotype_expression(fixture$obj, by_snp = TRUE, by_active_x = TRUE)
     x1 <- hap_row(res, "donor0", snp1, "X1")
     x2 <- hap_row(res, "donor0", snp1, "X2")
 
@@ -140,7 +140,7 @@ test_that("haplotype_expression() flags a group that reverses the phase without 
     fixture <- make_hap_fixture()
     snp2 <- fixture$snp_ids[2]
 
-    res <- haplotype_expression(fixture$obj, by_snp = TRUE)
+    res <- haplotype_expression(fixture$obj, by_snp = TRUE, by_active_x = TRUE)
     x1 <- hap_row(res, "donor0", snp2, "X1")
     x2 <- hap_row(res, "donor0", snp2, "X2")
 
@@ -221,7 +221,7 @@ test_that("same_allele_dominant tracks the groups straddling 0.5, not high escap
         overwrite = TRUE
     )
 
-    res <- haplotype_expression(obj, by_snp = TRUE)
+    res <- haplotype_expression(obj, by_snp = TRUE, by_active_x = TRUE)
     one_sided <- dplyr::filter(res, gene_name == "one_sided")
     symmetric <- dplyr::filter(res, gene_name == "symmetric")
 
@@ -238,7 +238,7 @@ test_that("same_allele_dominant tracks the groups straddling 0.5, not high escap
     # Confirm the election follows same_allele_dominant, so the symmetric escapee
     # is still elected at gene level while the one-sided SNP is dropped
     elected <- haplotype_expression(obj)
-    expect_setequal(elected$gene_name, c("symmetric", "symmetric"))
+    expect_setequal(elected$gene_name, "symmetric")
 })
 
 
@@ -247,7 +247,7 @@ test_that("phase_contradiction is mechanical, with no per-gene exemption", {
     snp2 <- fixture$snp_ids[2]
     snp_info(fixture$obj)$gene_name[snp_info(fixture$obj)$snp_id == snp2] <- "XIST"
 
-    res <- haplotype_expression(fixture$obj, by_snp = TRUE)
+    res <- haplotype_expression(fixture$obj, by_snp = TRUE, by_active_x = TRUE)
     x2 <- hap_row(res, "donor0", snp2, "X2")
 
     # The reversed group is reported rather than excluded, as for any gene
@@ -301,7 +301,7 @@ test_that("haplotype_expression() splits active/inactive counts by the stored ph
     # snp2 carries partial leakage (16:4), which is what makes it a useful test of
     # where the minority reads land -- snp1's 20:0 would pass even if leakage were
     # discarded entirely.
-    res <- haplotype_expression(fixture$obj, by_snp = TRUE)
+    res <- haplotype_expression(fixture$obj, by_snp = TRUE, by_active_x = TRUE)
     x1 <- hap_row(res, "donor0", snp2, "X1")
 
     # X1 carries REF; in X1-active cells REF is the active haplotype:
@@ -315,7 +315,7 @@ test_that("haplotype_expression() applies each donor's own phase, not the flatte
     fixture <- make_hap_fixture()
     snp3 <- fixture$snp_ids[3]
 
-    res <- haplotype_expression(fixture$obj, by_snp = TRUE)
+    res <- haplotype_expression(fixture$obj, by_snp = TRUE, by_active_x = TRUE)
     d1_x1 <- hap_row(res, "donor1", snp3, "X1")
     d1_x2 <- hap_row(res, "donor1", snp3, "X2")
 
@@ -425,10 +425,11 @@ test_that("haplotype_expression() elects the flipping SNP over a better-covered 
     # Verify geneA is represented by the flipping SNP, not the higher-coverage
     # SNP whose dominant allele fails to flip between the groups
     expect_setequal(gene_a$snp_id, fixture$snp_ids[2])
-    # Confirm exactly the two active-X groups are reported for the gene
-    expect_equal(nrow(gene_a), 2L)
-    # Check the counts are the elected SNP's own, not a sum over the gene's SNPs
-    expect_setequal(gene_a$coverage, c(6, 6))
+    # Confirm the gene collapses to a single row, its two active-X groups pooled
+    expect_equal(nrow(gene_a), 1L)
+    # Check the counts are the elected SNP's own two groups summed (6 + 6), not a
+    # sum over the gene's SNPs
+    expect_equal(gene_a$coverage, 12)
 })
 
 test_that("haplotype_expression() breaks ties between electable SNPs on total coverage", {
@@ -439,8 +440,9 @@ test_that("haplotype_expression() breaks ties between electable SNPs on total co
 
     # Both of geneB's SNPs flip, so the higher-coverage one wins
     expect_setequal(gene_b$snp_id, fixture$snp_ids[4])
-    # Verify the elected SNP's per-group coverage, confirming no summing occurred
-    expect_setequal(gene_b$coverage, c(10, 10))
+    # Verify the coverage is the elected SNP's alone (10 + 10 over its two
+    # groups), confirming no summing across the gene's SNPs occurred
+    expect_equal(gene_b$coverage, 20)
 })
 
 test_that("haplotype_expression() drops a gene with no flipping SNP", {
@@ -450,8 +452,8 @@ test_that("haplotype_expression() drops a gene with no flipping SNP", {
 
     # Confirm geneC, whose only SNP fails the flip test, is absent
     expect_false("geneC" %in% res$gene_name)
-    # Ensure only the two representable genes survive, two rows each
-    expect_setequal(res$gene_name, c("geneA", "geneA", "geneB", "geneB"))
+    # Ensure only the two representable genes survive, one row each
+    expect_setequal(res$gene_name, c("geneA", "geneB"))
 })
 
 test_that("haplotype_expression() drops the selection-criterion columns from gene output", {
@@ -462,10 +464,10 @@ test_that("haplotype_expression() drops the selection-criterion columns from gen
     # every surviving SNP flips by construction, so a uniformly FALSE column
     # would read as evidence rather than as the selection criterion it is
     expect_false("same_allele_dominant" %in% colnames(res))
-    # Confirm the grain is one row per (donor, gene, active-X group)
-    expect_equal(nrow(dplyr::distinct(res, donor, gene_name, active_x)), nrow(res))
-    # Check both active-X groups are present for each retained gene
-    expect_setequal(res$active_x, c("X1", "X2", "X1", "X2"))
+    # Confirm the default grain is one row per (donor, gene)
+    expect_equal(nrow(dplyr::distinct(res, donor, gene_name)), nrow(res))
+    # Check the per-group columns are gone with the groups they described
+    expect_false(any(c("active_x", "dominant_allele", "phase_contradiction") %in% colnames(res)))
 })
 
 test_that("haplotype_expression() requires gene annotation unless by_snp", {
@@ -480,7 +482,7 @@ test_that("haplotype_expression() requires gene annotation unless by_snp", {
 test_that("haplotype_expression() reports every phased SNP under by_snp", {
     fixture <- make_gene_collapse_fixture()
 
-    per_snp <- haplotype_expression(fixture$obj, by_snp = TRUE)
+    per_snp <- haplotype_expression(fixture$obj, by_snp = TRUE, by_active_x = TRUE)
 
     # Verify by_snp reports every phased SNP, including the non-flipping ones no
     # gene could elect -- this is the surface for inspecting what the default omits

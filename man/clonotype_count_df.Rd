@@ -10,7 +10,7 @@ clonotype_count_df(x, test_maf = TRUE)
 \S4method{clonotype_count_df}{SNPData}(x, test_maf = TRUE)
 }
 \arguments{
-\item{x}{A SNPData object}
+\item{x}{A SNPData object, required.}
 
 \item{test_maf}{Logical (default \code{TRUE}). Whether to include a test_maf column.}
 }

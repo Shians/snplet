@@ -1,6 +1,6 @@
 #' Plot assignment heatmap from a SNPData object with stored XCI diagnostics
 #'
-#' Visualizes the REF allele fraction at the genes this donor's model retained.
+#' Visualises the REF allele fraction at the genes this donor's model retained.
 #' Columns (cells or clonotypes) are ordered by posterior and annotated at the
 #' top. Rows are ordered by discriminative power (the difference in mean REF
 #' fraction between X1-active and X2-active cells) so the genes that most
@@ -16,7 +16,7 @@
 #'
 #' @param x A SNPData object, required, that had XCI diagnostics stored by
 #'   \code{\link{assign_xci}} or \code{\link{assign_xci_by_clonotype}}.
-#' @param donor Character scalar, required. Donor to visualize.
+#' @param donor Character scalar, required. Donor to visualise.
 #' @param min_coverage_cells Integer (default 1, dropping only genes with no
 #'   coverage in this donor). Minimum number of cells that must cover a gene
 #'   for it to be shown; genes covered in fewer cells carry little signal and
@@ -64,7 +64,8 @@
 #'
 #' @examples
 #' \dontrun{
-#' # Diagnostics stored by assign_xci() are read back automatically
+#' # Diagnostics stored by assign_xci() are read back automatically. Requires
+#' # a snp_data object already processed by assign_xci() (see its examples).
 #' snp_data <- assign_xci(snp_data)
 #' plot_xci_heatmap(snp_data, donor = "donor1")
 #' }
