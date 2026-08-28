@@ -180,7 +180,7 @@ coverage(x)
 
 \item{i}{Numeric or logical vector, optional. Subsets SNPs (rows).}
 
-\item{j}{Numeric or logical vector, optional. Subsets samples (columns).}
+\item{j}{Numeric or logical vector, optional. Subsets barcodes/cells (columns).}
 
 \item{ref_count}{A sparse Matrix (SNPs x cells), required. Reference allele counts.}
 
@@ -240,7 +240,7 @@ logs which legacy slots it migrated.}
 \value{
 A subsetted SNPData object
 
-A numeric vector of length 2 giving the number of SNPs and samples
+A numeric vector of length 2 giving the number of SNPs and barcodes/cells
 }
 \description{
 An S4 class to store and manipulate single-cell SNP count matrices with associated metadata.
@@ -316,7 +316,8 @@ importing Vireo genotypes) or by \code{\link{infer_zygosity}}.}
   \item{\code{oth_count(x)}}{Get other allele count matrix}
   \item{\code{snp_info(x)}}{Get SNP metadata data.frame (alias: \code{get_snp_info()})}
   \item{\code{barcode_info(x)}}{Get cell/barcode metadata data.frame (alias: \code{get_barcode_info()})}
-  \item{\code{get_sample_info(x)}}{Alias for barcode_info()}
+  \item{\code{get_sample_info(x)}}{Legacy alias for barcode_info(); prefer
+    \code{get_barcode_info()}/\code{barcode_info()} in new code}
   \item{\code{donor_info(x)}}{Get per-donor metadata tibble (alias: \code{get_donor_info()})}
   \item{\code{donor_snp_info(x, source = NULL)}}{Get per-(SNP, donor) metadata tibble,
     filtered to the active zygosity source by default (alias: \code{get_donor_snp_info()})}

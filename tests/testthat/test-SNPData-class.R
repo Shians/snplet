@@ -478,7 +478,7 @@ test_that("SNPData() throws error when alt_count and ref_count have mismatched r
             snp_info = test_snp_info,
             barcode_info = test_barcode_info
         ),
-        "nrow\\(alt_count\\) == nrow\\(ref_count\\)"
+        "ref_count and alt_count must have the same number of rows"
     )
 })
 
@@ -493,7 +493,7 @@ test_that("SNPData() throws error when snp_info rows don't match matrix rows", {
             snp_info = wrong_dim_snp_info,
             barcode_info = test_barcode_info
         ),
-        "nrow\\(ref_count\\) == nrow\\(snp_info\\)"
+        "nrow\\(ref_count\\) must equal nrow\\(snp_info\\)"
     )
 })
 
@@ -508,7 +508,7 @@ test_that("SNPData() throws error when barcode_info rows don't match matrix colu
             snp_info = test_snp_info,
             barcode_info = wrong_dim_barcode_info
         ),
-        "ncol\\(alt_count\\) == nrow\\(barcode_info\\)"
+        "ncol\\(alt_count\\) must equal nrow\\(barcode_info\\)"
     )
 })
 

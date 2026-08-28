@@ -42,7 +42,7 @@
 #' @param object A SNPData object, required. Passed to the show method.
 #' @param x A SNPData object, required.
 #' @param i Numeric or logical vector, optional. Subsets SNPs (rows).
-#' @param j Numeric or logical vector, optional. Subsets samples (columns).
+#' @param j Numeric or logical vector, optional. Subsets barcodes/cells (columns).
 #' @param value A data.frame, required. Replacement value for
 #'   \code{barcode_info<-} or \code{snp_info<-}.
 #' @param ... Unused; required by the \code{updateObject} generic.
@@ -103,7 +103,8 @@
 #'   \item{\code{oth_count(x)}}{Get other allele count matrix}
 #'   \item{\code{snp_info(x)}}{Get SNP metadata data.frame (alias: \code{get_snp_info()})}
 #'   \item{\code{barcode_info(x)}}{Get cell/barcode metadata data.frame (alias: \code{get_barcode_info()})}
-#'   \item{\code{get_sample_info(x)}}{Alias for barcode_info()}
+#'   \item{\code{get_sample_info(x)}}{Legacy alias for barcode_info(); prefer
+#'     \code{get_barcode_info()}/\code{barcode_info()} in new code}
 #'   \item{\code{donor_info(x)}}{Get per-donor metadata tibble (alias: \code{get_donor_info()})}
 #'   \item{\code{donor_snp_info(x, source = NULL)}}{Get per-(SNP, donor) metadata tibble,
 #'     filtered to the active zygosity source by default (alias: \code{get_donor_snp_info()})}
@@ -277,7 +278,7 @@ setMethod(
 #'
 #' @param x A SNPData object, required.
 #' @param i Numeric or logical vector, optional. Subsets SNPs (rows).
-#' @param j Numeric or logical vector, optional. Subsets samples (columns).
+#' @param j Numeric or logical vector, optional. Subsets barcodes/cells (columns).
 #' @return A subsetted SNPData object
 #' @rdname SNPData-class
 #' @export
@@ -870,7 +871,7 @@ rename_donor <- function(x, donor_map) {
 #' Get dimensions of a SNPData object
 #'
 #' @param x A SNPData object, required.
-#' @return A numeric vector of length 2 giving the number of SNPs and samples
+#' @return A numeric vector of length 2 giving the number of SNPs and barcodes/cells
 #' @rdname SNPData-class
 #' @exportMethod dim
 setMethod("dim", signature(x = "SNPData"), function(x) {

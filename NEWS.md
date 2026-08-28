@@ -1,4 +1,4 @@
-# snplet 1.0.0
+# snplet 0.6.5
 
 * Changed terminology from sample to barcode throughout codebase
 * Changed get_sample_info to get_barcode_info with backwards compatibility alias
@@ -15,7 +15,7 @@
 * Added metadata update utilities (add_barcode_metadata and add_snp_metadata)
 * Added setters for barcode_info and snp_info slots
 * Added handling for missing VDJ information when exporting SNPData
-* Added improved error messages for missing clonotype data in to_expr_matri
+* Added improved error messages for missing clonotype data in to_expr_matrix
 * Fixed exporting barcodes functionality
 * Fixed namespacing issues
 * Fixed importing without vireo files

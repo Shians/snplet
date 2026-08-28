@@ -8,10 +8,11 @@ plot_maf_track(allele_count_df, facet, x_range)
 }
 \arguments{
 \item{allele_count_df}{A data.frame, required, with columns \code{pos}
-(position), \code{maf} (minor allele frequency), and \code{donor_id} for
-faceting. SNP information.}
+(position), \code{maf} (minor allele frequency), and a column to facet by
+(see \code{facet}). SNP information.}
 
-\item{facet}{Required. Variable to use for faceting the plot.}
+\item{facet}{Bare column name (unquoted), required. Variable in
+\code{allele_count_df} to facet the plot by.}
 
 \item{x_range}{Numeric vector of length 2, required. Genomic range limits to display.}
 }
@@ -24,8 +25,9 @@ a genomic region, with optional faceting by a grouping variable.
 }
 \examples{
 \dontrun{
-allele_df <- get_allele_counts(snp_data)
-plot_maf_track(allele_df, facet = donor_id, x_range = c(1000000, 2000000))
+snp_data <- get_example_snpdata()
+allele_df <- donor_count_df(snp_data)
+plot_maf_track(allele_df, facet = donor, x_range = c(1000000, 2000000))
 }
 }
 \seealso{

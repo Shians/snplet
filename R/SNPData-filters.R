@@ -109,7 +109,10 @@ setMethod(
     filter_snps_impl
 )
 
-#' Filter SNPData object by sample/cell/barcode information
+#' Filter SNPData object by barcode/cell information
+#'
+#' \code{filter_samples} is a legacy alias retained for backwards compatibility;
+#' prefer \code{filter_barcodes} in new code.
 #'
 #' @param .data A SNPData object, required.
 #' @param ... Logical expressions, required. Filter conditions based on
@@ -124,7 +127,7 @@ setMethod(
 #' filtered_cells <- filter_barcodes(snp_data, library_size > 1000)
 #'
 #' # Filter cells from a specific donor
-#' filtered_cells <- filter_barcodes(snp_data, donor_id == "donor_1")
+#' filtered_cells <- filter_barcodes(snp_data, donor == "donor0")
 #'
 #' # Filter cells with multiple conditions
 #' filtered_cells <- filter_barcodes(snp_data, library_size > 1000, non_zero_snps > 50)

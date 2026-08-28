@@ -1,8 +1,10 @@
 # Internal helpers for SNPData construction and validation
 
 .validate_count_dims <- function(ref_count, alt_count, oth_count) {
-    stopifnot(nrow(alt_count) == nrow(ref_count))
-    stopifnot(ncol(alt_count) == ncol(ref_count))
+    stopifnot(
+        "ref_count and alt_count must have the same number of rows (SNPs)" = nrow(alt_count) == nrow(ref_count),
+        "ref_count and alt_count must have the same number of columns (cells)" = ncol(alt_count) == ncol(ref_count)
+    )
 
     if (is.null(oth_count)) {
         oth_count <- Matrix::Matrix(
@@ -12,16 +14,20 @@
             sparse = TRUE
         )
     } else {
-        stopifnot(nrow(oth_count) == nrow(ref_count))
-        stopifnot(ncol(oth_count) == ncol(ref_count))
+        stopifnot(
+            "oth_count must have the same number of rows (SNPs) as ref_count" = nrow(oth_count) == nrow(ref_count),
+            "oth_count must have the same number of columns (cells) as ref_count" = ncol(oth_count) == ncol(ref_count)
+        )
     }
 
     oth_count
 }
 
 .validate_info_dims <- function(ref_count, alt_count, snp_info, barcode_info) {
-    stopifnot(ncol(alt_count) == nrow(barcode_info))
-    stopifnot(nrow(ref_count) == nrow(snp_info))
+    stopifnot(
+        "ncol(alt_count) must equal nrow(barcode_info)" = ncol(alt_count) == nrow(barcode_info),
+        "nrow(ref_count) must equal nrow(snp_info)" = nrow(ref_count) == nrow(snp_info)
+    )
 }
 
 .validate_donor_dims <- function(donor_info, donor_snp_info, snp_info) {

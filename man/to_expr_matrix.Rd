@@ -34,7 +34,7 @@ Where:
   \item \code{(REF - ALT) / (depth + 1)} represents the allelic proportion, ranging
         from -1 (all ALT) to +1 (all REF), with 0 indicating balanced expression
   \item \code{log(depth + 1)} weights the signal by sequencing depth, similar to
-        log-normalization in RNA-seq analysis
+        log-normalisation in RNA-seq analysis
   \item The pseudocount of 1 prevents division by zero and log(0)
 }
 
@@ -43,6 +43,12 @@ This transformation has several useful properties:
   \item SNPs with higher depth contribute more to the signal
   \item Allelic imbalance direction is preserved (positive = REF bias, negative = ALT bias)
   \item Low-depth SNPs are naturally down-weighted
-  \item The log transformation stabilizes variance across depth ranges
+  \item The log transformation stabilises variance across depth ranges
+}
+}
+\examples{
+\dontrun{
+snp_data <- get_example_snpdata()
+expr_matrix <- to_expr_matrix(snp_data)
 }
 }

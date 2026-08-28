@@ -220,6 +220,9 @@
 #'
 #' @examples
 #' \dontrun{
+#' # Requires a snp_data object already processed by assign_xci() (see its
+#' # examples), which in turn needs enough X-linked heterozygous SNP coverage
+#' # to fit the model.
 #' snp_data <- assign_xci(snp_data)
 #'
 #' # One representative SNP per gene, safe to carry into test_escape()

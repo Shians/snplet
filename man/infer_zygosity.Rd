@@ -47,7 +47,11 @@ snp_data <- get_example_snpdata()
 snp_data <- infer_zygosity(snp_data)
 
 # Compare against Vireo genotype calls already present on the same object
-snp_data_vireo <- import_cellsnp(cellsnp_dir, gene_annotation, vireo_folder = vireo_dir)
+snp_data_vireo <- import_cellsnp(
+  cellsnp_dir = "path/to/cellsnp_output",
+  gene_annotation = gene_anno_df,
+  vireo_folder = "path/to/vireo_output"
+)
 snp_data_vireo <- infer_zygosity(snp_data_vireo)
 vireo_calls <- donor_snp_info(snp_data_vireo, source = "vireo_gt")
 binomial_calls <- donor_snp_info(snp_data_vireo, source = "binomial")
