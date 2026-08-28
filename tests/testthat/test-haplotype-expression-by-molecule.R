@@ -1,9 +1,10 @@
 # ==============================================================================
 # Test Suite: Molecule-pooled haplotype expression
-# Description: haplotype_expression_by_molecule() pools molecules within a
-#              gene's dominant phase block so a molecule counts once per gene
-#              regardless of how many SNPs it spans, unlike the per-SNP
-#              haplotype_expression().
+# Description: haplotype_expression_by_molecule() pools a gene's molecules so
+#              each counts once per gene regardless of how many SNPs it spans,
+#              unlike the per-SNP haplotype_expression(). pool_blocks controls
+#              whether every phase block of a gene is counted or only its
+#              largest.
 # ==============================================================================
 
 library(testthat)
@@ -514,4 +515,227 @@ test_that("test_escape() prefers molecule counts once the object carries them", 
     expect_equal(result$coverage, 1)
     # Confirm the gene is tested once, not once per active-X group
     expect_equal(nrow(result), 1L)
+})
+
+test_that("haplotype_expression_by_molecule() counts other blocks' molecules when pool_blocks is TRUE", {
+    fixture <- make_molecule_hap_fixture()
+    snpA <- fixture$snp_ids[["snpA"]]
+    snpB <- fixture$snp_ids[["snpB"]]
+    snpC <- fixture$snp_ids[["snpC"]]
+
+    # Two molecules in the dominant block (snpA/snpB), one alone in block 2.
+    molecule_calls <- tibble::tribble(
+        ~donor,
+        ~barcode,
+        ~umi,
+        ~snp_id,
+        ~allele,
+        ~transcript_strand,
+        "donor0",
+        "cell1",
+        "u1",
+        snpA,
+        "REF",
+        "+",
+        "donor0",
+        "cell1",
+        "u1",
+        snpB,
+        "REF",
+        "+",
+        "donor0",
+        "cell2",
+        "u2",
+        snpA,
+        "ALT",
+        "+",
+        "donor0",
+        "cell2",
+        "u2",
+        snpB,
+        "ALT",
+        "+",
+        "donor0",
+        "cell3",
+        "u3",
+        snpC,
+        "REF",
+        "+"
+    )
+
+    result <- haplotype_expression_by_molecule(
+        with_molecule_calls(fixture$obj, molecule_calls),
+        pool_blocks = TRUE
+    )
+
+    # Verify the block-2 molecule is counted rather than stranded
+    expect_equal(result$coverage, 3)
+    # Confirm both of the gene's blocks were counted
+    expect_equal(result$n_blocks_pooled, 2L)
+    # Check the block-2 molecule is still reported in the stranded tally
+    expect_equal(result$n_stranded_molecules, 1L)
+})
+
+test_that("haplotype_expression_by_molecule() counts only the largest block when pool_blocks is FALSE", {
+    fixture <- make_molecule_hap_fixture()
+    snpA <- fixture$snp_ids[["snpA"]]
+    snpB <- fixture$snp_ids[["snpB"]]
+    snpC <- fixture$snp_ids[["snpC"]]
+
+    molecule_calls <- tibble::tribble(
+        ~donor,
+        ~barcode,
+        ~umi,
+        ~snp_id,
+        ~allele,
+        ~transcript_strand,
+        "donor0",
+        "cell1",
+        "u1",
+        snpA,
+        "REF",
+        "+",
+        "donor0",
+        "cell1",
+        "u1",
+        snpB,
+        "REF",
+        "+",
+        "donor0",
+        "cell2",
+        "u2",
+        snpA,
+        "ALT",
+        "+",
+        "donor0",
+        "cell2",
+        "u2",
+        snpB,
+        "ALT",
+        "+",
+        "donor0",
+        "cell3",
+        "u3",
+        snpC,
+        "REF",
+        "+"
+    )
+
+    result <- haplotype_expression_by_molecule(
+        with_molecule_calls(fixture$obj, molecule_calls),
+        pool_blocks = FALSE
+    )
+
+    # Verify only the dominant block's two molecules are counted
+    expect_equal(result$coverage, 2)
+    # Confirm a single block was counted
+    expect_equal(result$n_blocks_pooled, 1L)
+})
+
+test_that("haplotype_expression_by_molecule() reports molecules from a backwards-oriented block", {
+    fixture <- make_molecule_hap_fixture()
+    snpA <- fixture$snp_ids[["snpA"]]
+    snpC <- fixture$snp_ids[["snpC"]]
+
+    # Block 1 (3 molecules) reads entirely active. Block 2's two molecules sit
+    # in an X1-active cell yet both call the X2 allele, so that block's
+    # inactive fraction is 1.0 -- impossible for genuine escape, which is
+    # bounded at 0.5, and so the signature of a block oriented backwards.
+    molecule_calls <- tibble::tribble(
+        ~donor,
+        ~barcode,
+        ~umi,
+        ~snp_id,
+        ~allele,
+        ~transcript_strand,
+        "donor0",
+        "cell1",
+        "u1",
+        snpA,
+        "REF",
+        "+",
+        "donor0",
+        "cell2",
+        "u2",
+        snpA,
+        "REF",
+        "+",
+        "donor0",
+        "cell3",
+        "u3",
+        snpA,
+        "ALT",
+        "+",
+        "donor0",
+        "cell1",
+        "u4",
+        snpC,
+        "ALT",
+        "+",
+        "donor0",
+        "cell1",
+        "u5",
+        snpC,
+        "ALT",
+        "+"
+    )
+
+    result <- haplotype_expression_by_molecule(
+        with_molecule_calls(fixture$obj, molecule_calls),
+        pool_blocks = TRUE
+    )
+
+    # Verify both of the backwards block's molecules are flagged as discordant
+    expect_equal(result$discordant_block_molecules, 2L)
+    # Confirm they are counted rather than dropped
+    expect_equal(result$coverage, 5)
+    # Check they land on the inactive haplotype, inflating escape as expected
+    expect_equal(result$inactive_count, 2)
+})
+
+test_that("haplotype_expression_by_molecule() reports no discordant molecules when blocks agree", {
+    fixture <- make_molecule_hap_fixture()
+    snpA <- fixture$snp_ids[["snpA"]]
+    snpC <- fixture$snp_ids[["snpC"]]
+
+    molecule_calls <- tibble::tribble(
+        ~donor,
+        ~barcode,
+        ~umi,
+        ~snp_id,
+        ~allele,
+        ~transcript_strand,
+        "donor0",
+        "cell1",
+        "u1",
+        snpA,
+        "REF",
+        "+",
+        "donor0",
+        "cell2",
+        "u2",
+        snpA,
+        "REF",
+        "+",
+        "donor0",
+        "cell3",
+        "u3",
+        snpA,
+        "ALT",
+        "+",
+        "donor0",
+        "cell1",
+        "u4",
+        snpC,
+        "REF",
+        "+"
+    )
+
+    result <- haplotype_expression_by_molecule(
+        with_molecule_calls(fixture$obj, molecule_calls),
+        pool_blocks = TRUE
+    )
+
+    # Verify a block agreeing with its gene's orientation is not flagged
+    expect_equal(result$discordant_block_molecules, 0L)
 })

@@ -8,13 +8,15 @@
 haplotype_expression_by_molecule(
   x,
   escape_threshold = 0.1,
-  by_active_x = FALSE
+  by_active_x = FALSE,
+  pool_blocks = TRUE
 )
 
 \S4method{haplotype_expression_by_molecule}{SNPData}(
   x,
   escape_threshold = 0.1,
-  by_active_x = FALSE
+  by_active_x = FALSE,
+  pool_blocks = TRUE
 )
 }
 \arguments{
@@ -33,6 +35,11 @@ X2-active cell groups pooled into one row per gene, matching
 \code{\link{haplotype_expression}} and the grain
 \code{\link{test_escape}} tests at). If \code{TRUE}, report the two
 groups on separate rows, adding \code{active_x}.}
+
+\item{pool_blocks}{Logical (default \code{TRUE}). If \code{TRUE}, count
+molecules from every one of a gene's phase blocks. If \code{FALSE}, count
+only the gene's largest block, leaving the rest reported but uncounted in
+\code{n_stranded_molecules}. See \sQuote{Pooling a gene's phase blocks}.}
 }
 \value{
 A tibble with one row per (\code{donor}, \code{gene_name}) pair,
@@ -40,9 +47,15 @@ A tibble with one row per (\code{donor}, \code{gene_name}) pair,
   \code{inactive_count}, \code{coverage}, \code{escape_fraction}
   (\code{inactive_count / coverage}), \code{escapes}
   (\code{escape_fraction >= escape_threshold}), \code{phase_block_used}
-  (the phase block whose molecules were pooled), \code{dominant_molecules}
-  (molecules backing the pooled block), and \code{n_stranded_molecules}
-  (molecules of the same gene in a different, unpooled block).
+  (the gene's largest phase block), \code{dominant_molecules}
+  (molecules backing that block), \code{n_stranded_molecules}
+  (molecules of the same gene in any other block -- counted when
+  \code{pool_blocks} is \code{TRUE}, reported but uncounted when it is
+  \code{FALSE}), \code{n_blocks_pooled} (blocks actually counted, always 1
+  when \code{pool_blocks} is \code{FALSE}), and
+  \code{discordant_block_molecules} (counted molecules sitting in a block
+  whose own inactive fraction exceeds 0.5, i.e. one that looks oriented
+  backwards; see \sQuote{Pooling a gene's phase blocks}).
 
   With \code{by_active_x = TRUE} each row is split into two, one per active-X
   group, with \code{active_x} (the expressed X, "X1" or "X2") added. A group
@@ -82,6 +95,33 @@ to single-SNP genes. Only a single-SNP gene with \emph{no} EM-derived
 phase at all has no way to be oriented, and is left to
 \code{haplotype_expression}, which already handles it correctly.
 }
+\section{Pooling a gene's phase blocks}{
+
+\code{\link{phase_snps}} cannot link two SNPs no single molecule spans, so
+one gene routinely ends up split across several phase blocks. Every SNP
+counted here nonetheless carries a globally oriented \code{allele_on_x1} --
+either the EM's own call, or an orientation \code{\link{add_molecule_phase}}
+propagated to the block from an EM anchor -- so a molecule's haplotype means
+the same thing in every block, and pooling blocks is arithmetically sound
+rather than a mixing of incompatible labels.
+
+What pooling stakes is that each block's orientation is individually
+correct. Within a block, relative phase is physical: two SNPs seen on one
+molecule sit on one chromosome, which is observed rather than inferred.
+Across blocks it is inherited from the EM anchors, which are
+expression-derived, so a block oriented backwards contributes its molecules
+to the wrong haplotype and inflates \code{escape_fraction}. Counting only
+the largest block (\code{pool_blocks = FALSE}) makes that impossible, at the
+cost of discarding the smaller blocks entirely.
+
+Because \code{escape_fraction} is bounded above by 0.5 by construction (see
+\code{\link{haplotype_expression}}), a block whose own inactive fraction
+exceeds 0.5 is not an extreme escapee but a block oriented the wrong way
+round. The molecules in such blocks are counted, but reported separately as
+\code{discordant_block_molecules} so the one failure mode pooling introduces
+is visible rather than silently averaged in.
+}
+
 \section{Where the inputs come from}{
 
 Beyond \code{x}, there is nothing to supply. Both inputs this function needs

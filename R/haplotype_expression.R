@@ -602,6 +602,35 @@ setMethod(
 #'   \code{\link{haplotype_expression}} and the grain
 #'   \code{\link{test_escape}} tests at). If \code{TRUE}, report the two
 #'   groups on separate rows, adding \code{active_x}.
+#' @param pool_blocks Logical (default \code{TRUE}). If \code{TRUE}, count
+#'   molecules from every one of a gene's phase blocks. If \code{FALSE}, count
+#'   only the gene's largest block, leaving the rest reported but uncounted in
+#'   \code{n_stranded_molecules}. See \sQuote{Pooling a gene's phase blocks}.
+#'
+#' @section Pooling a gene's phase blocks:
+#' \code{\link{phase_snps}} cannot link two SNPs no single molecule spans, so
+#' one gene routinely ends up split across several phase blocks. Every SNP
+#' counted here nonetheless carries a globally oriented \code{allele_on_x1} --
+#' either the EM's own call, or an orientation \code{\link{add_molecule_phase}}
+#' propagated to the block from an EM anchor -- so a molecule's haplotype means
+#' the same thing in every block, and pooling blocks is arithmetically sound
+#' rather than a mixing of incompatible labels.
+#'
+#' What pooling stakes is that each block's orientation is individually
+#' correct. Within a block, relative phase is physical: two SNPs seen on one
+#' molecule sit on one chromosome, which is observed rather than inferred.
+#' Across blocks it is inherited from the EM anchors, which are
+#' expression-derived, so a block oriented backwards contributes its molecules
+#' to the wrong haplotype and inflates \code{escape_fraction}. Counting only
+#' the largest block (\code{pool_blocks = FALSE}) makes that impossible, at the
+#' cost of discarding the smaller blocks entirely.
+#'
+#' Because \code{escape_fraction} is bounded above by 0.5 by construction (see
+#' \code{\link{haplotype_expression}}), a block whose own inactive fraction
+#' exceeds 0.5 is not an extreme escapee but a block oriented the wrong way
+#' round. The molecules in such blocks are counted, but reported separately as
+#' \code{discordant_block_molecules} so the one failure mode pooling introduces
+#' is visible rather than silently averaged in.
 #'
 #' @section Where the inputs come from:
 #' Beyond \code{x}, there is nothing to supply. Both inputs this function needs
@@ -643,9 +672,15 @@ setMethod(
 #'   \code{inactive_count}, \code{coverage}, \code{escape_fraction}
 #'   (\code{inactive_count / coverage}), \code{escapes}
 #'   (\code{escape_fraction >= escape_threshold}), \code{phase_block_used}
-#'   (the phase block whose molecules were pooled), \code{dominant_molecules}
-#'   (molecules backing the pooled block), and \code{n_stranded_molecules}
-#'   (molecules of the same gene in a different, unpooled block).
+#'   (the gene's largest phase block), \code{dominant_molecules}
+#'   (molecules backing that block), \code{n_stranded_molecules}
+#'   (molecules of the same gene in any other block -- counted when
+#'   \code{pool_blocks} is \code{TRUE}, reported but uncounted when it is
+#'   \code{FALSE}), \code{n_blocks_pooled} (blocks actually counted, always 1
+#'   when \code{pool_blocks} is \code{FALSE}), and
+#'   \code{discordant_block_molecules} (counted molecules sitting in a block
+#'   whose own inactive fraction exceeds 0.5, i.e. one that looks oriented
+#'   backwards; see \sQuote{Pooling a gene's phase blocks}).
 #'
 #'   With \code{by_active_x = TRUE} each row is split into two, one per active-X
 #'   group, with \code{active_x} (the expressed X, "X1" or "X2") added. A group
@@ -669,7 +704,7 @@ setMethod(
 #' }
 setGeneric(
     "haplotype_expression_by_molecule",
-    function(x, escape_threshold = 0.1, by_active_x = FALSE) {
+    function(x, escape_threshold = 0.1, by_active_x = FALSE, pool_blocks = TRUE) {
         standardGeneric("haplotype_expression_by_molecule")
     }
 )
@@ -679,7 +714,7 @@ setGeneric(
 setMethod(
     "haplotype_expression_by_molecule",
     signature(x = "SNPData"),
-    function(x, escape_threshold = 0.1, by_active_x = FALSE) {
+    function(x, escape_threshold = 0.1, by_active_x = FALSE, pool_blocks = TRUE) {
         barcode_info <- barcode_info(x)
         donor_snp_info <- donor_snp_info(x)
 
@@ -753,20 +788,60 @@ setMethod(
             dplyr::anti_join(best_block, by = c("donor", "gene_name", "phase_block")) %>%
             dplyr::summarise(n_stranded_molecules = sum(molecules), .by = c(donor, gene_name))
 
-        # A molecule votes across every SNP it covers within the dominant block
-        # only; majority wins, a tie is ambiguous (residual base-calling noise
-        # once phase is accounted for) and dropped rather than guessed.
-        molecules <- calls %>%
-            dplyr::semi_join(best_block, by = c("donor", "gene_name", "phase_block")) %>%
+        # Pooling is the default because every SNP reaching this point already
+        # carries a globally oriented allele_on_x1, so the blocks of one gene
+        # share a scale; counting only the largest is the conservative option
+        # rather than the correct one (see 'Pooling a gene's phase blocks').
+        counted <- calls
+        if (!pool_blocks) {
+            counted <- dplyr::semi_join(counted, best_block, by = c("donor", "gene_name", "phase_block"))
+        }
+        blocks_counted <- counted %>%
+            dplyr::distinct(donor, gene_name, phase_block) %>%
+            dplyr::summarise(n_blocks_pooled = dplyr::n(), .by = c(donor, gene_name))
+
+        cell_groups <- barcode_info %>%
+            dplyr::filter(active_x %in% c("X1", "X2")) %>%
+            dplyr::select(barcode, donor, active_x)
+
+        # A molecule votes across every SNP it covers in the blocks being
+        # counted; majority wins, a tie is ambiguous (residual base-calling
+        # noise once phase is accounted for) and dropped rather than guessed.
+        # Under pooling a molecule spanning two of the gene's blocks votes with
+        # all of its SNPs at once: the same rule over a wider set, not a new one.
+        molecules <- counted %>%
             dplyr::summarise(n_x1 = sum(is_x1), n_x2 = sum(!is_x1), .by = c(donor, gene_name, barcode, umi)) %>%
             dplyr::mutate(
                 haplotype = dplyr::case_when(n_x1 > n_x2 ~ "X1", n_x2 > n_x1 ~ "X2", TRUE ~ "ambiguous")
             ) %>%
             dplyr::filter(haplotype != "ambiguous")
 
-        cell_groups <- barcode_info %>%
-            dplyr::filter(active_x %in% c("X1", "X2")) %>%
-            dplyr::select(barcode, donor, active_x)
+        # The same vote taken per block, purely to audit orientation:
+        # escape_fraction cannot exceed 0.5 by construction, so a block whose
+        # own inactive fraction does is oriented backwards rather than
+        # escaping. Its molecules are still counted -- flipping them here would
+        # be guessing which of the two orientations is the wrong one -- but the
+        # count is surfaced so the gene can be re-examined or excluded.
+        discordant <- counted %>%
+            dplyr::summarise(
+                n_x1 = sum(is_x1),
+                n_x2 = sum(!is_x1),
+                .by = c(donor, gene_name, phase_block, barcode, umi)
+            ) %>%
+            dplyr::mutate(
+                haplotype = dplyr::case_when(n_x1 > n_x2 ~ "X1", n_x2 > n_x1 ~ "X2", TRUE ~ "ambiguous")
+            ) %>%
+            dplyr::filter(haplotype != "ambiguous") %>%
+            dplyr::inner_join(cell_groups, by = c("donor", "barcode")) %>%
+            dplyr::summarise(
+                block_molecules = dplyr::n(),
+                block_inactive = sum(haplotype != active_x),
+                .by = c(donor, gene_name, phase_block)
+            ) %>%
+            dplyr::summarise(
+                discordant_block_molecules = sum(block_molecules[block_inactive * 2 > block_molecules]),
+                .by = c(donor, gene_name)
+            )
 
         # Pool molecules per (donor, gene, active-X group): active_count is
         # molecules landing on the haplotype the group's own active_x names,
@@ -820,7 +895,12 @@ setMethod(
             ) %>%
             dplyr::left_join(best_block, by = c("donor", "gene_name")) %>%
             dplyr::left_join(stranded, by = c("donor", "gene_name")) %>%
-            dplyr::mutate(n_stranded_molecules = dplyr::coalesce(n_stranded_molecules, 0L)) %>%
+            dplyr::left_join(blocks_counted, by = c("donor", "gene_name")) %>%
+            dplyr::left_join(discordant, by = c("donor", "gene_name")) %>%
+            dplyr::mutate(
+                n_stranded_molecules = dplyr::coalesce(n_stranded_molecules, 0L),
+                discordant_block_molecules = dplyr::coalesce(discordant_block_molecules, 0L)
+            ) %>%
             dplyr::rename(phase_block_used = phase_block) %>%
             dplyr::arrange(dplyr::pick(dplyr::any_of(c("donor", "gene_name", "active_x"))))
     }
