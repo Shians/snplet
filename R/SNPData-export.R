@@ -195,3 +195,216 @@ export_cellsnp <- function(snpdata, out_dir) {
         )
     }
 }
+
+#' Export a SNPData object's cell-level counts as a SingleCellExperiment
+#'
+#' Wraps the REF/ALT (and OTH, if present) count matrices as assays of a
+#' \code{SingleCellExperiment}, with \code{barcode_info} as \code{colData} and
+#' \code{snp_info} as \code{rowData}, so cell-level allelic calls (e.g.
+#' \code{\link{assign_xci}}'s \code{active_x}) can be carried into
+#' Seurat (\code{Seurat::as.Seurat()}) or other SingleCellExperiment-based
+#' tools alongside a cell's existing cluster/UMAP annotation.
+#'
+#' @details
+#' This is the cell-level counterpart to \code{\link{as_escape_experiment}},
+#' which exports donor-level escape counts instead; the two are not
+#' interchangeable, since a \code{SingleCellExperiment} is cell-keyed and an
+#' XCI escape comparison is donor-keyed (see \code{\link{as_escape_experiment}}
+#' for why cell-level counts cannot stand in for that).
+#'
+#' Assays: \code{"ref"} and \code{"alt"} always; \code{"oth"} only when
+#' \code{oth_count(snpdata)} has any non-zero entry, since most objects carry
+#' an all-zero \code{oth_count} and an all-zero assay would be dead weight IN
+#' every downstream operation. \code{rowData} and \code{colData} carry every
+#' column of \code{snp_info}/\code{barcode_info} respectively, other than the
+#' identifiers already used as dimnames (\code{snp_id}, \code{cell_id}).
+#'
+#' Dropped, with no \code{SingleCellExperiment} slot to hold them:
+#' \code{donor_info}, \code{donor_snp_info} (zygosity calls and XCI gene-level
+#' diagnostics), \code{library_info}, and \code{snp_gene_map}. Use
+#' \code{saveRDS()} to keep the full SNPData object, or re-derive per-cell
+#' summaries of these (e.g. \code{donor_info}'s \code{xci_skew} is one value
+#' per donor, not per cell, so it has no natural column here; join it onto
+#' \code{colData} afterwards by \code{donor} if needed).
+#'
+#' @param snpdata A SNPData object, required.
+#'
+#' @return A \code{SingleCellExperiment} with SNPs as rows and cells as
+#'   columns, dimnamed by \code{snp_id} and \code{cell_id}.
+#'
+#' @family import and export functions
+#' @export
+#'
+#' @examples
+#' \dontrun{
+#' snp_data <- assign_xci(get_example_snpdata())
+#' sce <- as_singlecellexperiment(snp_data)
+#'
+#' # active_x rides along in colData, ready to plot against an existing
+#' # Seurat object's clustering once merged
+#' SummarizedExperiment::colData(sce)$active_x
+#' }
+as_singlecellexperiment <- function(snpdata) {
+    if (!requireNamespace("SingleCellExperiment", quietly = TRUE)) {
+        stop(
+            "as_singlecellexperiment() requires the SingleCellExperiment package. ",
+            "Install it with BiocManager::install(\"SingleCellExperiment\")."
+        )
+    }
+
+    snp_info <- snp_info(snpdata)
+    barcode_info <- barcode_info(snpdata)
+
+    assays <- list(ref = ref_count(snpdata), alt = alt_count(snpdata))
+    oth <- oth_count(snpdata)
+    if (any(oth != 0)) {
+        assays$oth <- oth
+    }
+
+    row_data <- DataFrame(
+        dplyr::select(snp_info, -snp_id),
+        row.names = snp_info$snp_id
+    )
+    col_data <- DataFrame(
+        dplyr::select(barcode_info, -cell_id),
+        row.names = barcode_info$cell_id
+    )
+
+    SingleCellExperiment::SingleCellExperiment(
+        assays = assays,
+        rowData = row_data,
+        colData = col_data
+    )
+}
+
+#' Export donor-level XCI escape counts as a SummarizedExperiment
+#'
+#' Pivots \code{\link{test_escape}}'s per-(donor, gene) escape counts into a
+#' gene x donor \code{SummarizedExperiment} with \code{"active"} and
+#' \code{"inactive"} assays, so escape (or skew) can be compared between
+#' experimental groups with external tools built for paired-count data, most
+#' directly edgeR's differential methylation workflow
+#' (\code{edgeR::modelMatrixMeth()}, treating \code{"active"}/\code{"inactive"}
+#' the way that workflow treats methylated/unmethylated read counts per CpG).
+#'
+#' @details
+#' This is the donor-level counterpart to
+#' \code{\link{as_singlecellexperiment}}. The two cannot substitute for each
+#' other: an escape comparison needs donors as replicates (independent units a
+#' group label can attach to and a test can be powered over), and a donor's
+#' cells cannot serve as those replicates themselves, since they are not
+#' independent — they share one donor's XCI skew and one donor's genotype, the
+#' entire premise \code{\link{assign_xci}} fits per donor rather than
+#' per cell.
+#'
+#' \code{\link{haplotype_expression}} (or
+#' \code{\link{haplotype_expression_by_molecule}}, used automatically once
+#' \code{\link{add_molecule_phase}} has run, matching \code{\link{test_escape}}'s
+#' own source selection) excludes a (donor, gene) pair with no qualifying SNP
+#' entirely, rather than reporting zero coverage for it — so the gene x donor
+#' grid is not dense before this function pads it. A missing pair becomes
+#' \code{NA} in both assays here, not a dropped row: a
+#' \code{SummarizedExperiment}'s assays must share one set of dimnames, so a
+#' gene present for some donors and absent for others cannot be represented by
+#' varying which rows exist per column, only by \code{NA} in the columns where
+#' it is missing.
+#'
+#' \code{colData} is \code{donor_info(snpdata)}, so an experimental-group
+#' label attached beforehand with
+#' \code{add_donor_metadata(x, data.frame(donor = ..., group = ...))} carries
+#' straight into the result, alongside \code{xci_skew} and the other stored
+#' per-donor diagnostics. \code{rowData} has one row per \code{gene_name}.
+#'
+#' edgeR has no native concept of two paired assays: its differential
+#' methylation path expects one matrix with \code{<sample>-Me}/\code{<sample>-Un}
+#' column pairs (see \code{edgeR::modelMatrixMeth()}), so combine this
+#' object's two assays into that shape before constructing a
+#' \code{edgeR::DGEList()} (see Examples); this function stops at the
+#' \code{SummarizedExperiment}, which is the natural, tool-agnostic
+#' Bioconductor container for the gene x donor active/inactive counts
+#' themselves, and does not depend on edgeR.
+#'
+#' NA-containing rows/columns are not filtered here; edgeR's own count-based
+#' functions generally do not tolerate NA counts, so filter to genes with
+#' complete coverage across the donors being compared before fitting.
+#'
+#' @param snpdata A SNPData object, required, that had XCI diagnostics stored
+#'   by \code{\link{assign_xci}} or \code{\link{assign_xci_by_clonotype}}.
+#'
+#' @return A \code{SummarizedExperiment} with genes as rows and donors as
+#'   columns, assays \code{"active"} and \code{"inactive"} (integer, \code{NA}
+#'   where that gene had no qualifying SNP in that donor).
+#'
+#' @family X-chromosome inactivation functions
+#' @export
+#'
+#' @examples
+#' \dontrun{
+#' snp_data <- assign_xci(snp_data)
+#' snp_data <- add_donor_metadata(
+#'   snp_data,
+#'   data.frame(donor = c("donor0", "donor1"), group = c("control", "treated"))
+#' )
+#' se <- as_escape_experiment(snp_data)
+#'
+#' # Reshape into edgeR's methylation-style Me/Un column-pair matrix and fit
+#' active <- SummarizedExperiment::assay(se, "active")
+#' inactive <- SummarizedExperiment::assay(se, "inactive")
+#' donors <- colnames(se)
+#' counts <- do.call(cbind, lapply(donors, function(d) {
+#'   m <- cbind(active[, d], inactive[, d])
+#'   colnames(m) <- paste0(d, c("-Me", "-Un"))
+#'   m
+#' }))
+#' keep <- stats::complete.cases(counts)
+#' y <- edgeR::DGEList(counts[keep, ])
+#' design_samples <- model.matrix(~0 + group, data = as.data.frame(SummarizedExperiment::colData(se)))
+#' design <- edgeR::modelMatrixMeth(design_samples)
+#' y <- edgeR::estimateDisp(y, design, trend = "none")
+#' fit <- edgeR::glmFit(y, design)
+#' }
+as_escape_experiment <- function(snpdata) {
+    if (!.has_xci_diagnostics(snpdata)) {
+        stop("No stored XCI diagnostics found. Run assign_xci(snpdata) first.")
+    }
+
+    counts <- .escape_counts(snpdata)
+    if (!"donor" %in% colnames(counts)) {
+        stop("as_escape_experiment() needs donor assignments to build a gene x donor matrix.")
+    }
+
+    donors <- sort(unique(counts$donor))
+    genes <- sort(unique(counts$gene_name))
+
+    # haplotype_expression()/haplotype_expression_by_molecule() drop a (donor,
+    # gene) pair with no qualifying SNP rather than reporting zero coverage
+    # for it, so the grid is padded here rather than already dense: a missing
+    # pair becomes NA, not a false zero, since zero coverage and "never
+    # measured" are not the same claim.
+    dense <- tidyr::expand_grid(donor = donors, gene_name = genes) %>%
+        dplyr::left_join(counts, by = c("donor", "gene_name"))
+
+    to_matrix <- function(value_col) {
+        m <- dense %>%
+            dplyr::select(gene_name, donor, dplyr::all_of(value_col)) %>%
+            tidyr::pivot_wider(names_from = donor, values_from = dplyr::all_of(value_col)) %>%
+            tibble::column_to_rownames("gene_name") %>%
+            as.matrix()
+        m[genes, donors, drop = FALSE]
+    }
+
+    assays <- list(active = to_matrix("active_count"), inactive = to_matrix("inactive_count"))
+
+    donor_info <- donor_info(snpdata)
+    col_data <- DataFrame(
+        dplyr::select(donor_info, -donor)[match(donors, donor_info$donor), , drop = FALSE],
+        row.names = donors
+    )
+    row_data <- DataFrame(gene_name = genes, row.names = genes)
+
+    SummarizedExperiment(
+        assays = assays,
+        rowData = row_data,
+        colData = col_data
+    )
+}

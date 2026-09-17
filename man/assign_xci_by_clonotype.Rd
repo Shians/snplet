@@ -31,6 +31,10 @@ SNPData object with an additional \code{active_x} column in
   so the result can be passed directly to
   \code{\link{plot_xci_heatmap}},
   \code{\link{xci_assignments}}, and \code{\link{xci_haplotypes}}.
+  \code{donor_info(x)$xci_skew} gives the fitted X1-active prior, here
+  estimated over clonotypes rather than cells: it is the skew of the
+  clonotype population the EM was fit on, which only equals cell-level
+  skew if clonotypes carry comparable cell counts.
 }
 \description{
 Identifies which X chromosome is active in female cells based on allelic
@@ -112,6 +116,7 @@ plot_xci_heatmap(snp_data, donor = "donor1")
 \seealso{
 Other X-chromosome inactivation functions:
 \code{\link[=add_molecule_phase]{add_molecule_phase()}},
+\code{\link[=as_escape_experiment]{as_escape_experiment()}},
 \code{\link[=assign_xci]{assign_xci()}},
 \code{\link[=haplotype_expression]{haplotype_expression()}},
 \code{\link[=haplotype_expression_by_molecule]{haplotype_expression_by_molecule()}},

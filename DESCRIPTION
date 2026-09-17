@@ -45,6 +45,7 @@ Imports:
     Seqinfo,
     scales,
     stringr,
+    SummarizedExperiment,
     tibble,
     tidyr,
     VGAM,
@@ -52,7 +53,9 @@ Imports:
     circlize
 Suggests:
     testthat,
-    withr
+    withr,
+    SingleCellExperiment,
+    edgeR
 SystemRequirements: samtools (optional; accelerates extract_snp_calls() when
     on PATH, otherwise falls back to pure Rsamtools/GenomicAlignments)
 License: Apache License (>= 2)

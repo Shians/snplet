@@ -30,6 +30,12 @@ SNPData object with an additional \code{active_x} column in
   into the object's metadata slots, so the result can be
   passed directly to \code{\link{plot_xci_heatmap}},
   \code{\link{xci_assignments}}, and \code{\link{xci_haplotypes}}.
+  \code{donor_info(x)$xci_skew} gives the quantified skew itself: the EM's
+  fitted X1-active prior, i.e. its own estimate of the fraction of this
+  donor's cells with X1 active, fit jointly with phase and escape rather
+  than counted from the confidence-thresholded hard calls in
+  \code{active_x} (which excludes low-confidence cells and so
+  underestimates skew in coverage-limited donors).
 }
 \description{
 Identifies which X chromosome is active in female cells based on allelic
@@ -100,6 +106,10 @@ within a gene without escaping this constraint.
 # dataset does not qualify.
 snp_data <- assign_xci(snp_data)
 
+# Quantified XCI skew per donor (the model's fitted X1-active fraction)
+donor_info(snp_data) \%>\%
+  dplyr::select(donor, xci_skew)
+
 # View results
 barcode_info(snp_data) \%>\%
   count(donor, active_x)
@@ -111,6 +121,7 @@ plot_xci_heatmap(snp_data, donor = "donor1")
 \seealso{
 Other X-chromosome inactivation functions:
 \code{\link[=add_molecule_phase]{add_molecule_phase()}},
+\code{\link[=as_escape_experiment]{as_escape_experiment()}},
 \code{\link[=assign_xci_by_clonotype]{assign_xci_by_clonotype()}},
 \code{\link[=haplotype_expression]{haplotype_expression()}},
 \code{\link[=haplotype_expression_by_molecule]{haplotype_expression_by_molecule()}},

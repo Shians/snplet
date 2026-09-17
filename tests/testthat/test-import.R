@@ -848,6 +848,80 @@ test_that("export_cellsnp rejects repeated barcodes", {
 })
 
 # ==============================================================================
+# Test: as_singlecellexperiment()
+# ==============================================================================
+
+test_that("as_singlecellexperiment() wraps counts as assays with matching dimnames", {
+    skip_if_not_installed("SingleCellExperiment")
+    snp_data <- get_example_snpdata()
+
+    sce <- as_singlecellexperiment(snp_data)
+
+    # Verify the container class and dimensions match the SNPData object
+    expect_s4_class(sce, "SingleCellExperiment")
+    expect_equal(dim(sce), dim(snp_data))
+    # Verify ref/alt assays are present and identical to the source matrices
+    expect_equal(as.matrix(SummarizedExperiment::assay(sce, "ref")), as.matrix(ref_count(snp_data)))
+    expect_equal(as.matrix(SummarizedExperiment::assay(sce, "alt")), as.matrix(alt_count(snp_data)))
+    # Confirm rows/columns are dimnamed by snp_id/cell_id, matching snp_info/barcode_info
+    expect_equal(rownames(sce), snp_info(snp_data)$snp_id)
+    expect_equal(colnames(sce), barcode_info(snp_data)$cell_id)
+})
+
+test_that("as_singlecellexperiment() omits an all-zero oth assay", {
+    skip_if_not_installed("SingleCellExperiment")
+    ref <- Matrix::Matrix(matrix(c(5L, 3L, 2L, 8L), 2, 2), sparse = TRUE)
+    alt <- Matrix::Matrix(matrix(c(1L, 2L, 4L, 1L), 2, 2), sparse = TRUE)
+    oth <- Matrix::Matrix(matrix(0L, 2, 2), sparse = TRUE)
+    snp_data <- SNPData(
+        ref_count = ref,
+        alt_count = alt,
+        oth_count = oth,
+        snp_info = data.frame(chrom = "chr1", pos = c(1L, 2L), ref = "A", alt = "G"),
+        barcode_info = data.frame(barcode = c("c1", "c2"))
+    )
+
+    sce <- as_singlecellexperiment(snp_data)
+
+    # Verify an all-zero oth_count is left out rather than carried as dead weight
+    expect_false("oth" %in% names(SummarizedExperiment::assays(sce)))
+})
+
+test_that("as_singlecellexperiment() keeps a non-zero oth assay", {
+    skip_if_not_installed("SingleCellExperiment")
+    ref <- Matrix::Matrix(matrix(c(5L, 3L, 2L, 8L), 2, 2), sparse = TRUE)
+    alt <- Matrix::Matrix(matrix(c(1L, 2L, 4L, 1L), 2, 2), sparse = TRUE)
+    oth <- Matrix::Matrix(matrix(c(0L, 0L, 1L, 0L), 2, 2), sparse = TRUE)
+    snp_data <- SNPData(
+        ref_count = ref,
+        alt_count = alt,
+        oth_count = oth,
+        snp_info = data.frame(chrom = "chr1", pos = c(1L, 2L), ref = "A", alt = "G"),
+        barcode_info = data.frame(barcode = c("c1", "c2"))
+    )
+
+    sce <- as_singlecellexperiment(snp_data)
+
+    # Verify a genuinely non-zero oth_count is carried through as its own assay
+    expect_true("oth" %in% names(SummarizedExperiment::assays(sce)))
+    expect_equal(as.matrix(SummarizedExperiment::assay(sce, "oth")), as.matrix(oth_count(snp_data)))
+})
+
+test_that("as_singlecellexperiment() carries barcode_info/snp_info columns into colData/rowData", {
+    skip_if_not_installed("SingleCellExperiment")
+    snp_data <- get_example_snpdata()
+
+    sce <- as_singlecellexperiment(snp_data)
+    col_data <- SummarizedExperiment::colData(sce)
+    row_data <- SummarizedExperiment::rowData(sce)
+
+    # Verify barcode_info columns (other than the cell_id used as dimnames) ride along
+    expect_true(all(setdiff(colnames(barcode_info(snp_data)), "cell_id") %in% colnames(col_data)))
+    # Verify snp_info columns (other than the snp_id used as dimnames) ride along
+    expect_true(all(setdiff(colnames(snp_info(snp_data)), "snp_id") %in% colnames(row_data)))
+})
+
+# ==============================================================================
 # Error Handling Tests
 # ==============================================================================
 

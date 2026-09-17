@@ -215,6 +215,7 @@ snp_gene_map(snp_data) <- assign_snp_genes(snp_info(snp_data), gene_anno)
 \seealso{
 Other X-chromosome inactivation functions:
 \code{\link[=add_molecule_phase]{add_molecule_phase()}},
+\code{\link[=as_escape_experiment]{as_escape_experiment()}},
 \code{\link[=assign_xci]{assign_xci()}},
 \code{\link[=assign_xci_by_clonotype]{assign_xci_by_clonotype()}},
 \code{\link[=haplotype_expression]{haplotype_expression()}},

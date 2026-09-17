@@ -59,6 +59,7 @@
 #' @importFrom GenomicRanges reduce
 #' @importFrom Seqinfo seqnames seqlevels "seqlevels<-"
 #' @importFrom IRanges IRanges findOverlaps PartitioningByWidth togroup
-#' @importFrom S4Vectors mcols queryHits subjectHits
+#' @importFrom S4Vectors mcols queryHits subjectHits DataFrame
 #' @importFrom Biostrings subseq
+#' @importFrom SummarizedExperiment SummarizedExperiment assay assays rowData colData
 NULL

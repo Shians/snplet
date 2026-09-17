@@ -317,6 +317,7 @@ hap_informative <- haplotype_expression(snp_data, xci_informative_only = TRUE)
 \seealso{
 Other X-chromosome inactivation functions:
 \code{\link[=add_molecule_phase]{add_molecule_phase()}},
+\code{\link[=as_escape_experiment]{as_escape_experiment()}},
 \code{\link[=assign_xci]{assign_xci()}},
 \code{\link[=assign_xci_by_clonotype]{assign_xci_by_clonotype()}},
 \code{\link[=haplotype_expression_by_molecule]{haplotype_expression_by_molecule()}},
