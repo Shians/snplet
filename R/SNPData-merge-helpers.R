@@ -8,6 +8,24 @@
     unname(lookup[names_vec])
 }
 
+# Resolves the `.x`/`.y` column pairs a full/left/right/inner join leaves behind
+# (suffix = c(".x", ".y")) into one column per name: x's value where present,
+# falling back to y's. Used wherever a merge only needs one side to win on
+# conflicting metadata columns, with no need to detect or report a disagreement
+# (contrast .merge_donor_snp_info(), which does care and so does its own thing).
+.prefer_x_join_columns <- function(merged) {
+    x_conflicts <- grep("\\.x$", colnames(merged), value = TRUE)
+    for (x_col in x_conflicts) {
+        base_col <- sub("\\.x$", "", x_col)
+        y_col <- paste0(base_col, ".y")
+        # coalesce() takes x's value, falling back to y's only where x is NA.
+        merged[[base_col]] <- dplyr::coalesce(merged[[x_col]], merged[[y_col]])
+        merged[[x_col]] <- NULL
+        merged[[y_col]] <- NULL
+    }
+    merged
+}
+
 # Merges one allele channel (ref/alt/oth) of x and y directly from their
 # triplet forms into the retained dimensions, rather than expanding x and y
 # to the merged dimensions separately and adding the results -- sparseMatrix()
@@ -127,14 +145,7 @@
         suffix = c(".x", ".y")
     )
 
-    x_conflicts <- grep("\\.x$", colnames(merged), value = TRUE)
-    for (x_col in x_conflicts) {
-        base_col <- sub("\\.x$", "", x_col)
-        y_col <- paste0(base_col, ".y")
-        merged[[base_col]] <- dplyr::coalesce(merged[[x_col]], merged[[y_col]])
-        merged[[x_col]] <- NULL
-        merged[[y_col]] <- NULL
-    }
+    merged <- .prefer_x_join_columns(merged)
 
     merged <- merged[merged$snp_id %in% snp_ids_retained, , drop = FALSE]
     order_idx <- match(snp_ids_retained, merged$snp_id)
@@ -185,14 +196,7 @@
         suffix = c(".x", ".y")
     )
 
-    x_conflicts <- grep("\\.x$", colnames(merged), value = TRUE)
-    for (x_col in x_conflicts) {
-        base_col <- sub("\\.x$", "", x_col)
-        y_col <- paste0(base_col, ".y")
-        merged[[base_col]] <- dplyr::coalesce(merged[[x_col]], merged[[y_col]])
-        merged[[x_col]] <- NULL
-        merged[[y_col]] <- NULL
-    }
+    merged <- .prefer_x_join_columns(merged)
 
     merged <- merged[merged$donor %in% donors_retained, , drop = FALSE]
     order_idx <- match(donors_retained, merged$donor)
@@ -319,14 +323,7 @@
     }
     merged <- merged[order_idx, , drop = FALSE]
 
-    x_conflicts <- grep("\\.x$", colnames(merged), value = TRUE)
-    for (x_col in x_conflicts) {
-        base_col <- sub("\\.x$", "", x_col)
-        y_col <- paste0(base_col, ".y")
-        merged[[base_col]] <- dplyr::coalesce(merged[[x_col]], merged[[y_col]])
-        merged[[x_col]] <- NULL
-        merged[[y_col]] <- NULL
-    }
+    merged <- .prefer_x_join_columns(merged)
 
     merged$cell_id <- cell_ids_retained
 
