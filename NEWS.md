@@ -20,6 +20,26 @@
   counts to a gene it may not have come from, where `NA` correctly withholds it;
   unambiguous SNPs, which need no strand to attribute, are unaffected. As above, a
   UMI-collapsed BAM has one read per molecule and so cannot tie
+* Changed `phase_snps()` to accept a SNP pair as an edge on the likelihood ratio between the
+  two haplotype hypotheses rather than the fraction of molecules agreeing, via the new
+  `error_rate` and `min_llr` arguments. Evidence scales with the margin between agreeing and
+  disagreeing molecules, not their ratio, so edges resting on few molecules are no longer
+  required to be unanimous: 4 of 5 agreeing is now accepted. `min_consistency` is deprecated,
+  ignored, and warns
+* Added a `min_cells` argument to `phase_snps()` (default 2), requiring an edge to be backed
+  by molecules from more than one cell. Molecules from a single cell are not independent
+  evidence: on the X the inactive copy is largely silent, so a gene's molecules there sample
+  one haplotype repeatedly, and ambient RNA or an undetected doublet is a property of the
+  barcode. The count is taken over the cells voting for the relation the edge is accepted on,
+  not over every cell spanning the SNP pair, so a cell whose molecules argue for the losing
+  relation cannot vouch for its rival: four molecules from one cell reading "same" plus one
+  from another reading "opposite" spans two barcodes but rests on a single cell, and is
+  rejected. Set to 1 for the previous behaviour
+* Added detection of internally inconsistent phase blocks to `phase_snps()`, reported as the
+  new `n_block_conflicts` and `block_conflict` columns. An edge closing a cycle predicts a
+  relation the block has already fixed; where the two disagree no phasing can satisfy every
+  edge at once, which previously passed silently. `add_molecule_phase()` folds this into
+  `phase_conflict`
 * Added a `test_escape()` method taking a SNPData object directly, which draws the counts,
   the null escape fraction and the overdispersion from the donor's own fit rather than
   requiring them to be supplied

@@ -525,96 +525,334 @@ molecule_read_strand <- function(reads) {
 #' molecule, not of gene annotation, and an ambiguous (multi-gene) SNP can
 #' still serve as a valid bridge between two unambiguous ones.
 #'
+#' @section Accepting an edge:
+#' Each molecule spanning two het SNPs is one vote on whether their REF
+#' alleles share a haplotype. Writing \code{e} for `error_rate`, the two
+#' hypotheses predict opposite things of a molecule: under "same" it agrees
+#' with probability \code{1 - e}, under "opposite" with probability \code{e}.
+#' With \code{k} of \code{n} molecules agreeing, the log-likelihood ratio
+#' between them reduces to
+#'
+#' \deqn{LLR = |2k - n| \cdot \log\left(\frac{1-e}{e}\right)}
+#'
+#' the binomial coefficient cancelling because it depends on the data alone.
+#' The two factors read separately: \code{|2k - n|} is the \emph{margin},
+#' agreements minus disagreements, and \code{log((1-e)/e)} is what one
+#' molecule is worth in log-odds, fixed by \code{e}. Evidence is therefore
+#' additive per molecule -- each agreeing molecule adds that weight, each
+#' disagreeing one subtracts it -- and an edge is accepted once the total
+#' reaches `min_llr`.
+#'
+#' This replaces the fraction cutoff used previously, which conflated how
+#' clean an edge is with how much of it there is. A fraction is also coarse
+#' at the small \code{n} most edges have: at `min_molecules = 5` a 0.9 cutoff
+#' admits only a unanimous 5 of 5, rejecting 4 of 5 despite it carrying
+#' \code{LLR = 8.8} at \code{e = 0.05}. The practical effect of the change is
+#' sensitivity rather than accuracy: far more true edges are accepted, which
+#' leaves blocks less fragmented, at a small and now-detectable rise in
+#' wrongly oriented ones (see \sQuote{Internally inconsistent blocks}).
+#'
+#' The LLR treats every molecule as an independent observation, which holds
+#' across cells but not within one. A cell contributes many transcripts of the
+#' same two chromosome copies, and on the X the inactive copy is largely
+#' silent, so a gene's molecules there are near-monoallelic: the SNPs agree
+#' because one haplotype was sampled repeatedly, not because both were seen to
+#' co-occur. Ambient RNA and an undetected doublet are likewise properties of
+#' a barcode, flipping that cell's molecules together rather than one at a
+#' time. Molecules from a single cell therefore inflate \code{n} without
+#' adding proportionate evidence, and `min_cells` requires an edge to be
+#' corroborated across barcodes before it is accepted. It is a floor on
+#' independence, not a second likelihood: the LLR itself still counts
+#' molecules.
+#'
+#' The count is taken over the cells backing the relation the edge is accepted
+#' on, not over every cell spanning the pair. The two differ precisely when a
+#' cell dissents, and it is that case the distinction matters for: four
+#' molecules from one cell reading "same" alongside one from another reading
+#' "opposite" spans two barcodes but rests, as far as "same" is concerned, on
+#' a single cell. Counting the dissenter towards the relation it contradicts
+#' would let it vouch for exactly the single-cell edge `min_cells` exists to
+#' reject.
+#'
+#' Note that \code{e} is treated as independent across molecules, which
+#' sequencing error is and contamination is not: ambient RNA is correlated
+#' within a cell and a doublet flips many molecules together. Where
+#' contamination rather than base-calling error dominates, the LLR is
+#' optimistic, so set \code{e} from observed discordance rather than from a
+#' sequencing-error prior, and treat `min_llr` as a threshold to calibrate
+#' rather than a p-value.
+#'
+#' @section Internally inconsistent blocks:
+#' Orientations are fixed by a spanning tree of each component, so any edge
+#' that closes a cycle is not needed to phase its endpoints -- but it is an
+#' independent prediction of the relation between them. Where such an edge
+#' contradicts the orientations already assigned, no assignment of alleles to
+#' two haplotypes can satisfy every accepted edge at once. That is impossible
+#' for a diploid genome, so at least one edge in the block is wrong: most
+#' often a spurious link from ambient RNA, a mismapped paralogue, or an
+#' undetected doublet whose two genotypes are read as one.
+#'
+#' Such blocks are still returned, oriented by the spanning tree as before --
+#' the contradiction says one edge is wrong, not which one, and dropping the
+#' block would discard its majority of sound edges along with the bad one.
+#' They are instead flagged \code{block_conflict = TRUE} with
+#' \code{n_block_conflicts} giving the number of contradicting edges, so a
+#' block built on an unreliable link can be inspected or excluded rather than
+#' trusted silently. A block whose SNPs are all genuinely linked has no
+#' conflicts at all, so any non-zero count is worth investigating.
+#'
 #' @param per_snp A tibble, required, as returned by `molecule_snp_alleles()`,
 #'   with columns `barcode`, `umi`, `snp_id`, `allele`.
 #' @param min_molecules Integer (default 5). Molecules required to accept a
-#'   SNP pair as an edge.
-#' @param min_consistency Numeric, in `[0, 1]` (default 0.9). Fraction of
-#'   those molecules that must agree on the same/opposite relation for the
-#'   edge to be accepted.
+#'   SNP pair as an edge, applied before `min_llr` so a large ratio resting on
+#'   one or two molecules cannot qualify.
+#' @param min_cells Integer, `>= 1` (default 2). Distinct cells whose molecules
+#'   must back the relation an edge is accepted on, applied alongside
+#'   `min_molecules`. Counted over the cells voting for that relation, not over
+#'   every cell spanning the pair, so a cell whose molecules argue for the
+#'   losing relation does not help its rival meet this floor. Molecules from
+#'   one cell are not independent evidence; see \sQuote{Accepting an edge}. Set
+#'   to 1 to count molecules only, restoring the previous behaviour.
+#' @param error_rate Numeric, in `(0, 0.5)` (default 0.05). Probability that a
+#'   single molecule reports the wrong relation, absorbing sequencing error,
+#'   mismapping, ambient RNA and undetected doublets. Sets how much one
+#'   molecule is worth as evidence; see \sQuote{Accepting an edge}.
+#' @param min_llr Numeric, `>= 0` (default 3). Log-likelihood ratio an edge
+#'   must reach to be accepted. Roughly, 3 is ~20:1 odds and 4.6 is ~100:1.
+#' @param min_consistency Deprecated and ignored (default `NULL`). Edges are
+#'   accepted on a likelihood ratio rather than a fraction; passing it warns
+#'   and has no effect. Use `error_rate` and `min_llr`.
 #'
 #' @return A tibble with columns `snp_id`, `block` (integer phase-block id,
-#'   unique within this call), and `allele_on_h1` ("REF" or "ALT", the
+#'   unique within this call), `allele_on_h1` ("REF" or "ALT", the
 #'   allele carried by haplotype 1 at that SNP; H1 is an arbitrary label local
-#'   to each block, not oriented to X1/X2). SNPs that could not be linked to
-#'   any other SNP by an accepted edge are absent from the result.
+#'   to each block, not oriented to X1/X2), `n_block_conflicts` (integer;
+#'   edges in this SNP's block that contradict the orientation assigned to
+#'   them, 0 for a consistent block), and `block_conflict` (logical;
+#'   `n_block_conflicts > 0`). See \sQuote{Internally inconsistent blocks}.
+#'   SNPs that could not be linked to any other SNP by an accepted edge are
+#'   absent from the result.
 #'
 #' @family molecule-level allele counting functions
 #' @export
-phase_snps <- function(per_snp, min_molecules = 5L, min_consistency = 0.9) {
+phase_snps <- function(
+    per_snp,
+    min_molecules = 5L,
+    min_cells = 2L,
+    error_rate = 0.05,
+    min_llr = 3,
+    min_consistency = NULL
+) {
+    # Retained only so an existing call still runs; it no longer has any effect.
+    if (!is.null(min_consistency)) {
+        logger::log_warn(
+            "phase_snps(min_consistency = ) is deprecated and ignored; edges are now accepted on a ",
+            "likelihood ratio instead of a fraction. Use error_rate and min_llr (see ?phase_snps)."
+        )
+    }
+    # error_rate is a per-molecule probability of a discordant observation, so
+    # it must leave room for one: at 0 no disagreement is ever explicable and
+    # the weight is infinite, at 0.5 the two hypotheses predict identical data
+    # and the weight is 0, and beyond 0.5 the test reads backwards.
+    if (!is.numeric(error_rate) || length(error_rate) != 1 || is.na(error_rate)) {
+        stop("error_rate must be a single non-missing number.")
+    }
+    if (error_rate <= 0 || error_rate >= 0.5) {
+        stop("error_rate must be in (0, 0.5); got ", error_rate, ".")
+    }
+    if (!is.numeric(min_llr) || length(min_llr) != 1 || is.na(min_llr) || min_llr < 0) {
+        stop("min_llr must be a single non-missing number >= 0.")
+    }
+    if (!is.numeric(min_cells) || length(min_cells) != 1 || is.na(min_cells) || min_cells < 1) {
+        stop("min_cells must be a single non-missing number >= 1.")
+    }
     molecule_snps <- per_snp %>%
         dplyr::arrange(barcode, umi, snp_id) %>%
         dplyr::summarise(snps = list(snp_id), alleles = list(allele), .by = c(barcode, umi)) %>%
         dplyr::filter(lengths(snps) >= 2)
 
     if (nrow(molecule_snps) == 0) {
-        return(tibble::tibble(snp_id = character(), block = integer(), allele_on_h1 = character()))
+        return(tibble::tibble(
+            snp_id = character(),
+            block = integer(),
+            allele_on_h1 = character(),
+            n_block_conflicts = integer(),
+            block_conflict = logical()
+        ))
     }
 
-    pair_rows <- purrr::map(seq_len(nrow(molecule_snps)), function(i) {
-        s <- molecule_snps$snps[[i]]
-        a <- molecule_snps$alleles[[i]]
-        idx <- utils::combn(length(s), 2)
-        tibble::tibble(snp_a = s[idx[1, ]], snp_b = s[idx[2, ]], same = a[idx[1, ]] == a[idx[2, ]])
+    # Every molecule contributes one vote per pair of SNPs it spans: the two
+    # alleles it read either agree ("same" -- both REF or both ALT, so the two
+    # REF alleles share a haplotype) or they do not. `snp_pairs` has the two
+    # rows of combn() naming the first and second member of each pair, so
+    # first_of_pair/second_of_pair index the molecule's own SNPs and alleles in
+    # lockstep.
+    pair_votes <- purrr::map(seq_len(nrow(molecule_snps)), function(molecule_idx) {
+        molecule_snp_ids <- molecule_snps$snps[[molecule_idx]]
+        molecule_alleles <- molecule_snps$alleles[[molecule_idx]]
+        snp_pairs <- utils::combn(length(molecule_snp_ids), 2)
+        first_of_pair <- snp_pairs[1, ]
+        second_of_pair <- snp_pairs[2, ]
+        tibble::tibble(
+            snp_a = molecule_snp_ids[first_of_pair],
+            snp_b = molecule_snp_ids[second_of_pair],
+            same = molecule_alleles[first_of_pair] == molecule_alleles[second_of_pair],
+            # Carried through so an edge's support can be counted in cells as
+            # well as molecules; see `min_cells`.
+            barcode = molecule_snps$barcode[molecule_idx]
+        )
     })
 
-    edges <- dplyr::bind_rows(pair_rows) %>%
-        dplyr::summarise(n = dplyr::n(), n_same = sum(same), .by = c(snp_a, snp_b)) %>%
+    # Evidence for an edge is the *margin* between agreeing and disagreeing
+    # molecules, not the fraction agreeing: log(L_same / L_opposite) reduces to
+    # (2 * n_same - n) * log((1 - error_rate) / error_rate), a net vote count
+    # times a fixed per-molecule weight. A fraction conflates how clean an edge
+    # is with how much of it there is, and at small n it is the coarser of the
+    # two -- 4 of 5 agreeing is 0.8, below any useful fraction cutoff, while
+    # carrying LLR 8.8 at error_rate = 0.05, which is decisive.
+    weight_per_molecule <- log((1 - error_rate) / error_rate)
+    edges <- dplyr::bind_rows(pair_votes) %>%
+        dplyr::summarise(
+            n = dplyr::n(),
+            n_same = sum(same),
+            # Counted per relation rather than over the pair as a whole: a cell
+            # is only independent evidence *for* the relation its molecules
+            # actually voted for. Counting every cell touching the pair would
+            # let a dissenting cell satisfy `min_cells` on behalf of the
+            # relation it argues against -- 4 molecules from one cell saying
+            # "same" plus 1 from another saying "opposite" would read as
+            # two-cell support for "same", which is exactly the single-cell
+            # edge the threshold exists to reject.
+            n_cells_same = dplyr::n_distinct(barcode[same]),
+            n_cells_opposite = dplyr::n_distinct(barcode[!same]),
+            .by = c(snp_a, snp_b)
+        ) %>%
         dplyr::mutate(
             relation = dplyr::if_else(n_same >= n - n_same, "same", "opposite"),
-            consistency = pmax(n_same, n - n_same) / n
+            consistency = pmax(n_same, n - n_same) / n,
+            # Cells backing the relation that won, so `min_cells` is a floor on
+            # the independence of the evidence actually being accepted.
+            n_cells = dplyr::if_else(relation == "same", n_cells_same, n_cells_opposite),
+            # Sign records which relation is favoured, which `relation` already
+            # holds; only the strength of the evidence is thresholded.
+            llr = abs(2 * n_same - n) * weight_per_molecule
         ) %>%
-        dplyr::filter(n >= min_molecules, consistency >= min_consistency)
+        dplyr::filter(n >= min_molecules, n_cells >= min_cells, llr >= min_llr)
 
     if (nrow(edges) == 0) {
-        return(tibble::tibble(snp_id = character(), block = integer(), allele_on_h1 = character()))
+        return(tibble::tibble(
+            snp_id = character(),
+            block = integer(),
+            allele_on_h1 = character(),
+            n_block_conflicts = integer(),
+            block_conflict = logical()
+        ))
     }
 
     snp_ids <- sort(unique(c(edges$snp_a, edges$snp_b)))
+    # orientation[snp] is 0 when that SNP's REF allele sits on H1 and 1 when it
+    # sits on H2; it doubles as the "already visited" marker, NA meaning the
+    # traversal has not reached this SNP yet.
     orientation <- stats::setNames(rep(NA_integer_, length(snp_ids)), snp_ids)
     block <- stats::setNames(rep(NA_integer_, length(snp_ids)), snp_ids)
 
-    # Undirected adjacency: every edge is walkable from both ends.
-    adj <- split(
+    # Undirected adjacency, keyed by SNP: every edge appears twice, once walkable
+    # from each end, so `neighbours_of_snp[[snp]]` lists everything reachable in
+    # one step whichever end the traversal arrives from. `edge_idx` carries each
+    # half-edge back to its row in `edges`, so a contradiction found while
+    # walking can be attributed to the edge that caused it.
+    neighbours_of_snp <- split(
         rbind(
-            data.frame(to = edges$snp_b, flip = edges$relation == "opposite"),
-            data.frame(to = edges$snp_a, flip = edges$relation == "opposite")
+            data.frame(to = edges$snp_b, flip = edges$relation == "opposite", edge_idx = seq_len(nrow(edges))),
+            data.frame(to = edges$snp_a, flip = edges$relation == "opposite", edge_idx = seq_len(nrow(edges)))
         ),
         c(edges$snp_a, edges$snp_b)
     )
 
+    # An edge reaching an already-oriented SNP is a cycle closing. The spanning
+    # tree has already fixed both endpoints' orientations, so this edge is not
+    # needed to phase anything -- but it is an independent prediction of the
+    # relation between them, and it either agrees with the tree or it does not.
+    # A disagreement means no assignment of alleles to two haplotypes can
+    # satisfy every accepted edge at once, which is physically impossible for a
+    # diploid genome and so evidence that one of the edges is wrong (a spurious
+    # link from ambient RNA, a mismapped paralogue, or a doublet's two
+    # genotypes read as one). Silently keeping the tree's answer would discard
+    # exactly the signal that says the block is untrustworthy, so the conflicts
+    # are counted and reported per block instead.
+    is_edge_inconsistent <- rep(FALSE, nrow(edges))
+    conflicts_per_block <- integer(0)
+
+    # Breadth-first traversal of the edge graph. Each unvisited SNP seeds a new
+    # connected component -- a phase block -- and is arbitrarily declared to
+    # carry its REF allele on H1 (orientation 0); every SNP reachable from it
+    # then inherits an orientation forced by the relations along the way. The
+    # visited SNPs of one component are exactly one block, so the traversal
+    # assigns block membership and relative phase in a single pass.
     block_id <- 0L
-    for (seed in snp_ids) {
-        if (!is.na(orientation[seed])) {
+    for (seed_snp in snp_ids) {
+        if (!is.na(orientation[seed_snp])) {
             next
         }
         block_id <- block_id + 1L
-        orientation[seed] <- 0L
-        block[seed] <- block_id
-        queue <- seed
-        while (length(queue) > 0) {
-            node <- queue[1]
-            queue <- queue[-1]
-            nbrs <- adj[[node]]
-            if (is.null(nbrs)) {
+        orientation[seed_snp] <- 0L
+        block[seed_snp] <- block_id
+        snp_queue <- seed_snp
+        while (length(snp_queue) > 0) {
+            current_snp <- snp_queue[1]
+            snp_queue <- snp_queue[-1]
+            neighbours <- neighbours_of_snp[[current_snp]]
+            if (is.null(neighbours)) {
                 next
             }
-            for (k in seq_len(nrow(nbrs))) {
-                to <- nbrs$to[k]
-                want <- as.integer(xor(orientation[[node]] == 1L, nbrs$flip[k]))
-                if (is.na(orientation[to])) {
-                    orientation[to] <- want
-                    block[to] <- block_id
-                    queue <- c(queue, to)
+            for (neighbour_idx in seq_len(nrow(neighbours))) {
+                neighbour_snp <- neighbours$to[neighbour_idx]
+                # An "opposite" edge flips the orientation across it, a "same"
+                # edge carries it through unchanged -- so the orientation this
+                # edge implies for the neighbour is the current SNP's, XORed
+                # with the edge's flip.
+                implied_orientation <- as.integer(
+                    xor(orientation[[current_snp]] == 1L, neighbours$flip[neighbour_idx])
+                )
+                if (is.na(orientation[neighbour_snp])) {
+                    orientation[neighbour_snp] <- implied_orientation
+                    block[neighbour_snp] <- block_id
+                    snp_queue <- c(snp_queue, neighbour_snp)
+                } else if (orientation[[neighbour_snp]] != implied_orientation) {
+                    # Each undirected edge is walked from both ends, so the same
+                    # conflict is seen twice; `edge_idx` identifies the original
+                    # row so it is only ever recorded once.
+                    is_edge_inconsistent[neighbours$edge_idx[neighbour_idx]] <- TRUE
                 }
             }
         }
     }
 
+    conflicting_edges <- edges[is_edge_inconsistent, , drop = FALSE]
+    if (nrow(conflicting_edges) > 0) {
+        # Both endpoints of a conflicting edge are in one block by construction,
+        # so either endpoint identifies the block the conflict belongs to.
+        conflicts_per_block <- table(block[conflicting_edges$snp_a])
+        logger::log_warn(
+            "{nrow(conflicting_edges)} edge(s) contradict the phase they were assigned, in ",
+            "{length(conflicts_per_block)} block(s); flagging those SNPs block_conflict = TRUE"
+        )
+    }
+
+    conflicted_block_ids <- as.integer(names(conflicts_per_block))
+
+    # Resolved before the tibble() call rather than inside it: tibble() builds
+    # columns sequentially in its own scope, so a `block = ` column defined
+    # there masks this `block` lookup vector for every argument after it.
+    block_of_snp <- unname(block[snp_ids])
+    n_conflicts_of_snp <- dplyr::coalesce(as.integer(conflicts_per_block[as.character(block_of_snp)]), 0L)
+
     tibble::tibble(
         snp_id = snp_ids,
-        block = unname(block[snp_ids]),
-        allele_on_h1 = dplyr::if_else(unname(orientation[snp_ids]) == 0L, "REF", "ALT")
+        block = block_of_snp,
+        allele_on_h1 = dplyr::if_else(unname(orientation[snp_ids]) == 0L, "REF", "ALT"),
+        n_block_conflicts = n_conflicts_of_snp,
+        block_conflict = block_of_snp %in% conflicted_block_ids
     )
 }
 

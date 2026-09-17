@@ -4,25 +4,53 @@
 \alias{phase_snps}
 \title{Phase heterozygous SNPs directly from the molecules that span them}
 \usage{
-phase_snps(per_snp, min_molecules = 5L, min_consistency = 0.9)
+phase_snps(
+  per_snp,
+  min_molecules = 5L,
+  min_cells = 2L,
+  error_rate = 0.05,
+  min_llr = 3,
+  min_consistency = NULL
+)
 }
 \arguments{
 \item{per_snp}{A tibble, required, as returned by `molecule_snp_alleles()`,
 with columns `barcode`, `umi`, `snp_id`, `allele`.}
 
 \item{min_molecules}{Integer (default 5). Molecules required to accept a
-SNP pair as an edge.}
+SNP pair as an edge, applied before `min_llr` so a large ratio resting on
+one or two molecules cannot qualify.}
 
-\item{min_consistency}{Numeric, in `[0, 1]` (default 0.9). Fraction of
-those molecules that must agree on the same/opposite relation for the
-edge to be accepted.}
+\item{min_cells}{Integer, `>= 1` (default 2). Distinct cells whose molecules
+must back the relation an edge is accepted on, applied alongside
+`min_molecules`. Counted over the cells voting for that relation, not over
+every cell spanning the pair, so a cell whose molecules argue for the
+losing relation does not help its rival meet this floor. Molecules from
+one cell are not independent evidence; see \sQuote{Accepting an edge}. Set
+to 1 to count molecules only, restoring the previous behaviour.}
+
+\item{error_rate}{Numeric, in `(0, 0.5)` (default 0.05). Probability that a
+single molecule reports the wrong relation, absorbing sequencing error,
+mismapping, ambient RNA and undetected doublets. Sets how much one
+molecule is worth as evidence; see \sQuote{Accepting an edge}.}
+
+\item{min_llr}{Numeric, `>= 0` (default 3). Log-likelihood ratio an edge
+must reach to be accepted. Roughly, 3 is ~20:1 odds and 4.6 is ~100:1.}
+
+\item{min_consistency}{Deprecated and ignored (default `NULL`). Edges are
+accepted on a likelihood ratio rather than a fraction; passing it warns
+and has no effect. Use `error_rate` and `min_llr`.}
 }
 \value{
 A tibble with columns `snp_id`, `block` (integer phase-block id,
-  unique within this call), and `allele_on_h1` ("REF" or "ALT", the
+  unique within this call), `allele_on_h1` ("REF" or "ALT", the
   allele carried by haplotype 1 at that SNP; H1 is an arbitrary label local
-  to each block, not oriented to X1/X2). SNPs that could not be linked to
-  any other SNP by an accepted edge are absent from the result.
+  to each block, not oriented to X1/X2), `n_block_conflicts` (integer;
+  edges in this SNP's block that contradict the orientation assigned to
+  them, 0 for a consistent block), and `block_conflict` (logical;
+  `n_block_conflicts > 0`). See \sQuote{Internally inconsistent blocks}.
+  SNPs that could not be linked to any other SNP by an accepted edge are
+  absent from the result.
 }
 \description{
 Two het SNPs observed on the same molecule sit on the same physical
@@ -40,11 +68,92 @@ gene assignment: whether two SNPs share a haplotype is a property of the
 molecule, not of gene annotation, and an ambiguous (multi-gene) SNP can
 still serve as a valid bridge between two unambiguous ones.
 }
+\section{Accepting an edge}{
+
+Each molecule spanning two het SNPs is one vote on whether their REF
+alleles share a haplotype. Writing \code{e} for `error_rate`, the two
+hypotheses predict opposite things of a molecule: under "same" it agrees
+with probability \code{1 - e}, under "opposite" with probability \code{e}.
+With \code{k} of \code{n} molecules agreeing, the log-likelihood ratio
+between them reduces to
+
+\deqn{LLR = |2k - n| \cdot \log\left(\frac{1-e}{e}\right)}
+
+the binomial coefficient cancelling because it depends on the data alone.
+The two factors read separately: \code{|2k - n|} is the \emph{margin},
+agreements minus disagreements, and \code{log((1-e)/e)} is what one
+molecule is worth in log-odds, fixed by \code{e}. Evidence is therefore
+additive per molecule -- each agreeing molecule adds that weight, each
+disagreeing one subtracts it -- and an edge is accepted once the total
+reaches `min_llr`.
+
+This replaces the fraction cutoff used previously, which conflated how
+clean an edge is with how much of it there is. A fraction is also coarse
+at the small \code{n} most edges have: at `min_molecules = 5` a 0.9 cutoff
+admits only a unanimous 5 of 5, rejecting 4 of 5 despite it carrying
+\code{LLR = 8.8} at \code{e = 0.05}. The practical effect of the change is
+sensitivity rather than accuracy: far more true edges are accepted, which
+leaves blocks less fragmented, at a small and now-detectable rise in
+wrongly oriented ones (see \sQuote{Internally inconsistent blocks}).
+
+The LLR treats every molecule as an independent observation, which holds
+across cells but not within one. A cell contributes many transcripts of the
+same two chromosome copies, and on the X the inactive copy is largely
+silent, so a gene's molecules there are near-monoallelic: the SNPs agree
+because one haplotype was sampled repeatedly, not because both were seen to
+co-occur. Ambient RNA and an undetected doublet are likewise properties of
+a barcode, flipping that cell's molecules together rather than one at a
+time. Molecules from a single cell therefore inflate \code{n} without
+adding proportionate evidence, and `min_cells` requires an edge to be
+corroborated across barcodes before it is accepted. It is a floor on
+independence, not a second likelihood: the LLR itself still counts
+molecules.
+
+The count is taken over the cells backing the relation the edge is accepted
+on, not over every cell spanning the pair. The two differ precisely when a
+cell dissents, and it is that case the distinction matters for: four
+molecules from one cell reading "same" alongside one from another reading
+"opposite" spans two barcodes but rests, as far as "same" is concerned, on
+a single cell. Counting the dissenter towards the relation it contradicts
+would let it vouch for exactly the single-cell edge `min_cells` exists to
+reject.
+
+Note that \code{e} is treated as independent across molecules, which
+sequencing error is and contamination is not: ambient RNA is correlated
+within a cell and a doublet flips many molecules together. Where
+contamination rather than base-calling error dominates, the LLR is
+optimistic, so set \code{e} from observed discordance rather than from a
+sequencing-error prior, and treat `min_llr` as a threshold to calibrate
+rather than a p-value.
+}
+
+\section{Internally inconsistent blocks}{
+
+Orientations are fixed by a spanning tree of each component, so any edge
+that closes a cycle is not needed to phase its endpoints -- but it is an
+independent prediction of the relation between them. Where such an edge
+contradicts the orientations already assigned, no assignment of alleles to
+two haplotypes can satisfy every accepted edge at once. That is impossible
+for a diploid genome, so at least one edge in the block is wrong: most
+often a spurious link from ambient RNA, a mismapped paralogue, or an
+undetected doublet whose two genotypes are read as one.
+
+Such blocks are still returned, oriented by the spanning tree as before --
+the contradiction says one edge is wrong, not which one, and dropping the
+block would discard its majority of sound edges along with the bad one.
+They are instead flagged \code{block_conflict = TRUE} with
+\code{n_block_conflicts} giving the number of contradicting edges, so a
+block built on an unreliable link can be inspected or excluded rather than
+trusted silently. A block whose SNPs are all genuinely linked has no
+conflicts at all, so any non-zero count is worth investigating.
+}
+
 \seealso{
 Other molecule-level allele counting functions:
 \code{\link[=add_molecule_phase]{add_molecule_phase()}},
 \code{\link[=assign_snp_genes]{assign_snp_genes()}},
 \code{\link[=extract_snp_calls]{extract_snp_calls()}},
+\code{\link[=molecule_haplotype_counts]{molecule_haplotype_counts()}},
 \code{\link[=molecule_read_strand]{molecule_read_strand()}},
 \code{\link[=molecule_snp_alleles]{molecule_snp_alleles()}}
 }

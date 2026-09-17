@@ -284,49 +284,49 @@ test_that("phase_snps() links two SNPs observed on the same molecules as 'same'"
 
 test_that("phase_snps() flips orientation for SNPs observed as 'opposite'", {
     per_snp <- tibble::tribble(
-        ~barcode,
-        ~umi,
-        ~snp_id,
-        ~allele,
-        "c1",
-        "u1",
-        "snp_a",
-        "REF",
-        "c1",
-        "u1",
-        "snp_b",
-        "ALT",
-        "c2",
-        "u2",
-        "snp_a",
-        "REF",
-        "c2",
-        "u2",
-        "snp_b",
-        "ALT",
-        "c3",
-        "u3",
-        "snp_a",
-        "ALT",
-        "c3",
-        "u3",
-        "snp_b",
-        "REF",
-        "c4",
-        "u4",
-        "snp_a",
-        "REF",
-        "c4",
-        "u4",
-        "snp_b",
-        "ALT",
-        "c5",
-        "u5",
-        "snp_a",
-        "ALT",
-        "c5",
-        "u5",
-        "snp_b",
+        ~barcode ,
+        ~umi     ,
+        ~snp_id  ,
+        ~allele  ,
+        "c1"     ,
+        "u1"     ,
+        "snp_a"  ,
+        "REF"    ,
+        "c1"     ,
+        "u1"     ,
+        "snp_b"  ,
+        "ALT"    ,
+        "c2"     ,
+        "u2"     ,
+        "snp_a"  ,
+        "REF"    ,
+        "c2"     ,
+        "u2"     ,
+        "snp_b"  ,
+        "ALT"    ,
+        "c3"     ,
+        "u3"     ,
+        "snp_a"  ,
+        "ALT"    ,
+        "c3"     ,
+        "u3"     ,
+        "snp_b"  ,
+        "REF"    ,
+        "c4"     ,
+        "u4"     ,
+        "snp_a"  ,
+        "REF"    ,
+        "c4"     ,
+        "u4"     ,
+        "snp_b"  ,
+        "ALT"    ,
+        "c5"     ,
+        "u5"     ,
+        "snp_a"  ,
+        "ALT"    ,
+        "c5"     ,
+        "u5"     ,
+        "snp_b"  ,
         "REF"
     )
 
@@ -339,25 +339,25 @@ test_that("phase_snps() flips orientation for SNPs observed as 'opposite'", {
 
 test_that("phase_snps() rejects an edge below min_molecules", {
     per_snp <- tibble::tribble(
-        ~barcode,
-        ~umi,
-        ~snp_id,
-        ~allele,
-        "c1",
-        "u1",
-        "snp_a",
-        "REF",
-        "c1",
-        "u1",
-        "snp_b",
-        "REF",
-        "c2",
-        "u2",
-        "snp_a",
-        "REF",
-        "c2",
-        "u2",
-        "snp_b",
+        ~barcode ,
+        ~umi     ,
+        ~snp_id  ,
+        ~allele  ,
+        "c1"     ,
+        "u1"     ,
+        "snp_a"  ,
+        "REF"    ,
+        "c1"     ,
+        "u1"     ,
+        "snp_b"  ,
+        "REF"    ,
+        "c2"     ,
+        "u2"     ,
+        "snp_a"  ,
+        "REF"    ,
+        "c2"     ,
+        "u2"     ,
+        "snp_b"  ,
         "REF"
     )
 
@@ -367,59 +367,277 @@ test_that("phase_snps() rejects an edge below min_molecules", {
     expect_equal(nrow(result), 0)
 })
 
-test_that("phase_snps() rejects an edge below min_consistency", {
+test_that("phase_snps() rejects an edge whose evidence is below min_llr", {
     per_snp <- tibble::tribble(
-        ~barcode,
-        ~umi,
-        ~snp_id,
-        ~allele,
-        "c1",
-        "u1",
-        "snp_a",
-        "REF",
-        "c1",
-        "u1",
-        "snp_b",
-        "REF",
-        "c2",
-        "u2",
-        "snp_a",
-        "REF",
-        "c2",
-        "u2",
-        "snp_b",
-        "REF",
-        "c3",
-        "u3",
-        "snp_a",
-        "REF",
-        "c3",
-        "u3",
-        "snp_b",
-        "ALT",
-        "c4",
-        "u4",
-        "snp_a",
-        "REF",
-        "c4",
-        "u4",
-        "snp_b",
-        "ALT",
-        "c5",
-        "u5",
-        "snp_a",
-        "REF",
-        "c5",
-        "u5",
-        "snp_b",
+        ~barcode ,
+        ~umi     ,
+        ~snp_id  ,
+        ~allele  ,
+        "c1"     ,
+        "u1"     ,
+        "snp_a"  ,
+        "REF"    ,
+        "c1"     ,
+        "u1"     ,
+        "snp_b"  ,
+        "REF"    ,
+        "c2"     ,
+        "u2"     ,
+        "snp_a"  ,
+        "REF"    ,
+        "c2"     ,
+        "u2"     ,
+        "snp_b"  ,
+        "REF"    ,
+        "c3"     ,
+        "u3"     ,
+        "snp_a"  ,
+        "REF"    ,
+        "c3"     ,
+        "u3"     ,
+        "snp_b"  ,
+        "ALT"    ,
+        "c4"     ,
+        "u4"     ,
+        "snp_a"  ,
+        "REF"    ,
+        "c4"     ,
+        "u4"     ,
+        "snp_b"  ,
+        "ALT"    ,
+        "c5"     ,
+        "u5"     ,
+        "snp_a"  ,
+        "REF"    ,
+        "c5"     ,
+        "u5"     ,
+        "snp_b"  ,
         "REF"
     )
-    # 3/5 "same", 2/5 "opposite" -- consistency 0.6, below the 0.9 threshold
+    # 3/5 "same", 2/5 "opposite" -- a net margin of 1 molecule, so LLR is
+    # log(0.95 / 0.05) = 2.94, just short of the default threshold of 3.
 
-    result <- phase_snps(per_snp, min_molecules = 5, min_consistency = 0.9)
+    result <- phase_snps(per_snp, min_molecules = 5)
 
-    # Verify an inconsistent edge is not phased
+    # Verify an edge with near-balanced votes is not phased
     expect_equal(nrow(result), 0)
+})
+
+# ------------------------------------------------------------------------------
+# Edge acceptance: likelihood ratio rather than a fraction agreeing
+# ------------------------------------------------------------------------------
+
+# One SNP pair spanned by `n` molecules, `k` of which agree. Each molecule comes
+# from its own cell unless `n_cells` says otherwise, so these tests exercise the
+# evidence threshold rather than tripping over min_cells.
+make_edge_molecules <- function(n, k, n_cells = n) {
+    dplyr::bind_rows(lapply(seq_len(n), function(i) {
+        tibble::tibble(
+            barcode = sprintf("c%03d", ((i - 1) %% n_cells) + 1),
+            umi = sprintf("u%03d", i),
+            snp_id = c("snp_a", "snp_b"),
+            allele = c("REF", if (i <= k) "REF" else "ALT")
+        )
+    }))
+}
+
+test_that("phase_snps() accepts an edge a fraction cutoff would have rejected", {
+    # 4 of 5 agreeing is a fraction of 0.8, which the old 0.9 cutoff rejected,
+    # but a margin of 3 molecules: LLR 8.8 at the default error_rate, decisive.
+    result <- phase_snps(make_edge_molecules(5, 4), min_molecules = 5)
+
+    # Verify the edge is accepted and both SNPs land in one block
+    expect_equal(nrow(result), 2)
+    expect_equal(dplyr::n_distinct(result$block), 1)
+})
+
+test_that("phase_snps() weighs evidence by margin rather than by fraction", {
+    # Two edges whose fractions are ordered opposite to nothing in particular,
+    # but whose margins both clear the threshold: acceptance must track the
+    # margin, so the weaker fraction (0.8) is accepted alongside the stronger.
+    weaker_fraction <- phase_snps(make_edge_molecules(5, 4), min_molecules = 5)
+    stronger_fraction <- phase_snps(make_edge_molecules(21, 20), min_molecules = 5)
+
+    # Check both are accepted despite fractions of 0.8 and 0.95
+    expect_equal(nrow(weaker_fraction), 2)
+    expect_equal(nrow(stronger_fraction), 2)
+
+    # Confirm a large fraction resting on too few molecules is still gated by
+    # min_molecules, which applies before the likelihood ratio
+    expect_equal(nrow(phase_snps(make_edge_molecules(3, 3), min_molecules = 5)), 0)
+    expect_equal(nrow(phase_snps(make_edge_molecules(3, 3), min_molecules = 2)), 2)
+})
+
+test_that("phase_snps() rejects an evenly split edge at any depth", {
+    # A 50/50 split has zero margin, so LLR is 0 however many molecules back
+    # it: no amount of balanced data is evidence for either relation.
+    for (n in c(6L, 20L, 40L)) {
+        # Verify depth alone never rescues a tied edge
+        expect_equal(nrow(phase_snps(make_edge_molecules(n, n / 2L), min_molecules = 5)), 0)
+    }
+})
+
+test_that("phase_snps() responds to min_llr and error_rate", {
+    per_snp <- make_edge_molecules(5, 4)
+
+    # Verify raising the threshold past the edge's LLR rejects it
+    expect_equal(nrow(phase_snps(per_snp, min_molecules = 5, min_llr = 3)), 2)
+    expect_equal(nrow(phase_snps(per_snp, min_molecules = 5, min_llr = 20)), 0)
+
+    # Check a noisier error_rate shrinks the per-molecule weight (log(0.7/0.3)
+    # = 0.85, so a margin of 3 gives LLR 2.5) and the same edge now fails
+    expect_equal(nrow(phase_snps(per_snp, min_molecules = 5, error_rate = 0.3)), 0)
+})
+
+test_that("phase_snps() rejects an edge backed by too few cells", {
+    # 20 molecules, all agreeing, all from one cell: overwhelming by molecule
+    # count but a single observation of one pair of chromosomes.
+    one_cell <- make_edge_molecules(20, 20, n_cells = 1)
+
+    # Verify depth of molecules alone does not carry an edge
+    expect_equal(nrow(phase_snps(one_cell, min_molecules = 5)), 0)
+
+    # Check the same molecules spread over two cells are accepted
+    two_cells <- make_edge_molecules(20, 20, n_cells = 2)
+    expect_equal(nrow(phase_snps(two_cells, min_molecules = 5)), 2)
+})
+
+test_that("phase_snps() counts distinct cells, not molecules, for min_cells", {
+    # Eight agreeing molecules held fixed while only their spread over cells
+    # varies, so any change in acceptance is down to min_cells alone.
+    accepted <- function(n_cells, ...) {
+        nrow(phase_snps(make_edge_molecules(8, 8, n_cells = n_cells), min_molecules = 5, ...)) > 0
+    }
+
+    # Verify the default of 2 is the boundary
+    expect_false(accepted(1))
+    expect_true(accepted(2))
+
+    # Check a raised threshold moves that boundary
+    expect_false(accepted(2, min_cells = 3))
+    expect_true(accepted(3, min_cells = 3))
+
+    # Ensure min_cells = 1 restores counting by molecule alone
+    expect_true(accepted(1, min_cells = 1))
+})
+
+test_that("phase_snps() counts only the cells backing the accepted relation for min_cells", {
+    # `make_edge_molecules()` spreads molecules over cells round-robin, so
+    # agreeing and dissenting ones always intermix. Here the dissent is
+    # confined to its own cell instead: every "same" molecule comes from one
+    # barcode and the lone "opposite" molecule from another, so the pair spans
+    # two cells while the accepted relation rests on only one.
+    one_cell_agrees <- dplyr::bind_rows(
+        lapply(seq_len(4), function(i) {
+            tibble::tibble(
+                barcode = "cell_a",
+                umi = sprintf("u%03d", i),
+                snp_id = c("snp_a", "snp_b"),
+                allele = c("REF", "REF")
+            )
+        }),
+        tibble::tibble(
+            barcode = "cell_b",
+            umi = "u999",
+            snp_id = c("snp_a", "snp_b"),
+            allele = c("REF", "ALT")
+        )
+    )
+
+    # Verify the edge is rejected: 4 of 5 agreeing carries an LLR of 8.8 and
+    # the pair spans two barcodes, so only the per-relation cell count stands
+    # between this and acceptance
+    expect_equal(nrow(phase_snps(one_cell_agrees, min_molecules = 5)), 0)
+
+    # Confirm the dissenting cell is what is being discounted, not the molecule
+    # count: the same five molecules agreeing across the same two cells are
+    # accepted
+    all_agree <- one_cell_agrees %>%
+        dplyr::mutate(allele = "REF")
+    expect_equal(nrow(phase_snps(all_agree, min_molecules = 5)), 2)
+
+    # Ensure min_cells = 1 still accepts the dissenting case, so this tightens
+    # only what the cell floor means and not the evidence threshold
+    expect_equal(nrow(phase_snps(one_cell_agrees, min_molecules = 5, min_cells = 1)), 2)
+})
+
+test_that("phase_snps() accepts an edge whose winning relation clears min_cells despite a dissent", {
+    # Two cells back "same" and a third dissents, so the accepted relation is
+    # corroborated across barcodes even though not every cell agrees.
+    majority_across_cells <- dplyr::bind_rows(
+        lapply(seq_len(3), function(i) {
+            tibble::tibble(
+                barcode = "cell_a",
+                umi = sprintf("a%03d", i),
+                snp_id = c("snp_a", "snp_b"),
+                allele = c("REF", "REF")
+            )
+        }),
+        lapply(seq_len(2), function(i) {
+            tibble::tibble(
+                barcode = "cell_b",
+                umi = sprintf("b%03d", i),
+                snp_id = c("snp_a", "snp_b"),
+                allele = c("REF", "REF")
+            )
+        }),
+        tibble::tibble(
+            barcode = "cell_c",
+            umi = "c001",
+            snp_id = c("snp_a", "snp_b"),
+            allele = c("REF", "ALT")
+        )
+    )
+
+    result <- phase_snps(majority_across_cells, min_molecules = 5)
+
+    # Verify a dissenting cell does not veto an edge two other cells support
+    expect_equal(nrow(result), 2)
+    # Check both SNPs are phased into one block with REF on the same haplotype
+    expect_equal(dplyr::n_distinct(result$block), 1)
+    expect_equal(result$allele_on_h1, c("REF", "REF"))
+})
+
+test_that("phase_snps() still requires evidence once min_cells is met", {
+    # Six cells, one molecule each, split 3/3: independent observations, but
+    # zero margin, so min_cells being satisfied must not rescue the edge.
+    tied <- make_edge_molecules(6, 3)
+
+    # Confirm the cell requirement and the likelihood ratio are both gates
+    expect_equal(nrow(phase_snps(tied, min_molecules = 5)), 0)
+})
+
+test_that("phase_snps() validates min_cells", {
+    per_snp <- make_edge_molecules(8, 8)
+
+    # Ensure an edge cannot be required to come from fewer than one cell
+    expect_error(phase_snps(per_snp, min_cells = 0), "min_cells must be")
+    expect_error(phase_snps(per_snp, min_cells = -1), "min_cells must be")
+    expect_error(phase_snps(per_snp, min_cells = "a"), "min_cells must be")
+    expect_error(phase_snps(per_snp, min_cells = NA), "min_cells must be")
+})
+
+test_that("phase_snps() validates error_rate and min_llr", {
+    per_snp <- make_edge_molecules(5, 5)
+
+    # Ensure error_rate is confined to (0, 0.5): at 0 the weight is infinite,
+    # at 0.5 the two hypotheses are indistinguishable, beyond it inverted
+    expect_error(phase_snps(per_snp, error_rate = 0), "error_rate must be in")
+    expect_error(phase_snps(per_snp, error_rate = 0.5), "error_rate must be in")
+    expect_error(phase_snps(per_snp, error_rate = 0.9), "error_rate must be in")
+    expect_error(phase_snps(per_snp, error_rate = "a"), "single non-missing number")
+
+    # Verify a negative threshold is rejected rather than accepting every edge
+    expect_error(phase_snps(per_snp, min_llr = -1), "min_llr must be")
+})
+
+test_that("phase_snps() ignores the deprecated min_consistency argument", {
+    # 4 of 5 agreeing: rejected under the old 0.9 fraction rule, accepted now.
+    # An old call must still run, and must get the new behaviour.
+    result <- phase_snps(make_edge_molecules(5, 4), min_molecules = 5, min_consistency = 0.9)
+
+    # Confirm the argument is inert rather than still filtering
+    expect_equal(nrow(result), 2)
 })
 
 test_that("phase_snps() keeps disjoint SNP pairs in separate blocks", {
@@ -454,17 +672,17 @@ test_that("phase_snps() keeps disjoint SNP pairs in separate blocks", {
 
 test_that("phase_snps() returns an empty tibble when no molecule spans multiple SNPs", {
     per_snp <- tibble::tribble(
-        ~barcode,
-        ~umi,
-        ~snp_id,
-        ~allele,
-        "c1",
-        "u1",
-        "snp_a",
-        "REF",
-        "c2",
-        "u2",
-        "snp_b",
+        ~barcode ,
+        ~umi     ,
+        ~snp_id  ,
+        ~allele  ,
+        "c1"     ,
+        "u1"     ,
+        "snp_a"  ,
+        "REF"    ,
+        "c2"     ,
+        "u2"     ,
+        "snp_b"  ,
         "REF"
     )
 
@@ -472,7 +690,115 @@ test_that("phase_snps() returns an empty tibble when no molecule spans multiple 
 
     # Verify the result has the expected empty structure, not an error
     expect_equal(nrow(result), 0)
-    expect_named(result, c("snp_id", "block", "allele_on_h1"))
+    expect_named(result, c("snp_id", "block", "allele_on_h1", "n_block_conflicts", "block_conflict"))
+})
+
+# ------------------------------------------------------------------------------
+# Internally inconsistent phase blocks
+#
+# Orientations are fixed by a spanning tree, so an edge closing a cycle is an
+# independent prediction of a relation the tree has already settled. Where the
+# two disagree, no assignment of alleles to two haplotypes satisfies every
+# accepted edge, which cannot happen on a real diploid genome.
+# ------------------------------------------------------------------------------
+
+# Build one molecule per row of `pairs`, repeated `n` times, so each SNP pair
+# clears min_molecules with perfect consistency and every edge is accepted.
+make_linked_molecules <- function(pairs, n = 10) {
+    rows <- purrr::imap(pairs, function(p, j) {
+        purrr::map(seq_len(n), function(i) {
+            tibble::tibble(
+                # One cell per molecule: these tests are about block topology,
+                # not about how many cells corroborate an edge.
+                barcode = sprintf("c%03d", i),
+                umi = sprintf("u%d_%03d", j, i),
+                snp_id = c(p$a, p$b),
+                allele = c("REF", if (p$same) "REF" else "ALT")
+            )
+        })
+    })
+    dplyr::bind_rows(rows)
+}
+
+test_that("phase_snps() flags a block whose edges cannot all be satisfied", {
+    # A~B same and B~C same imply A~C same, so an observed A~C opposite
+    # contradicts them: physically impossible for a diploid genome.
+    per_snp <- make_linked_molecules(list(
+        list(a = "snp_a", b = "snp_b", same = TRUE),
+        list(a = "snp_b", b = "snp_c", same = TRUE),
+        list(a = "snp_a", b = "snp_c", same = FALSE)
+    ))
+
+    result <- phase_snps(per_snp)
+
+    # Verify every SNP in the offending block is flagged
+    expect_true(all(result$block_conflict))
+    # Check the single contradicting edge is counted once, not once per traversal
+    expect_equal(unique(result$n_block_conflicts), 1L)
+    # Ensure the block is still returned and oriented rather than dropped
+    expect_equal(nrow(result), 3)
+    expect_false(anyNA(result$allele_on_h1))
+})
+
+test_that("phase_snps() leaves a consistent cycle unflagged", {
+    # A~B same, B~C same, A~C same is satisfiable, so closing the cycle
+    # agrees with the spanning tree and must not be reported.
+    consistent <- make_linked_molecules(list(
+        list(a = "snp_a", b = "snp_b", same = TRUE),
+        list(a = "snp_b", b = "snp_c", same = TRUE),
+        list(a = "snp_a", b = "snp_c", same = TRUE)
+    ))
+
+    result <- phase_snps(consistent)
+
+    # Check no SNP is flagged and no conflict is counted
+    expect_false(any(result$block_conflict))
+    expect_true(all(result$n_block_conflicts == 0L))
+
+    # Two flips also compose to "same", so this cycle is satisfiable too and
+    # confirms the check tracks orientation rather than counting "opposite" edges.
+    two_flips <- make_linked_molecules(list(
+        list(a = "snp_a", b = "snp_b", same = FALSE),
+        list(a = "snp_b", b = "snp_c", same = FALSE),
+        list(a = "snp_a", b = "snp_c", same = TRUE)
+    ))
+
+    result_flipped <- phase_snps(two_flips)
+
+    # Ensure an even number of flips round a cycle is not mistaken for a conflict
+    expect_false(any(result_flipped$block_conflict))
+    expect_true(all(result_flipped$n_block_conflicts == 0L))
+})
+
+test_that("phase_snps() confines a conflict to the block that contains it", {
+    per_snp <- make_linked_molecules(list(
+        list(a = "snp_a", b = "snp_b", same = TRUE),
+        list(a = "snp_b", b = "snp_c", same = TRUE),
+        list(a = "snp_a", b = "snp_c", same = FALSE),
+        list(a = "snp_y", b = "snp_z", same = TRUE)
+    ))
+
+    result <- phase_snps(per_snp)
+    flagged <- setNames(result$block_conflict, result$snp_id)
+
+    # Verify the inconsistent component is flagged
+    expect_true(all(flagged[c("snp_a", "snp_b", "snp_c")]))
+    # Check an unrelated, internally consistent block is untouched
+    expect_false(any(flagged[c("snp_y", "snp_z")]))
+})
+
+test_that("phase_snps() leaves an acyclic block unflagged", {
+    # A spanning tree has no cycle to close, so there is nothing to contradict.
+    per_snp <- make_linked_molecules(list(
+        list(a = "snp_a", b = "snp_b", same = TRUE),
+        list(a = "snp_b", b = "snp_c", same = FALSE)
+    ))
+
+    result <- phase_snps(per_snp)
+
+    # Verify a chain phases without any conflict being reported
+    expect_false(any(result$block_conflict))
+    expect_true(all(result$n_block_conflicts == 0L))
 })
 
 # ==============================================================================
