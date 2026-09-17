@@ -52,7 +52,9 @@ setMethod("to_expr_matrix", signature(x = "SNPData"), function(x, level = c("bar
                 "Clonotype information not available. Add clonotype data using add_barcode_metadata() or import_cellsnp() with vdj_file parameter."
             )
         } else {
-            stop("No ", level, " column in barcode_info.")
+            stop(
+                "Donor information not available. Add donor data using add_barcode_metadata() or import_cellsnp() with vireo_folder parameter."
+            )
         }
     }
 
@@ -93,11 +95,11 @@ setMethod("to_expr_matrix", signature(x = "SNPData"), function(x, level = c("bar
     if (all(is.na(groups))) {
         if (level == "clonotype") {
             stop(
-                "All clonotype values are NA. Cannot perform clonotype-level aggregation. Add clonotype data using add_barcode_metadata() or import_cellsnp() with vdj_file parameter."
+                "All clonotype values are NA. Cannot perform clonotype-level expression matrix conversion. Add clonotype data using add_barcode_metadata() or import_cellsnp() with vdj_file parameter."
             )
         }
         stop(
-            "All donor values are NA. Cannot perform donor-level aggregation. Add donor data using add_barcode_metadata() or import_cellsnp() with vireo_folder parameter."
+            "All donor values are NA. Cannot perform donor-level expression matrix conversion. Add donor data using add_barcode_metadata() or import_cellsnp() with vireo_folder parameter."
         )
     }
 

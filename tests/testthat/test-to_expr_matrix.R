@@ -366,7 +366,7 @@ test_that("to_expr_matrix() errors when donor column missing but requested", {
     # Verify missing donor column raises an informative error
     expect_error(
         to_expr_matrix(snp_data, level = "donor"),
-        "No donor column in barcode_info"
+        "Donor information not available"
     )
 })
 
