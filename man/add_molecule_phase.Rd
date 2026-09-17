@@ -11,7 +11,9 @@ add_molecule_phase(
   min_mapq = 20L,
   min_baseq = 10L,
   min_molecules = 5L,
-  min_consistency = 0.9,
+  min_cells = 2L,
+  error_rate = 0.05,
+  min_llr = 3,
   threads = 4L
 )
 }
@@ -45,14 +47,22 @@ het-SNP selection to.}
 \item{min_mapq, min_baseq, threads}{Integer (defaults 20, 10, 4). Passed to
 `extract_snp_calls()`.}
 
-\item{min_molecules, min_consistency}{Integer/numeric (defaults 5, 0.9).
-Passed to `phase_snps()`.}
+\item{min_molecules, min_cells, error_rate, min_llr}{Integer/numeric (defaults
+5, 2, 0.05, 3). Passed to `phase_snps()`, which accepts a SNP pair as an
+edge on the likelihood ratio between the two haplotype hypotheses, backed
+by molecules from at least `min_cells` distinct cells; see its
+\sQuote{Accepting an edge} section.}
 }
 \value{
 A SNPData object with `donor_snp_info` gaining the columns
   `allele_on_x1_em` (the EM's own phase, unchanged, given its own name for
   symmetry with `allele_on_x1_molecule`), `allele_on_x1_molecule`,
-  `phase_block`, `phase_source`, `phase_conflict`, and a re-derived
+  `phase_block`, `phase_source` (`"read_backed_propagated"`,
+  `"read_backed_anchor"` or `"em"`, recording how much molecule evidence
+  stands behind each SNP's phase; only the first is derived from molecules
+  spanning the SNP itself, and `startsWith(phase_source, "read_backed")`
+  selects the two block-based cases together), `phase_conflict`, and a
+  re-derived
   `allele_on_x1`: the EM's value where present (so nothing downstream that
   already reads `allele_on_x1` changes behaviour), else the molecule value,
   else `NA` where `phase_conflict` is `TRUE`. Also carries a
@@ -123,11 +133,13 @@ within a gene without escaping this constraint.
 Other molecule-level allele counting functions:
 \code{\link[=assign_snp_genes]{assign_snp_genes()}},
 \code{\link[=extract_snp_calls]{extract_snp_calls()}},
+\code{\link[=molecule_haplotype_counts]{molecule_haplotype_counts()}},
 \code{\link[=molecule_read_strand]{molecule_read_strand()}},
 \code{\link[=molecule_snp_alleles]{molecule_snp_alleles()}},
 \code{\link[=phase_snps]{phase_snps()}}
 
 Other X-chromosome inactivation functions:
+\code{\link[=as_escape_experiment]{as_escape_experiment()}},
 \code{\link[=assign_xci]{assign_xci()}},
 \code{\link[=assign_xci_by_clonotype]{assign_xci_by_clonotype()}},
 \code{\link[=haplotype_expression]{haplotype_expression()}},

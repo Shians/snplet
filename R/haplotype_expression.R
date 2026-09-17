@@ -769,46 +769,13 @@ setMethod(
             dplyr::filter(!is.na(allele_on_x1), !is.na(phase_block)) %>%
             dplyr::select(snp_id, donor, allele_on_x1, phase_block)
 
-        # is_x1: whether this molecule's allele at this SNP is the one the
-        # resolved phase names as sitting on X1 -- the gene-level analogue of
-        # haplotype_expression()'s per-SNP active/inactive split. A SNP
-        # assign_snp_genes() flagged ambiguous only counts towards a candidate
-        # gene for molecules whose own transcript strand matches that
-        # candidate's strand; strand-unknown or mismatched molecules are
-        # dropped for that SNP rather than guessed. Joining an ambiguous SNP's
-        # multiple molecules against its multiple gene candidates is a genuine
-        # many-to-many fan-out, narrowed back down by the strand filter below.
-        calls <- molecule_calls %>%
-            dplyr::inner_join(phase, by = c("snp_id", "donor")) %>%
-            dplyr::inner_join(snp_gene_map, by = "snp_id", relationship = "many-to-many") %>%
-            dplyr::filter(!ambiguous | (!is.na(transcript_strand) & transcript_strand == gene_strand)) %>%
-            dplyr::mutate(is_x1 = allele == allele_on_x1)
-
-        if (nrow(calls) == 0) {
-            stop("No molecule calls could be matched to a phased, singly-mapped-gene SNP.")
-        }
-
-        blocks <- calls %>%
-            dplyr::distinct(donor, gene_name, phase_block, barcode, umi) %>%
-            dplyr::count(donor, gene_name, phase_block, name = "molecules")
-        best_block <- blocks %>%
-            dplyr::slice_max(molecules, n = 1, by = c(donor, gene_name), with_ties = FALSE) %>%
-            dplyr::select(donor, gene_name, phase_block, dominant_molecules = molecules)
-        stranded <- blocks %>%
-            dplyr::anti_join(best_block, by = c("donor", "gene_name", "phase_block")) %>%
-            dplyr::summarise(n_stranded_molecules = sum(molecules), .by = c(donor, gene_name))
-
-        # Pooling is the default because every SNP reaching this point already
-        # carries a globally oriented allele_on_x1, so the blocks of one gene
-        # share a scale; counting only the largest is the conservative option
-        # rather than the correct one (see 'Pooling a gene's phase blocks').
-        counted <- calls
-        if (!pool_blocks) {
-            counted <- dplyr::semi_join(counted, best_block, by = c("donor", "gene_name", "phase_block"))
-        }
-        blocks_counted <- counted %>%
-            dplyr::distinct(donor, gene_name, phase_block) %>%
-            dplyr::summarise(n_blocks_pooled = dplyr::n(), .by = c(donor, gene_name))
+        calls <- .molecule_gene_phase_calls(molecule_calls, snp_gene_map, phase, orientation_col = "allele_on_x1")
+        calls$is_x1 <- calls$is_oriented_allele
+        block_counts <- .molecule_gene_block_counts(calls, pool_blocks = pool_blocks)
+        best_block <- block_counts$best_block
+        stranded <- block_counts$stranded
+        blocks_counted <- block_counts$blocks_counted
+        counted <- block_counts$counted
 
         cell_groups <- barcode_info %>%
             dplyr::filter(active_x %in% c("X1", "X2")) %>%

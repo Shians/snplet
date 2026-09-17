@@ -8,7 +8,12 @@
 }
 \arguments{
 \item{phase}{A tibble as returned by `phase_snps()`, with columns
-`snp_id`, `block`, `allele_on_h1`, for a single donor.}
+`snp_id`, `block`, `allele_on_h1`, and optionally `block_conflict`, for a
+single donor. A SNP in a block `phase_snps()` flagged `block_conflict`
+(its edges cannot all be satisfied at once) is reported
+`phase_conflict = TRUE` here regardless of how well its anchors agree:
+unanimous anchors settle which way round to put a block, not whether the
+block's own internal phase is sound.}
 
 \item{anchors}{A tibble with columns `snp_id` and `allele_on_x1_em` (the
 EM-derived phase for that donor, restricted to SNPs where it is not
@@ -18,9 +23,24 @@ EM-derived phase for that donor, restricted to SNPs where it is not
 }
 \value{
 A tibble with columns `snp_id`, `phase_block`, `allele_on_x1_molecule`
-  ("REF"/"ALT"/`NA`), `phase_source` (always `"read_backed"`), and
-  `phase_conflict` (logical). Includes both SNPs from `phase` and any
-  unlinked anchor from `anchors`.
+  ("REF"/"ALT"/`NA`), `phase_source`, and `phase_conflict` (logical).
+  Includes both SNPs from `phase` and any unlinked anchor from `anchors`.
+  `phase_source` records how each SNP's value was arrived at, which differs
+  in how much molecule evidence stands behind it:
+  \describe{
+    \item{`"read_backed_propagated"`}{A non-anchor SNP in a block. Its phase
+      relative to the block's anchors was observed on molecules spanning
+      both, so this is the only case with molecule evidence for the SNP
+      itself.}
+    \item{`"read_backed_anchor"`}{A SNP in a block that is itself an EM
+      anchor. The value is the EM's, corroborated by agreeing with its
+      block, not derived from molecules.}
+    \item{`"em"`}{An anchor `phase_snps()` never linked to any partner,
+      returned as its own singleton block with a negative `phase_block`. The
+      value is the EM's, copied verbatim; no molecule was involved.}
+  }
+  The two read-backed values share a prefix so `startsWith(phase_source,
+  "read_backed")` selects them together.
 }
 \description{
 A `phase_snps()` block's H1/H2 labelling is arbitrary and local to that

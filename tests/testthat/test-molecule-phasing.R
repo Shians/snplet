@@ -25,25 +25,25 @@ if (!nzchar(test_bam) || !file.exists(test_bam)) {
 
 test_that("molecule_snp_alleles() takes the majority call per (molecule, SNP)", {
     tallies <- tibble::tribble(
-        ~barcode,
-        ~umi,
-        ~snp_id,
-        ~allele,
-        ~n_calls,
-        "AAA",
-        "UMI1",
-        "snp1",
-        "REF",
-        3L,
-        "AAA",
-        "UMI1",
-        "snp1",
-        "ALT",
-        1L,
-        "AAA",
-        "UMI1",
-        "snp2",
-        "OTH",
+        ~barcode ,
+        ~umi     ,
+        ~snp_id  ,
+        ~allele  ,
+        ~n_calls ,
+        "AAA"    ,
+        "UMI1"   ,
+        "snp1"   ,
+        "REF"    ,
+        3L       ,
+        "AAA"    ,
+        "UMI1"   ,
+        "snp1"   ,
+        "ALT"    ,
+        1L       ,
+        "AAA"    ,
+        "UMI1"   ,
+        "snp2"   ,
+        "OTH"    ,
         2L
     )
 
@@ -965,25 +965,25 @@ test_that("extract_snp_calls() errors on empty snp_info", {
 
 test_that(".orient_phase_blocks() orients a block when all anchors agree H1 = X1", {
     phase <- tibble::tribble(
-        ~snp_id,
-        ~block,
-        ~allele_on_h1,
-        "anchor1",
-        1L,
-        "REF",
-        "anchor2",
-        1L,
-        "REF",
-        "bridge",
-        1L,
+        ~snp_id       ,
+        ~block        ,
+        ~allele_on_h1 ,
+        "anchor1"     ,
+        1L            ,
+        "REF"         ,
+        "anchor2"     ,
+        1L            ,
+        "REF"         ,
+        "bridge"      ,
+        1L            ,
         "ALT"
     )
     anchors <- tibble::tribble(
-        ~snp_id,
-        ~allele_on_x1_em,
-        "anchor1",
-        "REF",
-        "anchor2",
+        ~snp_id          ,
+        ~allele_on_x1_em ,
+        "anchor1"        ,
+        "REF"            ,
+        "anchor2"        ,
         "REF"
     )
 
@@ -997,22 +997,114 @@ test_that(".orient_phase_blocks() orients a block when all anchors agree H1 = X1
     expect_false(any(result$phase_conflict))
 })
 
+test_that(".orient_phase_blocks() distinguishes the three phase provenances", {
+    # One block holding an anchor and a SNP reached from it, plus an anchor
+    # phase_snps() never linked to anything.
+    phase <- tibble::tibble(
+        snp_id = c("anchor1", "bridge"),
+        block = 1L,
+        allele_on_h1 = c("REF", "ALT"),
+        block_conflict = FALSE
+    )
+    anchors <- tibble::tibble(snp_id = c("anchor1", "lonely"), allele_on_x1_em = c("REF", "ALT"))
+
+    result <- .orient_phase_blocks(phase, anchors, donor = "donor0")
+    source_of <- setNames(result$phase_source, result$snp_id)
+
+    # Verify a non-anchor SNP is marked as propagated: molecules spanning it
+    # and an anchor are what placed it
+    expect_equal(source_of[["bridge"]], "read_backed_propagated")
+    # Check an anchor inside a block is distinguished, its value being the EM's
+    # own and merely corroborated by the block agreeing with it
+    expect_equal(source_of[["anchor1"]], "read_backed_anchor")
+    # Ensure an unlinked anchor is not called read-backed at all, no molecule
+    # having contributed to it
+    expect_equal(source_of[["lonely"]], "em")
+})
+
+test_that(".orient_phase_blocks() keeps the two read-backed sources greppable", {
+    phase <- tibble::tibble(
+        snp_id = c("anchor1", "bridge"),
+        block = 1L,
+        allele_on_h1 = c("REF", "ALT"),
+        block_conflict = FALSE
+    )
+    anchors <- tibble::tibble(snp_id = c("anchor1", "lonely"), allele_on_x1_em = c("REF", "ALT"))
+
+    result <- .orient_phase_blocks(phase, anchors, donor = "donor0")
+
+    # Confirm the shared prefix selects both block-based cases and excludes the
+    # EM-only one, so filtering for read-backed phase needs no value list
+    read_backed <- result$snp_id[startsWith(result$phase_source, "read_backed")]
+    expect_setequal(read_backed, c("anchor1", "bridge"))
+    expect_equal(result$snp_id[result$phase_source == "em"], "lonely")
+})
+
+test_that(".orient_phase_blocks() labels an unlinked anchor's value as the EM's own", {
+    # Nothing links this anchor, so its phase can only be the EM's, unchanged.
+    phase <- tibble::tibble(
+        snp_id = "bridge",
+        block = 1L,
+        allele_on_h1 = "REF",
+        block_conflict = FALSE
+    )
+    anchors <- tibble::tibble(snp_id = "lonely", allele_on_x1_em = "ALT")
+
+    result <- .orient_phase_blocks(phase, anchors, donor = "donor0")
+    lonely <- result[result$snp_id == "lonely", ]
+
+    # Verify the reported value is the EM's, carried through untouched
+    expect_equal(lonely$allele_on_x1_molecule, "ALT")
+    # Check it is labelled accordingly rather than as read-backed
+    expect_equal(lonely$phase_source, "em")
+    # Confirm it still gets its own singleton block, with a negative id
+    expect_true(lonely$phase_block < 0)
+})
+
+test_that(".orient_phase_blocks() flags a block phase_snps() found internally inconsistent", {
+    # Unanimous anchors settle which way round to put a block; they say nothing
+    # about whether the block's own edges were satisfiable in the first place.
+    phase <- tibble::tibble(
+        snp_id = c("anchor1", "anchor2", "bridge"),
+        block = 1L,
+        allele_on_h1 = c("REF", "REF", "ALT"),
+        block_conflict = TRUE
+    )
+    anchors <- tibble::tibble(snp_id = c("anchor1", "anchor2"), allele_on_x1_em = c("REF", "REF"))
+
+    result <- .orient_phase_blocks(phase, anchors, donor = "donor0")
+
+    # Verify an internally inconsistent block is flagged despite unanimous anchors
+    expect_true(all(result$phase_conflict))
+})
+
+test_that(".orient_phase_blocks() accepts a phase table with no block_conflict column", {
+    # phase_snps() supplies the column, but the helper must not require it.
+    phase <- tibble::tibble(snp_id = c("anchor1", "bridge"), block = 1L, allele_on_h1 = c("REF", "ALT"))
+    anchors <- tibble::tibble(snp_id = "anchor1", allele_on_x1_em = "REF")
+
+    result <- .orient_phase_blocks(phase, anchors, donor = "donor0")
+
+    # Confirm a missing column is treated as "no conflict", not as NA
+    expect_false(any(result$phase_conflict))
+})
+
 test_that(".orient_phase_blocks() flips the block when all anchors agree H1 = X2", {
     phase <- tibble::tribble(
-        ~snp_id,
-        ~block,
-        ~allele_on_h1,
-        "anchor1",
-        1L,
-        "ALT",
-        "bridge",
-        1L,
+        ~snp_id       ,
+        ~block        ,
+        ~allele_on_h1 ,
+        "anchor1"     ,
+        1L            ,
+        "ALT"         ,
+        "bridge"      ,
+        1L            ,
         "REF"
     )
     anchors <- tibble::tribble(
-        ~snp_id,
-        ~allele_on_x1_em,
-        "anchor1",
+        ~snp_id          ,
+        ~allele_on_x1_em ,
+        "anchor1"        ,
         "REF"
     )
     # anchor1's H1 (ALT) disagrees with its own allele_on_x1_em (REF), so H1 = X2
@@ -1027,17 +1119,19 @@ test_that(".orient_phase_blocks() flips the block when all anchors agree H1 = X2
 
 test_that(".orient_phase_blocks() leaves a zero-anchor block unoriented without flagging conflict", {
     phase <- tibble::tribble(
-        ~snp_id,
-        ~block,
-        ~allele_on_h1,
-        "snp1",
-        1L,
-        "REF",
-        "snp2",
-        1L,
+        ~snp_id       ,
+        ~block        ,
+        ~allele_on_h1 ,
+        "snp1"        ,
+        1L            ,
+        "REF"         ,
+        "snp2"        ,
+        1L            ,
         "ALT"
     )
-    anchors <- tibble::tribble(~snp_id, ~allele_on_x1_em)[0, ]
+    anchors <- tibble::tribble(
+        ~snp_id , ~allele_on_x1_em
+    )[0, ]
 
     result <- .orient_phase_blocks(phase, anchors, donor = "donor0")
 
@@ -1049,30 +1143,30 @@ test_that(".orient_phase_blocks() leaves a zero-anchor block unoriented without 
 
 test_that(".orient_phase_blocks() resolves via majority when one of >=3 anchors disagrees", {
     phase <- tibble::tribble(
-        ~snp_id,
-        ~block,
-        ~allele_on_h1,
-        "a1",
-        1L,
-        "REF",
-        "a2",
-        1L,
-        "REF",
-        "a3",
-        1L,
-        "ALT", # outlier: disagrees with a1/a2's implied orientation
-        "bridge",
-        1L,
+        ~snp_id       ,
+        ~block        ,
+        ~allele_on_h1 ,
+        "a1"          ,
+        1L            ,
+        "REF"         ,
+        "a2"          ,
+        1L            ,
+        "REF"         ,
+        "a3"          ,
+        1L            ,
+        "ALT"         , # outlier: disagrees with a1/a2's implied orientation
+        "bridge"      ,
+        1L            ,
         "REF"
     )
     anchors <- tibble::tribble(
-        ~snp_id,
-        ~allele_on_x1_em,
-        "a1",
-        "REF",
-        "a2",
-        "REF",
-        "a3",
+        ~snp_id          ,
+        ~allele_on_x1_em ,
+        "a1"             ,
+        "REF"            ,
+        "a2"             ,
+        "REF"            ,
+        "a3"             ,
         "REF"
     )
     # a1: H1(REF)==EM(REF) -> H1 is X1. a2: same -> H1 is X1. a3: H1(ALT)!=EM(REF) -> H1 is X2 (outlier)
@@ -1092,25 +1186,25 @@ test_that(".orient_phase_blocks() resolves via majority when one of >=3 anchors 
 
 test_that(".orient_phase_blocks() refuses to resolve when exactly two anchors disagree", {
     phase <- tibble::tribble(
-        ~snp_id,
-        ~block,
-        ~allele_on_h1,
-        "a1",
-        1L,
-        "REF",
-        "a2",
-        1L,
-        "ALT",
-        "bridge",
-        1L,
+        ~snp_id       ,
+        ~block        ,
+        ~allele_on_h1 ,
+        "a1"          ,
+        1L            ,
+        "REF"         ,
+        "a2"          ,
+        1L            ,
+        "ALT"         ,
+        "bridge"      ,
+        1L            ,
         "REF"
     )
     anchors <- tibble::tribble(
-        ~snp_id,
-        ~allele_on_x1_em,
-        "a1",
-        "REF",
-        "a2",
+        ~snp_id          ,
+        ~allele_on_x1_em ,
+        "a1"             ,
+        "REF"            ,
+        "a2"             ,
         "REF"
     )
     # a1: H1 is X1. a2: H1(ALT) != EM(REF) -> H1 is X2. Two anchors, no majority.
@@ -1125,32 +1219,32 @@ test_that(".orient_phase_blocks() refuses to resolve when exactly two anchors di
 
 test_that(".orient_phase_blocks() refuses to resolve an even split among >=4 anchors", {
     phase <- tibble::tribble(
-        ~snp_id,
-        ~block,
-        ~allele_on_h1,
-        "a1",
-        1L,
-        "REF",
-        "a2",
-        1L,
-        "REF",
-        "a3",
-        1L,
-        "ALT",
-        "a4",
-        1L,
+        ~snp_id       ,
+        ~block        ,
+        ~allele_on_h1 ,
+        "a1"          ,
+        1L            ,
+        "REF"         ,
+        "a2"          ,
+        1L            ,
+        "REF"         ,
+        "a3"          ,
+        1L            ,
+        "ALT"         ,
+        "a4"          ,
+        1L            ,
         "ALT"
     )
     anchors <- tibble::tribble(
-        ~snp_id,
-        ~allele_on_x1_em,
-        "a1",
-        "REF",
-        "a2",
-        "REF",
-        "a3",
-        "REF",
-        "a4",
+        ~snp_id          ,
+        ~allele_on_x1_em ,
+        "a1"             ,
+        "REF"            ,
+        "a2"             ,
+        "REF"            ,
+        "a3"             ,
+        "REF"            ,
+        "a4"             ,
         "REF"
     )
     # a1,a2 imply H1=X1; a3,a4 imply H1=X2 -- an even 2-vs-2 split, not a single outlier
@@ -1164,28 +1258,28 @@ test_that(".orient_phase_blocks() refuses to resolve an even split among >=4 anc
 
 test_that(".orient_phase_blocks() keeps separate blocks independent", {
     phase <- tibble::tribble(
-        ~snp_id,
-        ~block,
-        ~allele_on_h1,
-        "a1",
-        1L,
-        "REF",
-        "bridge1",
-        1L,
-        "ALT",
-        "a2",
-        2L,
-        "ALT",
-        "bridge2",
-        2L,
+        ~snp_id       ,
+        ~block        ,
+        ~allele_on_h1 ,
+        "a1"          ,
+        1L            ,
+        "REF"         ,
+        "bridge1"     ,
+        1L            ,
+        "ALT"         ,
+        "a2"          ,
+        2L            ,
+        "ALT"         ,
+        "bridge2"     ,
+        2L            ,
         "ALT"
     )
     anchors <- tibble::tribble(
-        ~snp_id,
-        ~allele_on_x1_em,
-        "a1",
-        "REF",
-        "a2",
+        ~snp_id          ,
+        ~allele_on_x1_em ,
+        "a1"             ,
+        "REF"            ,
+        "a2"             ,
         "REF"
     )
     # Block 1: a1 implies H1=X1. Block 2: a2's H1(ALT) != EM(REF), implies H1=X2.
@@ -1204,24 +1298,24 @@ test_that(".orient_phase_blocks() gives an unlinked anchor its own singleton blo
     # "lonely" never appears in phase at all -- phase_snps() never linked it
     # to any partner, e.g. a gene with only one heterozygous SNP.
     phase <- tibble::tribble(
-        ~snp_id,
-        ~block,
-        ~allele_on_h1,
-        "a1",
-        1L,
-        "REF",
-        "a2",
-        1L,
+        ~snp_id       ,
+        ~block        ,
+        ~allele_on_h1 ,
+        "a1"          ,
+        1L            ,
+        "REF"         ,
+        "a2"          ,
+        1L            ,
         "REF"
     )
     anchors <- tibble::tribble(
-        ~snp_id,
-        ~allele_on_x1_em,
-        "a1",
-        "REF",
-        "a2",
-        "REF",
-        "lonely",
+        ~snp_id          ,
+        ~allele_on_x1_em ,
+        "a1"             ,
+        "REF"            ,
+        "a2"             ,
+        "REF"            ,
+        "lonely"         ,
         "ALT"
     )
 
@@ -1242,11 +1336,11 @@ test_that(".orient_phase_blocks() gives an unlinked anchor its own singleton blo
 test_that(".orient_phase_blocks() gives every unlinked anchor a distinct singleton block", {
     phase <- tibble::tibble(snp_id = character(), block = integer(), allele_on_h1 = character())
     anchors <- tibble::tribble(
-        ~snp_id,
-        ~allele_on_x1_em,
-        "solo1",
-        "REF",
-        "solo2",
+        ~snp_id          ,
+        ~allele_on_x1_em ,
+        "solo1"          ,
+        "REF"            ,
+        "solo2"          ,
         "ALT"
     )
 
@@ -1472,6 +1566,50 @@ test_that(".pool_donor_calls() resolves a cross-file strand disagreement to NA",
     # Verify a tied disagreement becomes NA rather than an arbitrary pick,
     # leaving strand-ambiguous SNPs unresolved for that molecule
     expect_true(is.na(pooled$molecule_strand$transcript_strand))
+})
+
+test_that("an unresolved molecule strand withholds an ambiguous SNP rather than guessing a gene", {
+    # One SNP overlapping two genes on opposite strands: resolvable only by the
+    # molecule's own transcript strand, which is what a tied vote fails to give.
+    snp_gene_map <- tibble::tibble(
+        snp_id = "snp1",
+        gene_name = c("gene_plus", "gene_minus"),
+        gene_strand = c("+", "-"),
+        ambiguous = TRUE
+    )
+    phase <- tibble::tibble(snp_id = "snp1", donor = "donor0", phase_block = 1L, allele_on_h1 = "REF")
+    calls <- function(transcript_strand) {
+        tibble::tibble(
+            donor = "donor0",
+            barcode = "c1",
+            umi = "u1",
+            snp_id = "snp1",
+            allele = "REF",
+            transcript_strand = transcript_strand
+        )
+    }
+
+    # Verify a resolved strand picks out exactly the gene on that strand
+    resolved <- .molecule_gene_phase_calls(calls("+"), snp_gene_map, phase, orientation_col = "allele_on_h1")
+    expect_equal(resolved$gene_name, "gene_plus")
+
+    # Confirm an NA strand attributes the molecule to neither gene, rather than
+    # sending its counts to whichever candidate happened to come first
+    expect_error(
+        .molecule_gene_phase_calls(calls(NA_character_), snp_gene_map, phase, orientation_col = "allele_on_h1"),
+        "No molecule calls could be matched"
+    )
+
+    # Ensure an NA strand does not withhold a SNP that was never ambiguous,
+    # since no strand was needed to attribute it in the first place
+    unambiguous <- tibble::tibble(
+        snp_id = "snp1",
+        gene_name = "gene_solo",
+        gene_strand = "+",
+        ambiguous = FALSE
+    )
+    kept <- .molecule_gene_phase_calls(calls(NA_character_), unambiguous, phase, orientation_col = "allele_on_h1")
+    expect_equal(kept$gene_name, "gene_solo")
 })
 
 test_that(".pool_donor_calls() lets a calibrated file outvote an uncalibrated one", {
@@ -1895,60 +2033,60 @@ test_that("add_molecule_phase() never overwrites an existing EM-derived allele_o
     # phase snp1 (the EM anchor) and snp2 (the EM-uninformative SNP) as the same
     # haplotype, oriented so H1 = X1 -- allowing snp2 to be rescued.
     fake_tallies <- tibble::tribble(
-        ~barcode,
-        ~umi,
-        ~snp_id,
-        ~allele,
-        ~n_calls,
-        "c1",
-        "u1",
-        snp_ids[1],
-        "REF",
-        5L,
-        "c1",
-        "u1",
-        snp_ids[2],
-        "ALT",
-        5L,
-        "c2",
-        "u2",
-        snp_ids[1],
-        "REF",
-        5L,
-        "c2",
-        "u2",
-        snp_ids[2],
-        "ALT",
-        5L,
-        "c3",
-        "u3",
-        snp_ids[1],
-        "REF",
-        5L,
-        "c3",
-        "u3",
-        snp_ids[2],
-        "ALT",
-        5L,
-        "c4",
-        "u4",
-        snp_ids[1],
-        "REF",
-        5L,
-        "c4",
-        "u4",
-        snp_ids[2],
-        "ALT",
-        5L,
-        "c5",
-        "u5",
-        snp_ids[1],
-        "REF",
-        5L,
-        "c5",
-        "u5",
-        snp_ids[2],
-        "ALT",
+        ~barcode   ,
+        ~umi       ,
+        ~snp_id    ,
+        ~allele    ,
+        ~n_calls   ,
+        "c1"       ,
+        "u1"       ,
+        snp_ids[1] ,
+        "REF"      ,
+        5L         ,
+        "c1"       ,
+        "u1"       ,
+        snp_ids[2] ,
+        "ALT"      ,
+        5L         ,
+        "c2"       ,
+        "u2"       ,
+        snp_ids[1] ,
+        "REF"      ,
+        5L         ,
+        "c2"       ,
+        "u2"       ,
+        snp_ids[2] ,
+        "ALT"      ,
+        5L         ,
+        "c3"       ,
+        "u3"       ,
+        snp_ids[1] ,
+        "REF"      ,
+        5L         ,
+        "c3"       ,
+        "u3"       ,
+        snp_ids[2] ,
+        "ALT"      ,
+        5L         ,
+        "c4"       ,
+        "u4"       ,
+        snp_ids[1] ,
+        "REF"      ,
+        5L         ,
+        "c4"       ,
+        "u4"       ,
+        snp_ids[2] ,
+        "ALT"      ,
+        5L         ,
+        "c5"       ,
+        "u5"       ,
+        snp_ids[1] ,
+        "REF"      ,
+        5L         ,
+        "c5"       ,
+        "u5"       ,
+        snp_ids[2] ,
+        "ALT"      ,
         5L
     )
     fake_reads <- tibble::tibble(
@@ -1980,8 +2118,280 @@ test_that("add_molecule_phase() never overwrites an existing EM-derived allele_o
     )
     # Confirm the new provenance columns are present and consistent
     expect_false(donor_snp_info$phase_conflict[donor_snp_info$snp_id == snp_ids[1] & donor_snp_info$donor == "donor0"])
+    # Verify the rescued SNP is labelled as propagated: its phase came from
+    # molecules linking it to an anchor, not from the EM
     expect_equal(
         donor_snp_info$phase_source[donor_snp_info$snp_id == snp_ids[2] & donor_snp_info$donor == "donor0"],
-        "read_backed"
+        "read_backed_propagated"
     )
+    # Check the anchor itself is distinguished from it, its value being the
+    # EM's own rather than molecule-derived
+    expect_equal(
+        donor_snp_info$phase_source[donor_snp_info$snp_id == snp_ids[1] & donor_snp_info$donor == "donor0"],
+        "read_backed_anchor"
+    )
+})
+
+# ==============================================================================
+# Test: molecule_haplotype_counts()
+# ==============================================================================
+
+# One donor, no XCI diagnostics at all: het SNPs (2 by default, or 4 for a
+# multi-block test) all assigned to GENE1 via snp_gene_map, and a zygosity
+# source (Vireo GT) so donor_het_status_df() can resolve het status without
+# assign_xci() ever having run. 3 cells (not 2), to avoid a square
+# ref_count/alt_count matrix: Matrix::Matrix()'s rownames<- is a no-op on a
+# square sparse matrix once colnames<- has already run (both dimnames alias
+# the same slot), which .set_dimnames() relies on being independent --
+# unrelated to phasing, so simply sidestepped here.
+make_molecule_haplotype_fixture <- function(n_snps = 2) {
+    ref <- matrix(5L, nrow = n_snps, ncol = 3)
+    alt <- matrix(5L, nrow = n_snps, ncol = 3)
+    snp_info <- data.frame(
+        chrom = "chr1",
+        pos = seq(1000L, by = 1000L, length.out = n_snps),
+        ref = "A",
+        alt = "G",
+        stringsAsFactors = FALSE
+    )
+    barcode_info <- data.frame(
+        barcode = c("cell1", "cell2", "cell3"),
+        donor = "donor0",
+        stringsAsFactors = FALSE
+    )
+    obj <- SNPData(
+        ref_count = Matrix::Matrix(ref, sparse = TRUE),
+        alt_count = Matrix::Matrix(alt, sparse = TRUE),
+        snp_info = snp_info,
+        barcode_info = barcode_info
+    )
+    snp_ids <- snp_info(obj)$snp_id
+    names(snp_ids) <- paste0("snp", LETTERS[seq_len(n_snps)])
+
+    obj <- add_donor_snp_metadata(
+        obj,
+        data.frame(
+            snp_id = snp_ids,
+            donor = "donor0",
+            zygosity = "het",
+            zygosity_source = "vireo_gt",
+            stringsAsFactors = FALSE
+        ),
+        join_by = c("snp_id", "donor"),
+        overwrite = TRUE
+    )
+    snp_gene_map(obj) <- data.frame(
+        snp_id = snp_ids,
+        gene_name = "GENE1",
+        gene_strand = "+",
+        ambiguous = FALSE,
+        stringsAsFactors = FALSE
+    )
+    list(obj = obj, snp_ids = snp_ids)
+}
+
+test_that("molecule_haplotype_counts() errors when the object carries no SNP-to-gene map", {
+    ref <- Matrix::Matrix(matrix(5L, 2, 2), sparse = TRUE)
+    alt <- Matrix::Matrix(matrix(5L, 2, 2), sparse = TRUE)
+    snp_info <- data.frame(chrom = "chr1", pos = c(1L, 2L), ref = "A", alt = "G")
+    barcode_info <- data.frame(barcode = c("c1", "c2"), donor = "donor0")
+    obj <- SNPData(ref_count = ref, alt_count = alt, snp_info = snp_info, barcode_info = barcode_info)
+
+    # Verify the error names the step that builds the map rather than returning an empty result
+    expect_error(molecule_haplotype_counts(obj, bam_files = c(lib_A = "fake.bam")), "no SNP-to-gene map")
+})
+
+test_that("molecule_haplotype_counts() runs without assign_xci() ever having been called", {
+    fixture <- make_molecule_haplotype_fixture()
+    snp_ids <- fixture$snp_ids
+
+    # One molecule spanning both SNPs, same physical haplotype (REF/REF).
+    tallies <- tibble::tibble(
+        barcode = rep("cell1", 2),
+        umi = rep("u1", 2),
+        snp_id = snp_ids,
+        allele = c("REF", "REF"),
+        n_calls = 5L
+    )
+    reads <- tibble::tibble(barcode = "cell1", umi = "u1", qname = "read1", strand = "+")
+    testthat::local_mocked_bindings(
+        extract_snp_calls = function(...) list(tallies = tallies, reads = reads),
+        .infer_bam_strand_orientation = function(bam_file, ...) {
+            list(orientation = "sense", n_ts_reads = 500L, concordance = 1, n_scanned = 5000L)
+        },
+        .package = "snplet"
+    )
+
+    # Verify no error and no XCI diagnostics required anywhere in the call path
+    result <- molecule_haplotype_counts(
+        fixture$obj,
+        bam_files = c(lib_A = local_fake_bam()),
+        # These fixtures exercise molecule *counting*, not edge evidence: a
+        # lone molecule from one cell clears neither the default LLR nor
+        # min_cells, so both are relaxed here rather than padding the fixture
+        # with cells and molecules the test does not otherwise need.
+        min_molecules = 1L,
+        min_cells = 1L,
+        min_llr = 2
+    )
+    expect_true(nrow(result) > 0)
+})
+
+test_that("molecule_haplotype_counts() counts a multi-SNP molecule once, not once per SNP", {
+    fixture <- make_molecule_haplotype_fixture()
+    snp_ids <- fixture$snp_ids
+
+    # A single molecule covering both SNPs, both REF.
+    tallies <- tibble::tibble(
+        barcode = rep("cell1", 2),
+        umi = rep("u1", 2),
+        snp_id = snp_ids,
+        allele = c("REF", "REF"),
+        n_calls = 5L
+    )
+    reads <- tibble::tibble(barcode = "cell1", umi = "u1", qname = "read1", strand = "+")
+    testthat::local_mocked_bindings(
+        extract_snp_calls = function(...) list(tallies = tallies, reads = reads),
+        .infer_bam_strand_orientation = function(bam_file, ...) {
+            list(orientation = "sense", n_ts_reads = 500L, concordance = 1, n_scanned = 5000L)
+        },
+        .package = "snplet"
+    )
+
+    result <- molecule_haplotype_counts(
+        fixture$obj,
+        bam_files = c(lib_A = local_fake_bam()),
+        # These fixtures exercise molecule *counting*, not edge evidence: a
+        # lone molecule from one cell clears neither the default LLR nor
+        # min_cells, so both are relaxed here rather than padding the fixture
+        # with cells and molecules the test does not otherwise need.
+        min_molecules = 1L,
+        min_cells = 1L,
+        min_llr = 2
+    )
+    gene_row <- dplyr::filter(result, gene_name == "GENE1")
+
+    # Verify one molecule spanning two SNPs in the same block contributes
+    # exactly one count to coverage, not two
+    expect_equal(sum(gene_row$coverage), 1)
+    expect_equal(sum(gene_row$n_molecules), 1)
+})
+
+test_that("molecule_haplotype_counts() reports disconnected phase blocks as separate rows, not pooled", {
+    fixture <- make_molecule_haplotype_fixture(n_snps = 4)
+    snp_ids <- fixture$snp_ids
+
+    # Two molecules link snpA-snpB (one block); two more link snpC-snpD (a
+    # second, disconnected block): no molecule spans across the two pairs, so
+    # phase_snps() cannot merge them, and GENE1 (all four SNPs) ends up split
+    # across two phase blocks.
+    tallies <- dplyr::bind_rows(
+        tibble::tibble(
+            barcode = "cell1",
+            umi = "u1",
+            snp_id = snp_ids[c("snpA", "snpB")],
+            allele = "REF",
+            n_calls = 5L
+        ),
+        tibble::tibble(
+            barcode = "cell2",
+            umi = "u2",
+            snp_id = snp_ids[c("snpA", "snpB")],
+            allele = "REF",
+            n_calls = 5L
+        ),
+        tibble::tibble(
+            barcode = "cell1",
+            umi = "u3",
+            snp_id = snp_ids[c("snpC", "snpD")],
+            allele = "ALT",
+            n_calls = 5L
+        ),
+        tibble::tibble(barcode = "cell2", umi = "u4", snp_id = snp_ids[c("snpC", "snpD")], allele = "ALT", n_calls = 5L)
+    )
+    reads <- tibble::tibble(
+        barcode = c("cell1", "cell2", "cell1", "cell2"),
+        umi = c("u1", "u2", "u3", "u4"),
+        qname = paste0("read", 1:4),
+        strand = "+"
+    )
+    testthat::local_mocked_bindings(
+        extract_snp_calls = function(...) list(tallies = tallies, reads = reads),
+        .infer_bam_strand_orientation = function(bam_file, ...) {
+            list(orientation = "sense", n_ts_reads = 500L, concordance = 1, n_scanned = 5000L)
+        },
+        .package = "snplet"
+    )
+
+    result <- molecule_haplotype_counts(
+        fixture$obj,
+        bam_files = c(lib_A = local_fake_bam()),
+        # These fixtures exercise molecule *counting*, not edge evidence: a
+        # lone molecule from one cell clears neither the default LLR nor
+        # min_cells, so both are relaxed here rather than padding the fixture
+        # with cells and molecules the test does not otherwise need.
+        min_molecules = 1L,
+        min_cells = 1L,
+        min_llr = 2
+    )
+    gene_rows <- dplyr::filter(result, gene_name == "GENE1")
+
+    # Verify GENE1's four SNPs land in two separate block rows rather than
+    # being summed into one gene-level count, since block-local H1 labels
+    # carry no relationship to each other across blocks
+    expect_equal(nrow(gene_rows), 2)
+    # Confirm each block's two molecules are both counted, not dropped
+    expect_equal(sort(gene_rows$n_molecules), c(2, 2))
+})
+
+test_that("molecule_haplotype_counts() drops a molecule with a tied haplotype vote", {
+    fixture <- make_molecule_haplotype_fixture()
+    snp_ids <- fixture$snp_ids
+
+    # One molecule voting REF at snpA and ALT at snpB, cast as its own block:
+    # phase_snps() links it to the consistent molecules below into one block
+    # (its lone dissenting edge stays under min_consistency's noise floor),
+    # so the tie only has to survive haplotype voting, which is what this
+    # test targets, not block formation.
+    tied <- tibble::tibble(
+        barcode = "cell_tied",
+        umi = "u_tied",
+        snp_id = snp_ids,
+        allele = c("REF", "ALT"),
+        n_calls = 5L
+    )
+    consistent <- purrr::map_dfr(1:20, function(i) {
+        tibble::tibble(
+            barcode = paste0("c", i),
+            umi = paste0("u", i),
+            snp_id = snp_ids,
+            allele = c("REF", "REF"),
+            n_calls = 5L
+        )
+    })
+    tallies <- dplyr::bind_rows(tied, consistent)
+    reads <- tibble::tibble(
+        barcode = unique(tallies$barcode),
+        umi = unique(tallies$umi),
+        qname = paste0("read_", unique(tallies$barcode)),
+        strand = "+"
+    )
+    testthat::local_mocked_bindings(
+        extract_snp_calls = function(...) list(tallies = tallies, reads = reads),
+        .infer_bam_strand_orientation = function(bam_file, ...) {
+            list(orientation = "sense", n_ts_reads = 500L, concordance = 1, n_scanned = 5000L)
+        },
+        .package = "snplet"
+    )
+
+    result <- molecule_haplotype_counts(fixture$obj, bam_files = c(lib_A = local_fake_bam()))
+    gene_row <- dplyr::filter(result, gene_name == "GENE1")
+
+    # Verify the block forms from all 21 molecules (the dissenting one is a
+    # small enough minority to stay under min_consistency), but the tied
+    # molecule's own 1-1 vote is ambiguous and does not count towards either
+    # haplotype, so n_molecules includes it while h1_count + h2_count (i.e.
+    # coverage) does not
+    expect_equal(sum(gene_row$n_molecules), 21)
+    expect_equal(sum(gene_row$coverage), 20)
 })

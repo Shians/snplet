@@ -40,6 +40,16 @@
   relation the block has already fixed; where the two disagree no phasing can satisfy every
   edge at once, which previously passed silently. `add_molecule_phase()` folds this into
   `phase_conflict`
+* Changed `phase_source` in `donor_snp_info` from the constant `"read_backed"` to one of
+  `"read_backed_propagated"` (phase observed on molecules spanning the SNP and an anchor),
+  `"read_backed_anchor"` (the EM's own value, corroborated by its block) or `"em"` (an anchor
+  no molecule linked to anything, copied verbatim from the EM). The single value conflated
+  three provenances, labelling as read-backed even SNPs no molecule had contributed to;
+  `startsWith(phase_source, "read_backed")` selects the two block-based cases together
+* Added `molecule_haplotype_counts()`, the general-purpose counterpart to
+  `haplotype_expression_by_molecule()` for genes with no X-inactivation signal to orient
+  phase blocks against: it counts each gene's molecules once per `phase_snps()` block, using
+  the block-local H1/H2 labels as-is since there is no external signal to orient them further
 * Added a `test_escape()` method taking a SNPData object directly, which draws the counts,
   the null escape fraction and the overdispersion from the donor's own fit rather than
   requiring them to be supplied

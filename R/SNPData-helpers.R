@@ -264,6 +264,9 @@
 # add_library_bams(), and add_molecule_phase() into a named list of character
 # vectors, one element per library.
 .as_library_bam_list <- function(bam_files, arg_name = "bam_files") {
+    if (length(bam_files) == 0) {
+        stop(arg_name, " is empty; supply at least one library's BAM file(s).")
+    }
     nms <- names(bam_files)
     if (is.null(nms) || anyNA(nms) || any(!nzchar(nms))) {
         stop(arg_name, " must be named, library_id = path(s).")
