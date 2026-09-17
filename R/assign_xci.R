@@ -76,6 +76,12 @@
 #'   into the object's metadata slots, so the result can be
 #'   passed directly to \code{\link{plot_xci_heatmap}},
 #'   \code{\link{xci_assignments}}, and \code{\link{xci_haplotypes}}.
+#'   \code{donor_info(x)$xci_skew} gives the quantified skew itself: the EM's
+#'   fitted X1-active prior, i.e. its own estimate of the fraction of this
+#'   donor's cells with X1 active, fit jointly with phase and escape rather
+#'   than counted from the confidence-thresholded hard calls in
+#'   \code{active_x} (which excludes low-confidence cells and so
+#'   underestimates skew in coverage-limited donors).
 #'
 #' @family X-chromosome inactivation functions
 #' @export
@@ -86,6 +92,10 @@
 #' # enough cells to fit the model; the small bundled get_example_snpdata()
 #' # dataset does not qualify.
 #' snp_data <- assign_xci(snp_data)
+#'
+#' # Quantified XCI skew per donor (the model's fitted X1-active fraction)
+#' donor_info(snp_data) %>%
+#'   dplyr::select(donor, xci_skew)
 #'
 #' # View results
 #' barcode_info(snp_data) %>%
@@ -166,6 +176,10 @@ setMethod(
 #'   so the result can be passed directly to
 #'   \code{\link{plot_xci_heatmap}},
 #'   \code{\link{xci_assignments}}, and \code{\link{xci_haplotypes}}.
+#'   \code{donor_info(x)$xci_skew} gives the fitted X1-active prior, here
+#'   estimated over clonotypes rather than cells: it is the skew of the
+#'   clonotype population the EM was fit on, which only equals cell-level
+#'   skew if clonotypes carry comparable cell counts.
 #'
 #' @family X-chromosome inactivation functions
 #' @export
@@ -469,6 +483,7 @@ setMethod(
         ref_mat = ref_mat_filtered,
         alt_mat = alt_mat_filtered,
         rho = xci_result$rho,
-        median_pi_g = median_pi_g
+        median_pi_g = median_pi_g,
+        skew = xci_result$prior
     )
 }

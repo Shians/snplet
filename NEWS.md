@@ -1,5 +1,10 @@
 # snplet 0.6.5
 
+* Added `xci_skew` to `donor_info` via a new fitted X1-active prior in the XCI EM. This is the
+  model's own estimate of the fraction of a donor's cells with X1 active, fit jointly with
+  phase and escape rather than counted from the confidence-thresholded hard calls in
+  `active_x`, which excludes low-confidence cells and so underestimates skew in
+  coverage-limited donors
 * Added a `test_escape()` method taking a SNPData object directly, which draws the counts,
   the null escape fraction and the overdispersion from the donor's own fit rather than
   requiring them to be supplied
