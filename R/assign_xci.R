@@ -121,6 +121,7 @@ setMethod(
     "assign_xci",
     signature(x = "SNPData"),
     function(x, n_inits = 10, confidence_threshold = 0.95) {
+        # Shared engine, fitting one model per cell.
         .fit_xci(
             x,
             n_inits = n_inits,
@@ -213,6 +214,7 @@ setMethod(
     "assign_xci_by_clonotype",
     signature(x = "SNPData"),
     function(x, n_inits = 10, confidence_threshold = 0.95) {
+        # Shared engine, fitting one model per clonotype.
         .fit_xci(
             x,
             n_inits = n_inits,
@@ -222,29 +224,7 @@ setMethod(
     }
 )
 
-#' Fit X-chromosome inactivation model (internal engine)
-#'
-#' Runs the beta-binomial EM algorithm for each donor and returns a full fit
-#' object containing per-unit assignments, per-gene haplotypes, and the final
-#' allele count matrices used in the model. The modelling unit is either the
-#' cell (\code{by = "cell"}) or the clonotype (\code{by = "clonotype"}).
-#'
-#' This is the shared engine behind \code{\link{assign_xci}} and
-#' \code{\link{assign_xci_by_clonotype}}. It is not exported; the public
-#' entry points return a SNPData object carrying the diagnostics in its metadata
-#' slots.
-#'
-#' @param x SNPData object containing X chromosome SNP data with donor
-#'   assignments and heterozygosity information. For \code{by = "clonotype"},
-#'   clonotype information must also be present.
-#' @param n_inits Number of random initialisations for the EM algorithm.
-#' @param confidence_threshold Posterior probability threshold for hard
-#'   assignment.
-#' @param by Modelling unit, \code{"cell"} or \code{"clonotype"}.
-#'
-#' @return The input SNPData object with diagnostics written into its metadata
-#'   slots.
-#'
+#' Shared EM-fitting engine behind assign_xci and assign_xci_by_clonotype, per donor.
 #' @keywords internal
 #' @include SNPData-class.R
 .fit_xci <- function(
@@ -255,6 +235,7 @@ setMethod(
 ) {
     by <- match.arg(by)
     if (by == "clonotype") {
+        # Errors early if clonotype metadata is missing or entirely NA.
         .check_clonotype_available(x)
     }
 
@@ -272,6 +253,8 @@ setMethod(
         unique_donors,
         function(dd, d) {
             tryCatch(
+                # Fits one donor's model; failures are caught per-donor so one bad
+                # donor does not abort the rest.
                 .fit_xci_donor(
                     dd,
                     n_inits,
@@ -289,6 +272,7 @@ setMethod(
         magrittr::set_names(unique_donors)
 
     fit <- structure(result, class = "xci_fit")
+    # Writes the per-donor fits into x's metadata slots.
     .store_xci_fit(x, fit)
 }
 
@@ -308,13 +292,7 @@ setMethod(
     invisible(TRUE)
 }
 
-#' Fit the XCI model for one donor, at cell or clonotype level
-#'
-#' Shared per-donor fitter for both modelling units. For \code{by = "cell"} the
-#' count matrices are used as-is; for \code{by = "clonotype"} they are first
-#' aggregated by clonotype and the resulting clonotype-level posteriors are
-#' projected back down to individual cells.
-#'
+#' Fits the XCI model for one donor, at cell or clonotype level.
 #' @keywords internal
 .fit_xci_donor <- function(
     snp_data,
@@ -331,8 +309,10 @@ setMethod(
         logger::log_info("[{donor}] Fitting XCI model")
     }
 
+    # Restricts to one heterozygous chrX SNP per gene.
     snp_data <- .filter_to_informative_het_snps(snp_data, donor)
 
+    # Builds REF/ALT count matrices at the requested modelling unit (cell or clonotype).
     unit_data <- .xci_unit_matrices(snp_data, by, donor)
     ref_mat <- unit_data$ref_mat
     alt_mat <- unit_data$alt_mat
@@ -344,6 +324,7 @@ setMethod(
         return(NULL)
     }
 
+    # Runs the EM to call each unit's active X and each gene's phase/escape.
     xci_result <- .infer_xci(
         ref_mat,
         alt_mat,
@@ -352,6 +333,7 @@ setMethod(
         donor = donor
     )
 
+    # Packages the EM result into the fit list returned to callers.
     fit <- .assemble_xci_fit(
         xci_result = xci_result,
         donor = donor,
@@ -362,16 +344,11 @@ setMethod(
         unit = by
     )
 
+    # No-op for cell-level fits; expands clonotype assignments to cells otherwise.
     .project_to_cells(fit, unit_data$cell_to_clonotype, by)
 }
 
-#' Build the count matrices for the requested modelling unit
-#'
-#' For \code{by = "cell"} the per-cell count matrices are used as-is. For
-#' \code{by = "clonotype"} cells with no clonotype are dropped and the
-#' remaining cells' counts are summed within each clonotype, so the EM sees
-#' one column per clonotype instead of per cell.
-#'
+#' Builds the count matrices for the requested modelling unit (cell or clonotype).
 #' @keywords internal
 .xci_unit_matrices <- function(snp_data, by, donor = NULL) {
     if (by != "clonotype") {
@@ -393,13 +370,7 @@ setMethod(
     )
 }
 
-#' Project a clonotype-level fit's posteriors down to individual cells
-#'
-#' A cell-level fit (\code{by = "cell"}) already keys \code{fit$assignments} on
-#' \code{cell_id}, so it is returned unchanged. A clonotype-level fit keys on
-#' the clonotype id instead; this adds \code{fit$cell_assignments}, one row per
-#' cell, by having each cell inherit its clonotype's posterior.
-#'
+#' Projects a clonotype-level fit's posteriors down to individual cells.
 #' @keywords internal
 .project_to_cells <- function(fit, cell_to_clonotype, by) {
     if (by != "clonotype") {
@@ -412,14 +383,7 @@ setMethod(
     fit
 }
 
-#' Assemble a per-donor XCI fit from an EM result
-#'
-#' Shared post-EM assembly used by both the cell- and clonotype-level donor
-#' fitters. \code{unit_ids} label the columns of the count matrices (cell IDs
-#' or clonotype IDs); the resulting \code{assignments} tibble keys on
-#' \code{cell_id} regardless so accessors and the heatmap treat the modelling
-#' unit uniformly.
-#'
+#' Assembles a per-donor XCI fit from an EM result.
 #' @keywords internal
 .assemble_xci_fit <- function(xci_result, donor, ref_mat, alt_mat, snp_info, unit_ids, unit = c("cell", "clonotype")) {
     unit <- match.arg(unit)
@@ -429,11 +393,7 @@ setMethod(
         dplyr::mutate(cell_id = unit_ids[cell], post_X2_active = 1 - post_X1_active) %>%
         dplyr::select(cell_id, post_X1_active, post_X2_active, assignment)
 
-    # Phase and escape fraction for every gene, not just the informative subset that drove
-    # calling: a gene with LLR <= 0 (inconsistent with the fitted phase) or an outlier escape
-    # fraction carries no information about which X is active (correctly excluded from that
-    # job) — genes with real but moderate escape are not excluded — but once active-X is
-    # called, any gene can still be phased against it.
+    # Re-phases every gene, including non-informative ones, against the frozen active-X calls.
     all_genes <- .rephase_all_genes(ref_mat, alt_mat, post = xci_result$post, rho = xci_result$rho)
     haplotypes <- tibble::tibble(
         snp_id = snp_info$snp_id,

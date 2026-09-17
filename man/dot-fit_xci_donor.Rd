@@ -2,7 +2,7 @@
 % Please edit documentation in R/assign_xci.R
 \name{.fit_xci_donor}
 \alias{.fit_xci_donor}
-\title{Fit the XCI model for one donor, at cell or clonotype level}
+\title{Fits the XCI model for one donor, at cell or clonotype level.}
 \usage{
 .fit_xci_donor(
   snp_data,
@@ -12,9 +12,6 @@
 )
 }
 \description{
-Shared per-donor fitter for both modelling units. For \code{by = "cell"} the
-count matrices are used as-is; for \code{by = "clonotype"} they are first
-aggregated by clonotype and the resulting clonotype-level posteriors are
-projected back down to individual cells.
+Fits the XCI model for one donor, at cell or clonotype level.
 }
 \keyword{internal}
