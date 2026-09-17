@@ -210,14 +210,27 @@ setMethod("test_escape", signature(x = "SNPData"), function(x, p = NULL, rho = N
     counts <- .escape_counts(x)
 
     donor_fit <- donor_info(x)
-    missing_fit <- setdiff(c("xci_median_pi_g", "xci_rho"), colnames(donor_fit))
-    if (length(missing_fit) > 0 && (is.null(p) || is.null(rho))) {
+    # Only a null the caller left to the fit needs a stored column to come
+    # from: supplying `rho` makes a missing `xci_rho` irrelevant, so the two
+    # are checked against their own arguments rather than as a pair.
+    fit_column <- c(p = "xci_median_pi_g", rho = "xci_rho")
+    needed_fit <- fit_column[c(is.null(p), is.null(rho))]
+    missing_fit <- needed_fit[!needed_fit %in% colnames(donor_fit)]
+    if (length(missing_fit) > 0) {
         stop(
             "donor_info(x) has no ",
             paste(missing_fit, collapse = " or "),
-            " to take the null from; re-run assign_xci(x), or pass p and rho explicitly."
+            " to take the null from; re-run assign_xci(x), or pass ",
+            paste(names(missing_fit), collapse = " and "),
+            " explicitly."
         )
     }
+
+    # Only the null the caller did not supply needs taking from the fit, so a
+    # column the object lacks is only ever read when it is actually wanted.
+    # The guard above has already rejected the one combination this cannot
+    # serve: a missing column whose value was not passed in.
+    stored_null <- intersect(c("xci_median_pi_g", "xci_rho"), colnames(donor_fit))
 
     # Left join rather than filter: a donor whose fit yielded no null keeps its
     # genes in the output with NA p_val, so it reads as untested rather than
@@ -225,31 +238,53 @@ setMethod("test_escape", signature(x = "SNPData"), function(x, p = NULL, rho = N
     if ("donor" %in% colnames(counts)) {
         counts <- dplyr::left_join(
             counts,
-            dplyr::select(donor_fit, dplyr::any_of(c("donor", "xci_median_pi_g", "xci_rho"))),
+            dplyr::select(donor_fit, dplyr::all_of(c("donor", stored_null))),
             by = "donor"
         )
     } else {
         # No donor column means a single-donor object; its sole fit applies to
         # every row.
-        counts$xci_median_pi_g <- dplyr::first(donor_fit$xci_median_pi_g)
-        counts$xci_rho <- dplyr::first(donor_fit$xci_rho)
+        for (column in stored_null) {
+            counts[[column]] <- dplyr::first(donor_fit[[column]])
+        }
     }
 
-    unfitted <- unique(counts$donor[is.na(counts$xci_median_pi_g) | is.na(counts$xci_rho)])
-    if (length(unfitted) > 0) {
-        logger::log_warn(
-            "No stored null for donor(s) {paste(unfitted, collapse = ', ')}; ",
-            "their genes are returned untested (NA p_val)"
-        )
+    # A null the caller supplied overrides the stored fit entirely; one they
+    # did not comes from the columns just attached, which the guard guarantees
+    # are present in that case.
+    if (is.null(p)) {
+        p <- counts$xci_median_pi_g
+    }
+    if (is.null(rho)) {
+        rho <- counts$xci_rho
     }
 
-    result <- test_escape(
-        dplyr::select(counts, -xci_median_pi_g, -xci_rho),
-        p = p %||% counts$xci_median_pi_g,
-        rho = rho %||% counts$xci_rho,
+    # Reported per donor where there are donors to name; a single-donor object
+    # has no donor column to report against, so the warning is only that some
+    # rows are untestable.
+    unfitted_rows <- is.na(p) | is.na(rho)
+    if (any(unfitted_rows)) {
+        if ("donor" %in% colnames(counts)) {
+            unfitted <- unique(counts$donor[unfitted_rows])
+            logger::log_warn(
+                "No stored null for donor(s) {paste(unfitted, collapse = ', ')}; ",
+                "their genes are returned untested (NA p_val)"
+            )
+        } else {
+            logger::log_warn(
+                "No stored null available; {sum(unfitted_rows)} gene(s) are returned untested (NA p_val)"
+            )
+        }
+    }
+
+    # Dropped by name rather than by negation so that a column the object never
+    # had is simply absent, not an error.
+    test_escape(
+        dplyr::select(counts, -dplyr::any_of(c("xci_median_pi_g", "xci_rho"))),
+        p = p,
+        rho = rho,
         by_donor = by_donor
     )
-    result
 })
 
 #' Take gene-level escape counts from whichever source the object carries

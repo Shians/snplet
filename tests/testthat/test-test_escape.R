@@ -333,7 +333,12 @@ test_that("test_escape flags a gene with strong biallelic signal as more signifi
 # X1-active and cells 3-4 X2-active in both donors.
 #
 # geneA leaks 2/10 reads from the silenced haplotype in each group, geneB none.
-make_escape_fixture <- function(rho = 0.05, median_pi_g = 0.05) {
+#
+# `stored_null` selects which of the fitted-null columns donor_info carries, so
+# that an object predating one of them (or carrying neither) can be built to
+# exercise what test_escape() does when it has to fall back to a supplied value.
+make_escape_fixture <- function(rho = 0.05, median_pi_g = 0.05, stored_null = c("p", "rho")) {
+    stopifnot(all(stored_null %in% c("p", "rho")))
     ref <- rbind(
         c(8L, 8L, 2L, 2L, 8L, 8L, 2L, 2L),
         c(10L, 10L, 0L, 0L, 10L, 10L, 0L, 0L)
@@ -384,17 +389,20 @@ make_escape_fixture <- function(rho = 0.05, median_pi_g = 0.05) {
         join_by = "cell_id",
         overwrite = TRUE
     )
-    add_donor_metadata(
-        obj,
-        data.frame(
-            donor = c("donor0", "donor1"),
-            xci_median_pi_g = median_pi_g,
-            xci_rho = rho,
-            stringsAsFactors = FALSE
-        ),
-        join_by = "donor",
-        overwrite = TRUE
-    )
+    # Nothing to attach when neither null is stored: donor_info then has no
+    # fitted-null column at all, as it does on an object assign_xci() has not
+    # written a fit to.
+    if (length(stored_null) == 0) {
+        return(obj)
+    }
+    donor_null <- data.frame(donor = c("donor0", "donor1"), stringsAsFactors = FALSE)
+    if ("p" %in% stored_null) {
+        donor_null$xci_median_pi_g <- median_pi_g
+    }
+    if ("rho" %in% stored_null) {
+        donor_null$xci_rho <- rho
+    }
+    add_donor_metadata(obj, donor_null, join_by = "donor", overwrite = TRUE)
 }
 
 test_that("test_escape() on a SNPData tests one row per donor and gene", {
@@ -463,6 +471,58 @@ test_that("test_escape() on a SNPData returns a donor with no stored fit unteste
     expect_false(any(is.na(dplyr::filter(result, donor == "donor0")$p_val)))
 })
 
+test_that("test_escape() on a SNPData takes a supplied null when the fit stored none", {
+    obj <- make_escape_fixture(stored_null = character())
+
+    # Ensure the fixture really does lack both columns, so this exercises the
+    # fallback rather than quietly reading a stored value
+    expect_false(any(c("xci_median_pi_g", "xci_rho") %in% colnames(donor_info(obj))))
+
+    # Verify supplying both nulls is enough on its own: the object has no fitted
+    # null to read, but none is needed once the caller has given both
+    result <- test_escape(obj, p = 0.1, rho = 0.3)
+
+    expect_valid_escape_result(result)
+    # Confirm every row was actually tested rather than returned NA
+    expect_false(any(is.na(result$p_val)))
+    # Check the stripped null columns do not leak into the result
+    expect_false(any(c("xci_median_pi_g", "xci_rho") %in% colnames(result)))
+})
+
+test_that("test_escape() on a SNPData takes a supplied null when only the other is stored", {
+    # Only xci_median_pi_g stored, so rho must come from the caller
+    obj <- make_escape_fixture(stored_null = "p")
+
+    # Verify the stored p is usable alongside a supplied rho
+    result <- test_escape(obj, rho = 0.3)
+    expect_valid_escape_result(result)
+    expect_false(any(is.na(result$p_val)))
+
+    # Confirm the stored p is what was used, by checking a different p gives
+    # different p-values on otherwise identical input
+    overridden <- test_escape(obj, p = 0.4, rho = 0.3)
+    expect_false(isTRUE(all.equal(result$p_val, overridden$p_val)))
+})
+
+test_that("test_escape() on a SNPData errors only for the null it cannot obtain", {
+    neither <- make_escape_fixture(stored_null = character())
+
+    # Verify the error names both columns and both arguments when neither the
+    # object nor the caller supplies either
+    expect_error(test_escape(neither), "xci_median_pi_g or xci_rho")
+    expect_error(test_escape(neither), "pass p and rho explicitly")
+
+    # Check that supplying one narrows the error to the other: p is given, so
+    # only the missing xci_rho is still a problem
+    expect_error(test_escape(neither, p = 0.1), "has no xci_rho")
+    expect_error(test_escape(neither, p = 0.1), "pass rho explicitly")
+
+    # Ensure a stored p plus a missing rho names only rho, not both
+    p_only <- make_escape_fixture(stored_null = "p")
+    expect_error(test_escape(p_only), "has no xci_rho")
+    expect_error(test_escape(p_only), "pass rho explicitly")
+})
+
 test_that("test_escape() on a SNPData requires stored XCI diagnostics", {
     ref <- Matrix(matrix(1L, 2, 2), sparse = TRUE)
     obj <- SNPData(
@@ -474,4 +534,135 @@ test_that("test_escape() on a SNPData requires stored XCI diagnostics", {
 
     # Verify the error names the step that produces what is missing
     expect_error(test_escape(obj), "Run assign_xci")
+})
+
+# ==============================================================================
+# Test: as_escape_experiment()
+# ==============================================================================
+
+test_that("as_escape_experiment() builds a gene x donor SummarizedExperiment", {
+    obj <- make_escape_fixture()
+
+    se <- as_escape_experiment(obj)
+
+    # Verify the container class and dimensions: 2 genes x 2 donors
+    expect_s4_class(se, "SummarizedExperiment")
+    expect_equal(dim(se), c(2L, 2L))
+    # Verify the two paired assays are present with the documented names
+    expect_equal(sort(names(SummarizedExperiment::assays(se))), c("active", "inactive"))
+    # Confirm rows are genes and columns are donors
+    expect_equal(sort(rownames(se)), c("geneA", "geneB"))
+    expect_equal(sort(colnames(se)), c("donor0", "donor1"))
+})
+
+test_that("as_escape_experiment() active/inactive assays match test_escape()'s own counts", {
+    obj <- make_escape_fixture()
+
+    se <- as_escape_experiment(obj)
+    counts <- test_escape(obj)
+
+    active <- SummarizedExperiment::assay(se, "active")
+    inactive <- SummarizedExperiment::assay(se, "inactive")
+    for (i in seq_len(nrow(counts))) {
+        row <- counts[i, ]
+        # Verify each (gene, donor) cell reproduces the exact count test_escape() reports
+        expect_equal(active[row$gene_name, row$donor], row$active_count)
+        expect_equal(inactive[row$gene_name, row$donor], row$inactive_count)
+    }
+})
+
+test_that("as_escape_experiment() carries a group label attached via add_donor_metadata()", {
+    obj <- make_escape_fixture()
+    obj <- add_donor_metadata(
+        obj,
+        data.frame(donor = c("donor0", "donor1"), group = c("control", "treated"), stringsAsFactors = FALSE),
+        join_by = "donor"
+    )
+
+    se <- as_escape_experiment(obj)
+    col_data <- SummarizedExperiment::colData(se)
+
+    # Verify the group label reaches colData, keyed by the same donor order as the assays
+    expect_equal(
+        as.character(col_data[colnames(se), "group"]),
+        c("control", "treated")[match(colnames(se), c("donor0", "donor1"))]
+    )
+})
+
+test_that("as_escape_experiment() pads a (donor, gene) pair with no qualifying SNP as NA, not a dropped row", {
+    # geneA has clean XCI signal (dominant allele flips between the X1-active
+    # and X2-active groups) in both donors, so it always selects a
+    # representative SNP. geneB has the same flip in donor0, but zero coverage
+    # in donor1, which haplotype_expression() excludes entirely for that donor
+    # rather than reporting zero coverage.
+    ref <- rbind(
+        c(8L, 8L, 2L, 2L, 8L, 8L, 2L, 2L),
+        c(10L, 10L, 0L, 0L, 0L, 0L, 0L, 0L)
+    )
+    alt <- rbind(
+        c(2L, 2L, 8L, 8L, 2L, 2L, 8L, 8L),
+        c(0L, 0L, 10L, 10L, 0L, 0L, 0L, 0L)
+    )
+    snp_info <- data.frame(
+        chrom = "X",
+        pos = c(1000L, 2000L),
+        ref = "A",
+        alt = "G",
+        gene_name = c("geneA", "geneB"),
+        stringsAsFactors = FALSE
+    )
+    barcode_info <- data.frame(
+        barcode = paste0("cell", 1:8),
+        donor = rep(c("donor0", "donor1"), each = 4),
+        stringsAsFactors = FALSE
+    )
+    obj <- SNPData(
+        ref_count = Matrix(ref, sparse = TRUE),
+        alt_count = Matrix(alt, sparse = TRUE),
+        snp_info = snp_info,
+        barcode_info = barcode_info
+    )
+    obj <- add_donor_snp_metadata(
+        obj,
+        expand.grid(snp_id = snp_info(obj)$snp_id, donor = c("donor0", "donor1"), stringsAsFactors = FALSE) %>%
+            dplyr::mutate(xci_informative = TRUE, allele_on_x1 = "REF"),
+        join_by = c("snp_id", "donor"),
+        overwrite = TRUE
+    )
+    obj <- add_barcode_metadata(
+        obj,
+        data.frame(cell_id = barcode_info(obj)$cell_id, active_x = rep(c("X1", "X1", "X2", "X2"), 2)),
+        join_by = "cell_id",
+        overwrite = TRUE
+    )
+    obj <- add_donor_metadata(
+        obj,
+        data.frame(donor = c("donor0", "donor1"), xci_median_pi_g = 0.05, xci_rho = 0.1, stringsAsFactors = FALSE),
+        join_by = "donor"
+    )
+
+    se <- as_escape_experiment(obj)
+    active <- SummarizedExperiment::assay(se, "active")
+    inactive <- SummarizedExperiment::assay(se, "inactive")
+
+    # Verify the missing (donor1, geneB) pair is NA in both assays rather than
+    # the row being dropped from the SummarizedExperiment entirely
+    expect_true(is.na(active["geneB", "donor1"]))
+    expect_true(is.na(inactive["geneB", "donor1"]))
+    # Confirm every other cell, including donor0's geneB, is still a real count
+    expect_false(is.na(active["geneB", "donor0"]))
+    expect_false(is.na(active["geneA", "donor1"]))
+})
+
+test_that("as_escape_experiment() requires stored XCI diagnostics", {
+    ref <- Matrix(matrix(1L, 2, 2), sparse = TRUE)
+    obj <- SNPData(
+        ref_count = ref,
+        alt_count = ref,
+        snp_info = data.frame(chrom = "X", pos = c(1L, 2L), ref = "A", alt = "G"),
+        barcode_info = data.frame(barcode = c("c1", "c2"))
+    )
+
+    # Verify the error names the step that produces what is missing
+    expect_error(as_escape_experiment(obj), "Run assign_xci")
 })
