@@ -55,31 +55,59 @@ test_that("molecule_snp_alleles() takes the majority call per (molecule, SNP)", 
     expect_false("snp2" %in% result$snp_id)
 })
 
-test_that("molecule_snp_alleles() drops OTH-only calls and keeps ties resolved deterministically", {
-    tallies <- tibble::tribble(
-        ~barcode,
-        ~umi,
-        ~snp_id,
-        ~allele,
-        ~n_calls,
-        "BBB",
-        "UMI2",
-        "snp1",
-        "REF",
-        2L,
-        "BBB",
-        "UMI2",
-        "snp1",
-        "ALT",
-        2L
+test_that("molecule_snp_alleles() drops a molecule whose reads tie", {
+    tallies <- tibble::tibble(
+        barcode = "BBB",
+        umi = "UMI2",
+        snp_id = "snp1",
+        allele = c("REF", "ALT"),
+        n_calls = c(2L, 2L)
+    )
+
+    # Verify a tied vote is dropped rather than resolved, since there is no
+    # majority to read off
+    expect_equal(nrow(molecule_snp_alleles(tallies)), 0)
+
+    # Confirm the outcome does not depend on the order the rows arrive in,
+    # which an argmax over tied values would silently make it depend on
+    expect_equal(nrow(molecule_snp_alleles(tallies[2:1, ])), 0)
+})
+
+test_that("molecule_snp_alleles() excludes OTH before the vote, not after", {
+    tallies <- tibble::tibble(
+        barcode = "BBB",
+        umi = "UMI3",
+        snp_id = "snp1",
+        allele = c("REF", "OTH"),
+        n_calls = c(1L, 3L)
     )
 
     result <- molecule_snp_alleles(tallies)
 
-    # Verify a tie still resolves to exactly one row (with_ties = FALSE)
+    # Verify the REF read still yields a call even though OTH has more reads:
+    # OTH is error at a known biallelic site, so it is not a candidate to win
     expect_equal(nrow(result), 1)
-    # Check the resolved allele is one of the tied candidates
-    expect_true(result$allele %in% c("REF", "ALT"))
+    expect_equal(result$allele, "REF")
+    # Check n_calls reports the reads backing the winning allele, not the total
+    expect_equal(result$n_calls, 1L)
+})
+
+test_that("molecule_snp_alleles() drops a molecule with no REF or ALT read", {
+    tallies <- tibble::tibble(
+        barcode = "BBB",
+        umi = "UMI4",
+        snp_id = "snp1",
+        allele = "OTH",
+        n_calls = 2L
+    )
+
+    result <- molecule_snp_alleles(tallies)
+
+    # Ensure an all-OTH molecule yields nothing, quietly: summarise() over an
+    # empty input would otherwise warn from max() with no observations
+    expect_equal(nrow(result), 0)
+    expect_named(result, c("barcode", "umi", "snp_id", "allele", "n_calls"))
+    expect_no_warning(molecule_snp_alleles(tallies))
 })
 
 # ==============================================================================
@@ -88,21 +116,21 @@ test_that("molecule_snp_alleles() drops OTH-only calls and keeps ties resolved d
 
 test_that("molecule_read_strand() takes the majority alignment strand per molecule", {
     reads <- tibble::tribble(
-        ~barcode,
-        ~umi,
-        ~qname,
-        ~strand,
-        "AAA",
-        "UMI1",
-        "read1",
-        "+",
-        "AAA",
-        "UMI1",
-        "read2",
-        "+",
-        "AAA",
-        "UMI1",
-        "read3",
+        ~barcode ,
+        ~umi     ,
+        ~qname   ,
+        ~strand  ,
+        "AAA"    ,
+        "UMI1"   ,
+        "read1"  ,
+        "+"      ,
+        "AAA"    ,
+        "UMI1"   ,
+        "read2"  ,
+        "+"      ,
+        "AAA"    ,
+        "UMI1"   ,
+        "read3"  ,
         "-"
     )
 
@@ -115,17 +143,17 @@ test_that("molecule_read_strand() takes the majority alignment strand per molecu
 
 test_that("molecule_read_strand() resolves one row per distinct molecule", {
     reads <- tibble::tribble(
-        ~barcode,
-        ~umi,
-        ~qname,
-        ~strand,
-        "AAA",
-        "UMI1",
-        "read1",
-        "+",
-        "BBB",
-        "UMI2",
-        "read2",
+        ~barcode ,
+        ~umi     ,
+        ~qname   ,
+        ~strand  ,
+        "AAA"    ,
+        "UMI1"   ,
+        "read1"  ,
+        "+"      ,
+        "BBB"    ,
+        "UMI2"   ,
+        "read2"  ,
         "-"
     )
 
@@ -137,55 +165,111 @@ test_that("molecule_read_strand() resolves one row per distinct molecule", {
     expect_equal(result$strand[result$barcode == "BBB"], "-")
 })
 
+test_that("molecule_read_strand() reports NA for a molecule whose reads tie on strand", {
+    # An even split has no majority to read off. Both orderings are built so
+    # the result cannot depend on which strand happens to sort or appear first.
+    tied <- function(first, second) {
+        tibble::tibble(
+            barcode = "AAA",
+            umi = "UMI1",
+            qname = c("read1", "read2"),
+            strand = c(first, second)
+        )
+    }
+
+    # Verify a 1-1 tie is unresolved rather than settled by row order
+    expect_true(is.na(molecule_read_strand(tied("+", "-"))$strand))
+    # Check the reversed input gives the same answer, not the other strand
+    expect_true(is.na(molecule_read_strand(tied("-", "+"))$strand))
+
+    # Ensure a tie still yields exactly one row, so the caller's join stays 1:1
+    expect_equal(nrow(molecule_read_strand(tied("+", "-"))), 1)
+})
+
+test_that("molecule_read_strand() keeps a tied molecule from deciding a resolved one", {
+    reads <- dplyr::bind_rows(
+        # Tied molecule: 2 reads, one each way
+        tibble::tibble(
+            barcode = "AAA",
+            umi = "UMI1",
+            qname = c("read1", "read2"),
+            strand = c("+", "-")
+        ),
+        # Clear majority in a different molecule of the same cell
+        tibble::tibble(
+            barcode = "AAA",
+            umi = "UMI2",
+            qname = c("read3", "read4", "read5"),
+            strand = c("-", "-", "+")
+        ),
+        # A deeper 2-2 tie, to confirm depth does not break the tie either
+        tibble::tibble(
+            barcode = "BBB",
+            umi = "UMI3",
+            qname = c("read6", "read7", "read8", "read9"),
+            strand = c("+", "+", "-", "-")
+        )
+    )
+
+    result <- molecule_read_strand(reads)
+
+    # Verify one row per molecule regardless of whether each resolved
+    expect_equal(nrow(result), 3)
+    # Confirm only the tied molecules are NA, and the majority one still wins
+    expect_true(is.na(result$strand[result$umi == "UMI1"]))
+    expect_equal(result$strand[result$umi == "UMI2"], "-")
+    expect_true(is.na(result$strand[result$umi == "UMI3"]))
+})
+
 # ==============================================================================
 # Test: phase_snps()
 # ==============================================================================
 
 test_that("phase_snps() links two SNPs observed on the same molecules as 'same'", {
     per_snp <- tibble::tribble(
-        ~barcode,
-        ~umi,
-        ~snp_id,
-        ~allele,
-        "c1",
-        "u1",
-        "snp_a",
-        "REF",
-        "c1",
-        "u1",
-        "snp_b",
-        "REF",
-        "c2",
-        "u2",
-        "snp_a",
-        "REF",
-        "c2",
-        "u2",
-        "snp_b",
-        "REF",
-        "c3",
-        "u3",
-        "snp_a",
-        "ALT",
-        "c3",
-        "u3",
-        "snp_b",
-        "ALT",
-        "c4",
-        "u4",
-        "snp_a",
-        "REF",
-        "c4",
-        "u4",
-        "snp_b",
-        "REF",
-        "c5",
-        "u5",
-        "snp_a",
-        "ALT",
-        "c5",
-        "u5",
-        "snp_b",
+        ~barcode ,
+        ~umi     ,
+        ~snp_id  ,
+        ~allele  ,
+        "c1"     ,
+        "u1"     ,
+        "snp_a"  ,
+        "REF"    ,
+        "c1"     ,
+        "u1"     ,
+        "snp_b"  ,
+        "REF"    ,
+        "c2"     ,
+        "u2"     ,
+        "snp_a"  ,
+        "REF"    ,
+        "c2"     ,
+        "u2"     ,
+        "snp_b"  ,
+        "REF"    ,
+        "c3"     ,
+        "u3"     ,
+        "snp_a"  ,
+        "ALT"    ,
+        "c3"     ,
+        "u3"     ,
+        "snp_b"  ,
+        "ALT"    ,
+        "c4"     ,
+        "u4"     ,
+        "snp_a"  ,
+        "REF"    ,
+        "c4"     ,
+        "u4"     ,
+        "snp_b"  ,
+        "REF"    ,
+        "c5"     ,
+        "u5"     ,
+        "snp_a"  ,
+        "ALT"    ,
+        "c5"     ,
+        "u5"     ,
+        "snp_b"  ,
         "ALT"
     )
 

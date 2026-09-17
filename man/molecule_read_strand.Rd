@@ -12,7 +12,8 @@ with columns `barcode`, `umi`, `qname`, `strand`.}
 }
 \value{
 A tibble with one row per (`barcode`, `umi`) and columns
-  `barcode`, `umi`, `strand` (the majority call, `"+"` or `"-"`).
+  `barcode`, `umi`, `strand` (the majority call: `"+"`, `"-"`, or `NA`
+  where the molecule's reads tie between the two).
 }
 \description{
 A molecule is one transcript, so every read behind it should agree on
@@ -24,11 +25,24 @@ requires the BAM's sense/antisense orientation, since some demultiplexing
 pipelines flip reads relative to the transcript (see
 `.infer_bam_strand_orientation()`).
 }
+\details{
+A molecule whose reads tie between the two strands has no majority to read
+off and reports `NA`, matching how \code{\link{molecule_snp_alleles}}
+treats a tied allele vote. A tie means the evidence does not say which
+strand the transcript came from, and a strand picked between two equal
+options would be used downstream exactly as a resolved one:
+`haplotype_expression_by_molecule()` attributes an ambiguous SNP's molecule
+to whichever overlapping gene shares its strand, so a guess there sends the
+molecule's counts to a gene it may not have come from, while `NA` correctly
+withholds it. Note that a UMI-collapsed BAM gives one read per molecule and
+so cannot tie.
+}
 \seealso{
 Other molecule-level allele counting functions:
 \code{\link[=add_molecule_phase]{add_molecule_phase()}},
 \code{\link[=assign_snp_genes]{assign_snp_genes()}},
 \code{\link[=extract_snp_calls]{extract_snp_calls()}},
+\code{\link[=molecule_haplotype_counts]{molecule_haplotype_counts()}},
 \code{\link[=molecule_snp_alleles]{molecule_snp_alleles()}},
 \code{\link[=phase_snps]{phase_snps()}}
 }

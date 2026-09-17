@@ -5,6 +5,21 @@
   phase and escape rather than counted from the confidence-thresholded hard calls in
   `active_x`, which excludes low-confidence cells and so underestimates skew in
   coverage-limited donors
+* Fixed `molecule_snp_alleles()` excluding `OTH` after the per-read vote rather than before,
+  which let an error allele take the majority and discard the molecule's REF/ALT reads along
+  with it. A molecule read as 3 `OTH` and 1 `REF` now yields its `REF` call
+* Fixed `molecule_snp_alleles()` resolving a tied REF/ALT vote by row order, making the result
+  depend on the order reads arrived in. Tied molecules are now dropped, as
+  `haplotype_expression_by_molecule()` and `molecule_haplotype_counts()` already do with a tied
+  haplotype vote. Neither fix changes results on a UMI-collapsed BAM, where a molecule has one
+  read and so nothing to tie
+* Fixed `molecule_read_strand()` resolving a tied alignment-strand vote by row order, so a
+  molecule whose reads split evenly between strands was assigned one of them arbitrarily.
+  It now reports `NA`, matching the tie rule applied elsewhere. The strand decides which of
+  two opposite-strand genes an ambiguous SNP's molecule is attributed to, so a guess sent its
+  counts to a gene it may not have come from, where `NA` correctly withholds it;
+  unambiguous SNPs, which need no strand to attribute, are unaffected. As above, a
+  UMI-collapsed BAM has one read per molecule and so cannot tie
 * Added a `test_escape()` method taking a SNPData object directly, which draws the counts,
   the null escape fraction and the overdispersion from the donor's own fit rather than
   requiring them to be supplied

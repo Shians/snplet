@@ -419,14 +419,42 @@ extract_snp_calls <- function(
 #'
 #' @return A tibble with one row per (`barcode`, `umi`, `snp_id`) and columns
 #'   `barcode`, `umi`, `snp_id`, `allele` (the majority call, "REF" or "ALT"),
-#'   and `n_calls`.
+#'   and `n_calls` (reads backing that call). A (molecule, SNP) with no REF or
+#'   ALT read, or whose reads tie between the two, is absent from the result.
 #'
 #' @family molecule-level allele counting functions
 #' @export
 molecule_snp_alleles <- function(tallies) {
-    tallies %>%
-        dplyr::slice_max(n_calls, n = 1, by = c(barcode, umi, snp_id), with_ties = FALSE) %>%
-        dplyr::filter(allele %in% c("REF", "ALT"))
+    # Excluded before the vote, not after: OTH is a sequencing error at a known
+    # biallelic site, so it is not a candidate to win. Filtering afterwards
+    # would let it take the argmax and discard the molecule's REF/ALT reads
+    # along with it, losing a call that was there to be made.
+    informative <- dplyr::filter(tallies, allele %in% c("REF", "ALT"))
+    # summarise() still evaluates its expressions against a zero-row input, and
+    # max() of nothing warns before returning -Inf. The result is empty either
+    # way, so the empty case returns early rather than emitting a warning that
+    # says nothing about the data.
+    if (nrow(informative) == 0) {
+        return(dplyr::select(informative, barcode, umi, snp_id, allele, n_calls))
+    }
+
+    informative %>%
+        # n_top is computed before n_calls is redefined: summarise() evaluates
+        # its arguments in order and each one masks the column it names, so a
+        # later reference to n_calls would see the scalar maximum and count
+        # every observation as untied.
+        dplyr::summarise(
+            n_top = sum(n_calls == max(n_calls)),
+            allele = allele[which.max(n_calls)],
+            n_calls = max(n_calls),
+            .by = c(barcode, umi, snp_id)
+        ) %>%
+        # A tied molecule is residual noise with no majority to read off, so it
+        # is dropped rather than resolved by row order -- the rule
+        # haplotype_expression_by_molecule() and molecule_haplotype_counts()
+        # already apply to their own votes.
+        dplyr::filter(n_top == 1) %>%
+        dplyr::select(barcode, umi, snp_id, allele, n_calls)
 }
 
 #' Resolve the alignment strand of each molecule
@@ -440,19 +468,45 @@ molecule_snp_alleles <- function(tallies) {
 #' pipelines flip reads relative to the transcript (see
 #' `.infer_bam_strand_orientation()`).
 #'
+#' A molecule whose reads tie between the two strands has no majority to read
+#' off and reports `NA`, matching how \code{\link{molecule_snp_alleles}}
+#' treats a tied allele vote. A tie means the evidence does not say which
+#' strand the transcript came from, and a strand picked between two equal
+#' options would be used downstream exactly as a resolved one:
+#' `haplotype_expression_by_molecule()` attributes an ambiguous SNP's molecule
+#' to whichever overlapping gene shares its strand, so a guess there sends the
+#' molecule's counts to a gene it may not have come from, while `NA` correctly
+#' withholds it. Note that a UMI-collapsed BAM gives one read per molecule and
+#' so cannot tie.
+#'
 #' @param reads A tibble, required, as returned by `extract_snp_calls()$reads`,
 #'   with columns `barcode`, `umi`, `qname`, `strand`.
 #'
 #' @return A tibble with one row per (`barcode`, `umi`) and columns
-#'   `barcode`, `umi`, `strand` (the majority call, `"+"` or `"-"`).
+#'   `barcode`, `umi`, `strand` (the majority call: `"+"`, `"-"`, or `NA`
+#'   where the molecule's reads tie between the two).
 #'
 #' @family molecule-level allele counting functions
 #' @export
 molecule_read_strand <- function(reads) {
     reads %>%
         dplyr::count(barcode, umi, strand, name = "n_reads") %>%
-        dplyr::slice_max(n_reads, n = 1, by = c(barcode, umi), with_ties = FALSE) %>%
-        dplyr::select(barcode, umi, strand)
+        # with_ties = TRUE so a tie survives as two rows to be recognised
+        # below; dropping one arbitrarily here would resolve the molecule by
+        # row order and there would be nothing left to detect.
+        dplyr::slice_max(n_reads, n = 1, by = c(barcode, umi), with_ties = TRUE) %>%
+        # A molecule whose reads split evenly between strands has no majority
+        # to read off, so it reports NA rather than whichever strand sorted
+        # first -- the rule molecule_snp_alleles() and .pool_donor_calls()
+        # already apply to their own tied votes. NA is what the consumers
+        # expect for "unresolvable": .molecule_gene_phase_calls() requires a
+        # non-NA strand before attributing an ambiguous SNP's molecule to a
+        # gene, so a tie excludes the molecule there instead of sending its
+        # counts to an arbitrary one of two overlapping genes.
+        dplyr::summarise(
+            strand = dplyr::if_else(dplyr::n() == 1L, strand[1], NA_character_),
+            .by = c(barcode, umi)
+        )
 }
 
 #' Phase heterozygous SNPs directly from the molecules that span them

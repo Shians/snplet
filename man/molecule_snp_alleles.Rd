@@ -14,18 +14,30 @@ molecule_snp_alleles(tallies)
 \value{
 A tibble with one row per (`barcode`, `umi`, `snp_id`) and columns
   `barcode`, `umi`, `snp_id`, `allele` (the majority call, "REF" or "ALT"),
-  and `n_calls`.
+  and `n_calls` (reads backing that call). A (molecule, SNP) with no REF or
+  ALT read, or whose reads tie between the two, is absent from the result.
 }
 \description{
 Duplicate reads of one molecule vote on the allele at each SNP. Only REF
 and ALT are retained; OTH is a sequencing error at a known biallelic site
-and carries no haplotype information.
+and carries no haplotype information, so it is excluded before the vote
+rather than after -- a molecule read as 3 OTH and 1 REF still yields its
+REF call instead of being discarded for having no majority allele.
+}
+\details{
+A molecule whose reads tie between REF and ALT has no majority to read off
+and is dropped, matching how \code{\link{haplotype_expression_by_molecule}}
+and \code{\link{molecule_haplotype_counts}} treat a tied haplotype vote.
+Note that a BAM whose reads are already UMI-collapsed gives one read per
+molecule, so neither case arises: the vote that matters there is across the
+several SNPs a molecule spans, which those two functions take.
 }
 \seealso{
 Other molecule-level allele counting functions:
 \code{\link[=add_molecule_phase]{add_molecule_phase()}},
 \code{\link[=assign_snp_genes]{assign_snp_genes()}},
 \code{\link[=extract_snp_calls]{extract_snp_calls()}},
+\code{\link[=molecule_haplotype_counts]{molecule_haplotype_counts()}},
 \code{\link[=molecule_read_strand]{molecule_read_strand()}},
 \code{\link[=phase_snps]{phase_snps()}}
 }
