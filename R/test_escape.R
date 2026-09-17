@@ -128,8 +128,12 @@ setMethod("test_escape", signature(x = "data.frame"), function(x, p = NULL, rho 
     # The data.frame method has no donor fit to read a null off, so it falls
     # back to fixed values rather than erroring: it is the method for counts
     # that came from somewhere other than assign_xci().
-    p <- p %||% 0.10
-    rho <- rho %||% 0.05
+    if (is.null(p)) {
+        p <- 0.10
+    }
+    if (is.null(rho)) {
+        rho <- 0.05
+    }
 
     req_cols <- c("active_count", "inactive_count")
     missing_cols <- setdiff(req_cols, colnames(x))

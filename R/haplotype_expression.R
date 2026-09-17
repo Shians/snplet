@@ -348,7 +348,14 @@ setMethod(
             tibble::tibble(
                 donor = d,
                 snp_id = snp_keep_info$snp_id,
-                gene_name = snp_keep_info$gene_name %||% NA_character_,
+                # snp_info need not carry gene_name at all, in which case `$`
+                # yields NULL and the column would vanish from the tibble
+                # rather than read as unknown.
+                gene_name = if (is.null(snp_keep_info$gene_name)) {
+                    NA_character_
+                } else {
+                    snp_keep_info$gene_name
+                },
                 active_x = g,
                 n_cells = sum(cols),
                 active_count = active_count,

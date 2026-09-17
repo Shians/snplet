@@ -219,8 +219,12 @@ setMethod(
             }
         }
 
-        donor_info <- donor_info %||% .default_donor_info(barcode_info)
-        donor_snp_info <- donor_snp_info %||% .empty_donor_snp_info()
+        if (is.null(donor_info)) {
+            donor_info <- .default_donor_info(barcode_info)
+        }
+        if (is.null(donor_snp_info)) {
+            donor_snp_info <- .empty_donor_snp_info()
+        }
 
         deduped <- .dedupe_snps(ref_count, alt_count, oth_count, snp_info, donor_snp_info)
         ref_count <- deduped$ref_count

@@ -143,7 +143,13 @@ setMethod(
         # For a clonotype-level fit, aggregate the per-cell counts and assignments up
         # to the modelling unit (clonotype) so the heatmap columns match how the
         # model actually saw the data.
-        fit_unit <- unique(donor_barcode_info$xci_fit_unit %||% "cell")
+        # An object fit before xci_fit_unit was recorded has no such column, and
+        # a per-cell fit is what that predates.
+        fit_unit <- if (is.null(donor_barcode_info$xci_fit_unit)) {
+            "cell"
+        } else {
+            unique(donor_barcode_info$xci_fit_unit)
+        }
         by_clonotype <- "clonotype" %in% fit_unit && "clonotype" %in% colnames(assigned)
         if (by_clonotype) {
             agg <- .aggregate_xci_to_clonotype(assigned, ref_mat, alt_mat)

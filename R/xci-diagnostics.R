@@ -119,7 +119,7 @@ setMethod("xci_haplotypes", signature(x = "SNPData"), function(x) {
                 xci_post_X1_active = post_X1_active,
                 # Record the unit the model was fit on so downstream plotting can
                 # aggregate cells back to clonotypes when appropriate.
-                xci_fit_unit = f$unit %||% "cell"
+                xci_fit_unit = if (is.null(f$unit)) "cell" else f$unit
             )
     }) %>%
         dplyr::bind_rows()
