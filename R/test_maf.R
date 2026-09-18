@@ -42,9 +42,7 @@
 #' }
 test_maf <- function(x, p = 0.10) {
     .check_required_columns(x, c("ref_count", "alt_count", "total_count"))
-    .check_nonnegative_column(x$ref_count, "ref_count")
-    .check_nonnegative_column(x$alt_count, "alt_count")
-    .check_nonnegative_column(x$total_count, "total_count")
+    .check_nonnegative_columns(x, c("ref_count", "alt_count", "total_count"))
     .check_alleles_within_total(x)
 
     minor_allele_count <- pmin(x$ref_count, x$alt_count)
@@ -77,6 +75,12 @@ test_maf <- function(x, p = 0.10) {
     if (length(missing_cols) > 0) {
         missing_list <- paste0(missing_cols, collapse = ", ")
         stop(glue::glue("Missing required columns: {missing_list}"))
+    }
+}
+
+.check_nonnegative_columns <- function(df, col_names) {
+    for (cn in col_names) {
+        .check_nonnegative_column(df[[cn]], cn)
     }
 }
 
