@@ -7,11 +7,9 @@
 #'   cellSNP-lite output files.
 #' @param gene_annotation A data.frame, required, with columns \code{chrom},
 #'   \code{start}, \code{end}, \code{gene_name}. Gene annotations.
-#' @param library_id Character scalar, required. Name of the sequencing
-#'   library this cellSNP-lite run came from, stored on every cell. A 10x
-#'   barcode is unique only within its library, so \code{\link{merge_snpdata}}
-#'   needs this label to tell a repeated cell from two different cells that
-#'   happened to draw the same barcode.
+#' @param library_id Character scalar, optional (default \code{NA}). Name of
+#'   the sequencing library this cellSNP-lite run came from, stored on every
+#'   cell. See \sQuote{Merging libraries} below.
 #' @param vdj_file Character scalar, optional (default \code{NULL}). Path to
 #'   \code{filtered_contig_annotations.csv} from cellranger VDJ.
 #' @param vireo_folder Character scalar, optional (default \code{NULL}).
@@ -39,6 +37,15 @@
 #'   Paths are kept as given and only checked when read.
 #'
 #' @return A SNPData object
+#'
+#' @section Merging libraries:
+#' A 10x barcode is unique only within its library, so
+#' \code{\link{merge_snpdata}} uses \code{library_id} to tell a repeated cell
+#' from two different cells that happened to draw the same barcode, and
+#' refuses to merge any object carrying a \code{NA} \code{library_id}. A
+#' single-library workflow that never calls \code{merge_snpdata} can safely
+#' leave \code{library_id} unset.
+#'
 #' @family import and export functions
 #' @export
 #'
@@ -87,7 +94,7 @@
 import_cellsnp <- function(
     cellsnp_dir,
     gene_annotation,
-    library_id,
+    library_id = NA_character_,
     vdj_file = NULL,
     vireo_folder = NULL,
     donor_map = NULL,
@@ -107,19 +114,26 @@ import_cellsnp <- function(
         )
     }
 
-    # Required rather than defaulted: merge_snpdata() distinguishes a barcode
-    # shared within a library from one shared across libraries, and nothing in
-    # the cellSNP output records which library a run came from, so a default
-    # would silently make every object unmergeable.
-    if (missing(library_id)) {
-        stop(
-            "library_id is required: name the sequencing library this cellSNP run came from, ",
-            "e.g. import_cellsnp(..., library_id = \"run1\"). ",
-            "merge_snpdata() needs it to tell a repeated cell from two cells sharing a barcode."
-        )
+    # Left NA rather than defaulted to a guessed label: nothing in the cellSNP
+    # output records which library a run came from, and a guessed default
+    # (e.g. the directory name) risks two different libraries colliding
+    # silently at merge time. merge_snpdata() already refuses to merge any
+    # object with an NA library_id (see .check_library_ids()), so a
+    # single-library workflow that never merges can safely leave this unset,
+    # and a workflow that does merge is stopped there instead.
+    if (length(library_id) != 1) {
+        stop("library_id must be a single string naming the library this cellSNP run came from, or NA.")
     }
-    if (length(library_id) != 1 || is.na(library_id)) {
-        stop("library_id must be a single non-NA string naming the library this cellSNP run came from.")
+
+    # bam_files is recorded against library_id in library_info, so there is
+    # nothing to key it against when library_id was left NA. Checked ahead of
+    # file existence so this points at the real cause rather than a confusing
+    # add_library_bams() error once import has otherwise succeeded.
+    if (!is.null(bam_files) && is.na(library_id)) {
+        stop(
+            "bam_files was supplied but library_id was not: BAM paths are recorded against ",
+            "library_id in library_info, so set library_id = to use bam_files."
+        )
     }
 
     # Check if required files exist

@@ -263,16 +263,14 @@ test_that("import_cellsnp() labels every cell with the supplied library_id", {
     expect_equal(unique(barcode_info(snp_data)$library_id), "lib_A")
 })
 
-test_that("import_cellsnp() errors when library_id is not supplied", {
+test_that("import_cellsnp() leaves library_id as NA when not supplied", {
     cellsnp_dir <- system.file("extdata/example_snpdata", package = "snplet")
     gene_annotation <- data.frame(chrom = "chr1", start = 1, end = 1e9, gene_name = "dummy")
 
-    # Verify the label is demanded up front rather than defaulted, since it
-    # cannot be recovered from the counts once the object exists
-    expect_error(
-        import_cellsnp(cellsnp_dir, gene_annotation),
-        "library_id is required"
-    )
+    # Verify a single-library workflow can omit library_id entirely
+    snp_data <- expect_no_error(import_cellsnp(cellsnp_dir, gene_annotation))
+    # Check that every cell is left with an NA library_id rather than a guess
+    expect_true(all(is.na(barcode_info(snp_data)$library_id)))
 })
 
 test_that("import_cellsnp() rejects a library_id that is not a single string", {
@@ -282,7 +280,18 @@ test_that("import_cellsnp() rejects a library_id that is not a single string", {
     # Check that a vector of labels is refused, since one run is one library
     expect_error(
         import_cellsnp(cellsnp_dir, gene_annotation, library_id = c("lib_A", "lib_B")),
-        "single non-NA string"
+        "single string"
+    )
+})
+
+test_that("import_cellsnp() with bam_files but no library_id errors clearly", {
+    cellsnp_dir <- system.file("extdata/example_snpdata", package = "snplet")
+    gene_annotation <- data.frame(chrom = "chr1", start = 1, end = 1e9, gene_name = "dummy")
+
+    # Verify bam_files cannot be recorded without a library_id to key them against
+    expect_error(
+        import_cellsnp(cellsnp_dir, gene_annotation, bam_files = "dummy.bam"),
+        "bam_files was supplied but library_id was not"
     )
 })
 
