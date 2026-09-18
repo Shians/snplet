@@ -76,10 +76,9 @@ assign_snp_genes <- function(snp_info, gene_anno) {
 
     genes_per_snp <- snp_gene_hits %>% dplyr::summarise(n_genes = dplyr::n_distinct(gene_name), .by = snp_id)
 
-    # Two candidate genes sharing a strand at the same SNP are still
-    # indistinguishable even once a molecule's strand is known, so they are
-    # dropped from that strand's candidates; a strand contributing exactly
-    # one gene survives as a molecule-resolvable candidate.
+    # Two candidates sharing a strand stay indistinguishable even once a
+    # molecule's strand is known, so they are dropped; a strand with exactly
+    # one gene survives.
     snp_gene_hits %>%
         dplyr::mutate(n_genes_same_strand = dplyr::n(), .by = c(snp_id, gene_strand)) %>%
         dplyr::filter(n_genes_same_strand == 1) %>%
@@ -189,11 +188,8 @@ add_molecule_phase <- function(
     x_chrom <- filter_snps(x, chrom_canonical == target_chrom)
     donor_snp_info <- donor_snp_info(x)
 
-    # Deferred and cached rather than computed up front: donor_het_status_df()
-    # requires a zygosity source, and a caller whose only donors are
-    # "doublet"/"unassigned" (filtered out inside the helper before any donor
-    # is ever queried) should see that short-circuit rather than an unrelated
-    # zygosity error.
+    # Deferred and cached: a caller whose only donors are "doublet"/"unassigned"
+    # should see that short-circuit rather than an unrelated zygosity error.
     het_status <- NULL
     snp_ids_fn <- function(donor_id) {
         if (is.null(het_status)) {
@@ -239,9 +235,7 @@ add_molecule_phase <- function(
 
     new_cols$zygosity_source <- zygosity_source(x)
 
-    # Step 1 adds only brand-new columns, so unmatched existing rows (this
-    # donor_snp_info row was never touched by phasing) pass through untouched
-    # -- critically, this cannot clobber any pre-existing allele_on_x1.
+    # Step 1: new columns only, so this cannot clobber any pre-existing allele_on_x1.
     x <- add_donor_snp_metadata(
         x,
         new_cols[, c(
@@ -257,10 +251,8 @@ add_molecule_phase <- function(
         overwrite = TRUE
     )
 
-    # Step 2 recomputes the resolved allele_on_x1 over the *complete* table
-    # (every row, not just the ones touched above) so the follow-up merge is a
-    # row-complete 1:1 match and cannot null out an untouched row the way a
-    # partial-coverage overwrite could.
+    # Step 2: recomputed over the *complete* table so the merge is 1:1 and
+    # cannot null out an untouched row.
     resolved <- donor_snp_info(x) %>%
         dplyr::mutate(
             allele_on_x1_em = allele_on_x1,
@@ -274,33 +266,23 @@ add_molecule_phase <- function(
 
     x <- add_donor_snp_metadata(x, resolved, join_by = c("snp_id", "donor", "zygosity_source"), overwrite = TRUE)
 
-    # BAM extraction is the expensive step this function already pays for;
-    # attaching the per-molecule calls lets haplotype_expression_by_molecule()
-    # reuse them instead of re-extracting from the BAM a second time.
+    # Lets haplotype_expression_by_molecule() reuse this instead of re-extracting.
     attr(x, "molecule_calls") <- molecule_calls
-    # Strand calibration decides how every ambiguous SNP in a file is resolved,
-    # so it is recorded rather than only logged: a file whose orientation came
-    # out `NA`, or whose concordance was low enough that
-    # `.infer_bam_strand_orientation()` fell back to a bare majority, is the
-    # first thing to check when phase blocks look wrong.
+    # Recorded, not just logged, so a bad orientation call is inspectable later.
     attr(x, "bam_calibration") <- calibration
     x
 }
 
 
-# Resolve donor/library/BAM inputs, extract per-molecule allele calls for
-# each donor's het SNPs, and read-backed phase them with phase_snps() --
-# everything add_molecule_phase() and molecule_haplotype_counts() both need
-# before they part ways: the former orients blocks to X1/X2 against
-# assign_xci()'s EM anchors, the latter reports them block-local. `snp_ids_fn`
-# is called per donor as `snp_ids_fn(donor)` and must return the snp_ids
-# to extract for that donor (the het-SNP set, however the caller derived it).
+# Resolves donor/library/BAM inputs, extracts per-molecule allele calls for
+# each donor's het SNPs, and read-backed phases them -- everything
+# add_molecule_phase() and molecule_haplotype_counts() both need before they
+# part ways (the former orients blocks to X1/X2, the latter reports them
+# block-local). `snp_ids_fn(donor_id)` returns the het-SNP set to extract.
 #
-# Returns a named list, one entry per donor with phase blocks, each holding
-# `phase` (phase_snps() output) and `per_snp` (molecule_snp_alleles() output
-# with transcript_strand and donor columns, the per-molecule calls
-# downstream functions attach as their "molecule_calls" attribute). A donor
-# contributing no rows (no het SNPs, or no phase blocks formed) is absent.
+# Returns a named list, one entry per donor with phase blocks formed, each
+# holding `phase` (phase_snps() output) and `per_snp` (molecule_snp_alleles()
+# output plus transcript_strand and donor columns).
 .extract_and_phase_donor_molecules <- function(
     x,
     bam_files,
@@ -322,16 +304,12 @@ add_molecule_phase <- function(
     }
     bam_files <- .as_library_bam_list(bam_files)
 
-    # BAM files are keyed by library rather than by donor because that is what
-    # they are a property of: one library's BAM holds all of its donors' cells,
-    # and the object already records which library each cell came from. A
-    # donor's files are therefore looked up, not asked for, which also makes it
-    # impossible for the caller to point a donor at another library's reads --
-    # where the same barcode names a different cell entirely.
+    # BAM files are keyed by library, not donor: that is what they are a
+    # property of, and it stops a caller pointing a donor at another
+    # library's reads.
     donor_library <- .donor_library_map(barcode_info)
     if (all(is.na(donor_library$library_id))) {
-        # No labels anywhere: the object is a single implicit library, so one
-        # entry covers every donor whatever the caller happened to name it.
+        # No labels anywhere: treat the object as one implicit library.
         if (length(bam_files) != 1) {
             stop(
                 "barcode_info$library_id is unset for every cell, so the object is a single library and ",
@@ -351,10 +329,8 @@ add_molecule_phase <- function(
         )
     }
 
-    # "doublet"/"unassigned" are not real donors -- a doublet's genotype is a
-    # mix of two cells' and an unassigned cell has no confident genotype, so
-    # neither has a meaningful het-SNP set to phase against. Dropped here the
-    # same way assign_xci() excludes them from its own per-donor EM fit.
+    # Neither has a genuine genotype to phase against; excluded the same way
+    # assign_xci() excludes them from its own per-donor EM fit.
     non_donor_labels <- intersect(donor_library$donor, c("doublet", "unassigned"))
     if (length(non_donor_labels) > 0) {
         logger::log_warn(
@@ -382,9 +358,6 @@ add_molecule_phase <- function(
             return(NULL)
         }
 
-        # A donor's whole barcode set is safe to use against every one of its
-        # library's files: `library_id` is what disambiguates a barcode shared
-        # with another library, and these files are that library's.
         donor_barcodes <- barcode_info$barcode[barcode_info$donor == donor_id]
         per_file <- purrr::map(donor_bams[[donor_id]], function(bam_file) {
             extracted <- extract_snp_calls(
@@ -395,10 +368,8 @@ add_molecule_phase <- function(
                 min_baseq = min_baseq,
                 threads = threads
             )
-            # Orientation is a property of the file's pipeline, so it is applied
-            # before pooling: two of a donor's files may well be calibrated
-            # differently, and pooled reads carry no record of where they came
-            # from.
+            # Applied before pooling: two of a donor's files may be calibrated
+            # differently, and pooled reads carry no record of origin.
             orientation <- calibration$orientation[calibration$bam_file == bam_file]
             molecule_strand <- molecule_read_strand(extracted$reads)
             aligned_strand <- molecule_strand$strand
@@ -436,10 +407,9 @@ add_molecule_phase <- function(
     list(per_donor = purrr::compact(per_donor), calibration = calibration)
 }
 
-# The paths recorded against each library at import, as the named list
-# `bam_files` would have been given as. Libraries with no stored path are left
-# out entirely, so a half-populated object fails the same way an incomplete
-# `bam_files` argument would rather than silently phasing only some donors.
+# Paths recorded against each library at import, in the shape a `bam_files`
+# argument would take. Libraries with no stored path are left out, so a
+# half-populated object fails rather than silently phasing only some donors.
 .stored_bam_files <- function(x) {
     stored <- library_info(x)
     stored <- stored[lengths(stored$bam_files) > 0, , drop = FALSE]
@@ -452,11 +422,8 @@ add_molecule_phase <- function(
     stats::setNames(stored$bam_files, stored$library_id)
 }
 
-# A BAM file listed twice under one library would be extracted twice and its
-# tallies summed by `.pool_donor_calls()`, silently doubling every read behind
-# that library's molecules. A missing index is just as quiet but costlier:
-# `.prefilter_bam()`'s `samtools view -M -L` seeks by index, and without one the
-# region-restricted scan degrades to streaming the whole file once per donor.
+# A duplicate path would double-count every read via .pool_donor_calls(); a
+# missing index is quieter but costlier, since .prefilter_bam() seeks by index.
 .check_bam_paths <- function(bam_files) {
     for (library_id in names(bam_files)) {
         paths <- bam_files[[library_id]]
@@ -500,12 +467,9 @@ add_molecule_phase <- function(
     any(file.exists(index_paths))
 }
 
-# Which library each donor's cells came from. This is derived from the object
-# rather than asked of the caller: `library_id` is a property of the cell, so
-# the object already knows, and a donor whose cells span two libraries breaks
-# the assumption every BAM lookup here rests on -- that a donor's reads live in
-# exactly one library's files -- and so is an error rather than a guess.
-# An object with no library labels at all is treated as one implicit library.
+# Which library each donor's cells came from, derived from the object rather
+# than asked of the caller. A donor spanning two libraries breaks the
+# assumption every BAM lookup here rests on, so is an error, not a guess.
 .donor_library_map <- function(barcode_info) {
     n_missing <- sum(is.na(barcode_info$library_id))
     if (n_missing > 0 && n_missing < nrow(barcode_info)) {
@@ -530,13 +494,10 @@ add_molecule_phase <- function(
     donor_library
 }
 
-# Strand calibration is a property of the BAM's pipeline, not of the donors
-# read out of it, so it is computed once per file and up front: eagerly, so a
-# file that cannot be calibrated is reported before any expensive extraction is
-# paid for, and once, so two donors sharing a library BAM cannot calibrate it
-# inconsistently. Unlike extraction this scan starts at the head of the file
-# and ignores the index, so repeating it per donor is the one cost that does
-# not shrink with the chromosome filter.
+# Computed once per file, up front: strand calibration is a property of the
+# BAM's pipeline, not of the donors read from it, so two donors sharing a file
+# must not calibrate it inconsistently, and a failure surfaces before
+# extraction is paid for.
 .calibrate_bam_strands <- function(bam_paths) {
     per_file_rows <- purrr::map(bam_paths, function(bam_file) {
         calibration <- tryCatch(
@@ -569,19 +530,13 @@ add_molecule_phase <- function(
     dplyr::bind_rows(per_file_rows)
 }
 
-# Pool one donor's per-file extractions into the shape a single file would have
-# produced. The two tables need different reductions because they mean
-# different things. Read tallies for a molecule split across files are partial
-# counts of one vote, so they must be summed *before* `molecule_snp_alleles()`
-# picks a winner: binding alone would instead take the argmax of the per-file
-# counts and discard the losing file's reads, and voting per file then binding
-# would emit one row per file per molecule, so `phase_snps()` would count a
-# single molecule several times towards `min_molecules`. Transcript strand is
-# already one call per molecule per file, so it is majority-voted instead, and
-# must come out at one row per molecule or the left join onto the calls fans
-# out. Molecules seen only in an uncalibrated file are simply absent here and
-# pick up `NA` from that join; a genuine "+"/"-" disagreement between files
-# resolves to `NA` rather than a guess.
+# Pool one donor's per-file extractions into the shape a single file would
+# have produced. Read tallies are partial counts of one vote and must be
+# summed *before* molecule_snp_alleles() picks a winner, or a molecule split
+# across files gets double-counted (or its losing file's reads discarded).
+# Transcript strand is already one call per molecule per file, so it is
+# majority-voted down to one row per molecule instead, to avoid fanning out
+# the later join; a genuine disagreement between files resolves to NA.
 .pool_donor_calls <- function(per_file) {
     tallies <- dplyr::bind_rows(purrr::map(per_file, "tallies")) %>%
         dplyr::summarise(n_calls = sum(n_calls), .by = c(barcode, umi, snp_id, allele))
@@ -659,9 +614,8 @@ add_molecule_phase <- function(
         }
         n_scanned <- n_scanned + length(galn)
 
-        # A read whose alignment strand matches the transcript strand minimap2
-        # called from its splice junctions was sequenced sense to the
-        # transcript; a mismatch means the pipeline reverse-complemented it.
+        # A match between alignment strand and the ts tag means sense; a mismatch
+        # means the pipeline reverse-complemented the read.
         transcript_strand_tag <- S4Vectors::mcols(galn)$ts
         has_ts_tag <- !is.na(transcript_strand_tag)
         if (any(has_ts_tag)) {
@@ -832,12 +786,8 @@ molecule_haplotype_counts <- function(
         stop("No phase blocks formed for any donor.")
     }
 
-    # phase_snps() blocks are numbered independently per donor call, so an
-    # unlinked SNP would otherwise collide with another donor's block 1; each
-    # donor's blocks are namespaced by donor here for that reason (mirroring
-    # .orient_phase_blocks()'s negative-id trick for unlinked anchors, but
-    # there is no anchor step here to make a block of one for an unlinked SNP,
-    # so it is simply absent, same as phase_snps() leaves it).
+    # phase_snps() numbers blocks independently per call, so they are
+    # namespaced by donor here to avoid collisions (e.g. two donors' block 1).
     phase <- purrr::imap(per_donor, function(donor_result, donor_id) {
         donor_phase <- donor_result$phase
         donor_phase$donor <- donor_id
@@ -849,11 +799,8 @@ molecule_haplotype_counts <- function(
 
     calls <- .molecule_gene_phase_calls(molecule_calls, snp_gene_map, phase, orientation_col = "allele_on_h1")
 
-    # A molecule votes across every SNP of the block it covers; majority wins,
-    # a tie is ambiguous (residual base-calling noise once phase is accounted
-    # for) and dropped rather than guessed -- the same rule
-    # haplotype_expression_by_molecule() applies per gene, applied here per
-    # (gene, block) since blocks are not pooled.
+    # Majority wins per (gene, block); a tie is dropped, not guessed -- the
+    # same rule haplotype_expression_by_molecule() applies per gene.
     molecule_votes <- calls %>%
         dplyr::summarise(
             n_h1 = sum(is_oriented_allele),
@@ -877,18 +824,15 @@ molecule_haplotype_counts <- function(
         dplyr::arrange(donor, gene_name, phase_block)
 }
 
-# Join per-molecule allele calls to a phase table and the SNP-to-gene map,
-# resolving strand-ambiguous SNPs against each molecule's own transcript
-# strand. Shared by haplotype_expression_by_molecule() (phase already
-# oriented to X1/X2 by .orient_phase_blocks()) and molecule_haplotype_counts()
-# (phase left in phase_snps()'s own block-local H1/H2), since the join and the
-# strand-resolution rule are identical either way -- only what "oriented
-# allele" means differs, named genetically as is_oriented_allele here and
-# relabelled by each caller (is_x1, is_h1) for its own convention.
+# Joins per-molecule allele calls to a phase table and the SNP-to-gene map,
+# resolving strand-ambiguous SNPs against each molecule's transcript strand.
+# Shared by haplotype_expression_by_molecule() (X1/X2-oriented phase) and
+# molecule_haplotype_counts() (block-local H1/H2 phase): the join and
+# strand-resolution rule are identical, only what "oriented allele" means
+# differs, via the `orientation_col` argument.
 #
-# `phase` must have columns snp_id, donor, phase_block, and a column named
-# `orientation_col` giving the allele ("REF"/"ALT") this call treats as
-# oriented.
+# `phase` must have columns snp_id, donor, phase_block, and `orientation_col`
+# giving the allele ("REF"/"ALT") this call treats as oriented.
 .molecule_gene_phase_calls <- function(molecule_calls, snp_gene_map, phase, orientation_col) {
     phase <- dplyr::rename(phase, .oriented_allele = dplyr::all_of(orientation_col))
     calls <- molecule_calls %>%
@@ -905,15 +849,11 @@ molecule_haplotype_counts <- function(
 }
 
 # Per-(donor, gene, phase_block) molecule bookkeeping shared by
-# haplotype_expression_by_molecule() and molecule_haplotype_counts(): which
-# block has the most distinct molecules backing it, how many molecules sit in
-# any other block, and which blocks are included in `counted` once
-# `pool_blocks` is applied. Pooling blocks into one gene-level count is only
-# valid when every SNP's `is_oriented_allele` means the same thing across
-# blocks (an externally, globally oriented phase, as XCI's EM anchors give);
-# `calls` here is agnostic to that and only counts molecules, leaving the
-# caller to decide whether pooling the returned blocks is sound for its phase
-# source.
+# haplotype_expression_by_molecule() and molecule_haplotype_counts(): the
+# dominant block, molecules stranded in other blocks, and which blocks
+# `pool_blocks` includes in `counted`. Pooling is only valid when
+# `is_oriented_allele` means the same thing across blocks (a globally oriented
+# phase); this function only counts molecules and leaves that call to the caller.
 .molecule_gene_block_counts <- function(calls, pool_blocks) {
     blocks <- calls %>%
         dplyr::distinct(donor, gene_name, phase_block, barcode, umi) %>%

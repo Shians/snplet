@@ -336,34 +336,25 @@ extract_snp_calls <- function(
 #' @family molecule-level allele counting functions
 #' @export
 molecule_snp_alleles <- function(tallies) {
-    # Excluded before the vote, not after: OTH is a sequencing error at a known
-    # biallelic site, so it is not a candidate to win. Filtering afterwards
-    # would let it take the argmax and discard the molecule's REF/ALT reads
-    # along with it, losing a call that was there to be made.
+    # Excluded before the vote: OTH is never a candidate to win, so filtering
+    # afterwards would let it take the argmax and discard a real REF/ALT call.
     informative <- dplyr::filter(tallies, allele %in% c("REF", "ALT"))
-    # summarise() still evaluates its expressions against a zero-row input, and
-    # max() of nothing warns before returning -Inf. The result is empty either
-    # way, so the empty case returns early rather than emitting a warning that
-    # says nothing about the data.
+    # max() of a zero-row group warns before returning -Inf; short-circuit instead.
     if (nrow(informative) == 0) {
         return(dplyr::select(informative, barcode, umi, snp_id, allele, n_calls))
     }
 
     informative %>%
-        # n_top is computed before n_calls is redefined: summarise() evaluates
-        # its arguments in order and each one masks the column it names, so a
-        # later reference to n_calls would see the scalar maximum and count
-        # every observation as untied.
+        # n_top must be computed before n_calls is redefined, or it would see
+        # the scalar maximum instead of the original per-row counts.
         dplyr::summarise(
             n_top = sum(n_calls == max(n_calls)),
             allele = allele[which.max(n_calls)],
             n_calls = max(n_calls),
             .by = c(barcode, umi, snp_id)
         ) %>%
-        # A tied molecule is residual noise with no majority to read off, so it
-        # is dropped rather than resolved by row order -- the rule
-        # haplotype_expression_by_molecule() and molecule_haplotype_counts()
-        # already apply to their own votes.
+        # A tie has no majority to read off, so it is dropped, not resolved by
+        # row order -- see molecule_read_strand()'s own tied vote for the same rule.
         dplyr::filter(n_top == 1) %>%
         dplyr::select(barcode, umi, snp_id, allele, n_calls)
 }
@@ -402,18 +393,11 @@ molecule_snp_alleles <- function(tallies) {
 molecule_read_strand <- function(reads) {
     reads %>%
         dplyr::count(barcode, umi, strand, name = "n_reads") %>%
-        # with_ties = TRUE so a tie survives as two rows to be recognised
-        # below; dropping one arbitrarily here would resolve the molecule by
-        # row order and there would be nothing left to detect.
+        # with_ties = TRUE keeps a tie as two rows so it can be detected below,
+        # rather than resolved arbitrarily by row order.
         dplyr::slice_max(n_reads, n = 1, by = c(barcode, umi), with_ties = TRUE) %>%
-        # A molecule whose reads split evenly between strands has no majority
-        # to read off, so it reports NA rather than whichever strand sorted
-        # first -- the rule molecule_snp_alleles() and .pool_donor_calls()
-        # already apply to their own tied votes. NA is what the consumers
-        # expect for "unresolvable": .molecule_gene_phase_calls() requires a
-        # non-NA strand before attributing an ambiguous SNP's molecule to a
-        # gene, so a tie excludes the molecule there instead of sending its
-        # counts to an arbitrary one of two overlapping genes.
+        # A tie has no majority to read off, so it reports NA -- the same rule
+        # molecule_snp_alleles() applies to its own tied vote.
         dplyr::summarise(
             strand = dplyr::if_else(dplyr::n() == 1L, strand[1], NA_character_),
             .by = c(barcode, umi)

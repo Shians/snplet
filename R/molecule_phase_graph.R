@@ -152,10 +152,7 @@ phase_snps <- function(
             "likelihood ratio instead of a fraction. Use error_rate and min_llr (see ?phase_snps)."
         )
     }
-    # error_rate is a per-molecule probability of a discordant observation, so
-    # it must leave room for one: at 0 no disagreement is ever explicable and
-    # the weight is infinite, at 0.5 the two hypotheses predict identical data
-    # and the weight is 0, and beyond 0.5 the test reads backwards.
+    # (0, 0.5): at 0 the weight is infinite, at 0.5 it is 0, beyond it the test reads backwards.
     if (!is.numeric(error_rate) || length(error_rate) != 1 || is.na(error_rate)) {
         stop("error_rate must be a single non-missing number.")
     }
@@ -183,12 +180,9 @@ phase_snps <- function(
         ))
     }
 
-    # Every molecule contributes one vote per pair of SNPs it spans: the two
-    # alleles it read either agree ("same" -- both REF or both ALT, so the two
-    # REF alleles share a haplotype) or they do not. `snp_pairs` has the two
-    # rows of combn() naming the first and second member of each pair, so
-    # first_of_pair/second_of_pair index the molecule's own SNPs and alleles in
-    # lockstep.
+    # One vote per pair of SNPs a molecule spans, "same" if the two alleles it
+    # read agree; snp_pairs' two combn() rows index the molecule's SNPs and
+    # alleles in lockstep.
     pair_votes <- purrr::map(seq_len(nrow(molecule_snps)), function(molecule_idx) {
         molecule_snp_ids <- molecule_snps$snps[[molecule_idx]]
         molecule_alleles <- molecule_snps$alleles[[molecule_idx]]
@@ -199,32 +193,19 @@ phase_snps <- function(
             snp_a = molecule_snp_ids[first_of_pair],
             snp_b = molecule_snp_ids[second_of_pair],
             same = molecule_alleles[first_of_pair] == molecule_alleles[second_of_pair],
-            # Carried through so an edge's support can be counted in cells as
-            # well as molecules; see `min_cells`.
+            # Carried through for the `min_cells` count below.
             barcode = molecule_snps$barcode[molecule_idx]
         )
     })
 
-    # Evidence for an edge is the *margin* between agreeing and disagreeing
-    # molecules, not the fraction agreeing: log(L_same / L_opposite) reduces to
-    # (2 * n_same - n) * log((1 - error_rate) / error_rate), a net vote count
-    # times a fixed per-molecule weight. A fraction conflates how clean an edge
-    # is with how much of it there is, and at small n it is the coarser of the
-    # two -- 4 of 5 agreeing is 0.8, below any useful fraction cutoff, while
-    # carrying LLR 8.8 at error_rate = 0.05, which is decisive.
+    # LLR and per-relation cell counts implement @section Accepting an edge.
     weight_per_molecule <- log((1 - error_rate) / error_rate)
     edges <- dplyr::bind_rows(pair_votes) %>%
         dplyr::summarise(
             n = dplyr::n(),
             n_same = sum(same),
-            # Counted per relation rather than over the pair as a whole: a cell
-            # is only independent evidence *for* the relation its molecules
-            # actually voted for. Counting every cell touching the pair would
-            # let a dissenting cell satisfy `min_cells` on behalf of the
-            # relation it argues against -- 4 molecules from one cell saying
-            # "same" plus 1 from another saying "opposite" would read as
-            # two-cell support for "same", which is exactly the single-cell
-            # edge the threshold exists to reject.
+            # n_cells_same/opposite, not one count over the whole pair, since a
+            # cell is independent evidence only for the relation it voted for.
             n_cells_same = dplyr::n_distinct(barcode[same]),
             n_cells_opposite = dplyr::n_distinct(barcode[!same]),
             .by = c(snp_a, snp_b)
@@ -232,11 +213,7 @@ phase_snps <- function(
         dplyr::mutate(
             relation = dplyr::if_else(n_same >= n - n_same, "same", "opposite"),
             consistency = pmax(n_same, n - n_same) / n,
-            # Cells backing the relation that won, so `min_cells` is a floor on
-            # the independence of the evidence actually being accepted.
             n_cells = dplyr::if_else(relation == "same", n_cells_same, n_cells_opposite),
-            # Sign records which relation is favoured, which `relation` already
-            # holds; only the strength of the evidence is thresholded.
             llr = abs(2 * n_same - n) * weight_per_molecule
         ) %>%
         dplyr::filter(n >= min_molecules, n_cells >= min_cells, llr >= min_llr)
@@ -252,17 +229,13 @@ phase_snps <- function(
     }
 
     snp_ids <- sort(unique(c(edges$snp_a, edges$snp_b)))
-    # orientation[snp] is 0 when that SNP's REF allele sits on H1 and 1 when it
-    # sits on H2; it doubles as the "already visited" marker, NA meaning the
-    # traversal has not reached this SNP yet.
+    # orientation[snp]: 0 = REF on H1, 1 = REF on H2; NA doubles as "unvisited".
     orientation <- stats::setNames(rep(NA_integer_, length(snp_ids)), snp_ids)
     block <- stats::setNames(rep(NA_integer_, length(snp_ids)), snp_ids)
 
-    # Undirected adjacency, keyed by SNP: every edge appears twice, once walkable
-    # from each end, so `neighbours_of_snp[[snp]]` lists everything reachable in
-    # one step whichever end the traversal arrives from. `edge_idx` carries each
-    # half-edge back to its row in `edges`, so a contradiction found while
-    # walking can be attributed to the edge that caused it.
+    # Undirected adjacency: each edge appears twice (once per end), and
+    # edge_idx traces a half-edge back to its row in `edges` for conflict
+    # reporting below.
     neighbours_of_snp <- split(
         rbind(
             data.frame(to = edges$snp_b, flip = edges$relation == "opposite", edge_idx = seq_len(nrow(edges))),
@@ -271,26 +244,14 @@ phase_snps <- function(
         c(edges$snp_a, edges$snp_b)
     )
 
-    # An edge reaching an already-oriented SNP is a cycle closing. The spanning
-    # tree has already fixed both endpoints' orientations, so this edge is not
-    # needed to phase anything -- but it is an independent prediction of the
-    # relation between them, and it either agrees with the tree or it does not.
-    # A disagreement means no assignment of alleles to two haplotypes can
-    # satisfy every accepted edge at once, which is physically impossible for a
-    # diploid genome and so evidence that one of the edges is wrong (a spurious
-    # link from ambient RNA, a mismapped paralogue, or a doublet's two
-    # genotypes read as one). Silently keeping the tree's answer would discard
-    # exactly the signal that says the block is untrustworthy, so the conflicts
-    # are counted and reported per block instead.
+    # An edge reaching an already-oriented SNP closes a cycle; see @section
+    # Internally inconsistent blocks for what a disagreement there means.
     is_edge_inconsistent <- rep(FALSE, nrow(edges))
     conflicts_per_block <- integer(0)
 
-    # Breadth-first traversal of the edge graph. Each unvisited SNP seeds a new
-    # connected component -- a phase block -- and is arbitrarily declared to
-    # carry its REF allele on H1 (orientation 0); every SNP reachable from it
-    # then inherits an orientation forced by the relations along the way. The
-    # visited SNPs of one component are exactly one block, so the traversal
-    # assigns block membership and relative phase in a single pass.
+    # BFS: each unvisited SNP seeds a block, arbitrarily orienting its REF
+    # allele to H1 (0); every SNP reached from it inherits an orientation
+    # forced by the relations along the way.
     block_id <- 0L
     for (seed_snp in snp_ids) {
         if (!is.na(orientation[seed_snp])) {
@@ -309,10 +270,8 @@ phase_snps <- function(
             }
             for (neighbour_idx in seq_len(nrow(neighbours))) {
                 neighbour_snp <- neighbours$to[neighbour_idx]
-                # An "opposite" edge flips the orientation across it, a "same"
-                # edge carries it through unchanged -- so the orientation this
-                # edge implies for the neighbour is the current SNP's, XORed
-                # with the edge's flip.
+                # "opposite" flips the orientation across the edge, "same"
+                # carries it through: XOR the current SNP's orientation with flip.
                 implied_orientation <- as.integer(
                     xor(orientation[[current_snp]] == 1L, neighbours$flip[neighbour_idx])
                 )
@@ -321,9 +280,7 @@ phase_snps <- function(
                     block[neighbour_snp] <- block_id
                     snp_queue <- c(snp_queue, neighbour_snp)
                 } else if (orientation[[neighbour_snp]] != implied_orientation) {
-                    # Each undirected edge is walked from both ends, so the same
-                    # conflict is seen twice; `edge_idx` identifies the original
-                    # row so it is only ever recorded once.
+                    # Walked from both ends, so record via edge_idx once, not twice.
                     is_edge_inconsistent[neighbours$edge_idx[neighbour_idx]] <- TRUE
                 }
             }
@@ -332,8 +289,7 @@ phase_snps <- function(
 
     conflicting_edges <- edges[is_edge_inconsistent, , drop = FALSE]
     if (nrow(conflicting_edges) > 0) {
-        # Both endpoints of a conflicting edge are in one block by construction,
-        # so either endpoint identifies the block the conflict belongs to.
+        # Either endpoint identifies the block: both are in it by construction.
         conflicts_per_block <- table(block[conflicting_edges$snp_a])
         logger::log_warn(
             "{nrow(conflicting_edges)} edge(s) contradict the phase they were assigned, in ",
@@ -343,9 +299,8 @@ phase_snps <- function(
 
     conflicted_block_ids <- as.integer(names(conflicts_per_block))
 
-    # Resolved before the tibble() call rather than inside it: tibble() builds
-    # columns sequentially in its own scope, so a `block = ` column defined
-    # there masks this `block` lookup vector for every argument after it.
+    # Resolved outside tibble(): a `block = ` column defined inside it would
+    # mask this `block` lookup vector for every argument after it.
     block_of_snp <- unname(block[snp_ids])
     n_conflicts_of_snp <- dplyr::coalesce(as.integer(conflicts_per_block[as.character(block_of_snp)]), 0L)
 
@@ -490,9 +445,8 @@ phase_snps <- function(
         )
     }
 
-    # An anchor whose own vote disagrees with its block's resolved orientation
-    # is a minority-of-one outlier (the only way a block still resolves despite
-    # a dissent) -- flagged even though the block orientation itself is trusted.
+    # A minority-of-one anchor is flagged even though the block orientation
+    # itself is trusted (the majority resolved it).
     anchor_status <- phase_anchors %>%
         dplyr::left_join(dplyr::select(block_summary, block, orientation), by = "block") %>%
         dplyr::mutate(
@@ -508,10 +462,8 @@ phase_snps <- function(
         )
     }
 
-    # phase_snps() always supplies block_conflict, but the column is optional
-    # here so a caller assembling a phase table by hand is not forced to invent
-    # one; absent means nothing found a contradiction, which is not the same as
-    # an unknown and so is FALSE rather than NA.
+    # block_conflict is optional here (phase_snps() always supplies it, a
+    # hand-built phase table need not); absent means FALSE, not unknown.
     block_conflict_flag <- rep(FALSE, nrow(phase))
     if ("block_conflict" %in% colnames(phase)) {
         block_conflict_flag <- phase[["block_conflict"]]
@@ -526,11 +478,8 @@ phase_snps <- function(
                 orientation == "h1_is_x1" ~ allele_on_h1,
                 orientation == "h1_is_x2" ~ dplyr::if_else(allele_on_h1 == "REF", "ALT", "REF")
             ),
-            # An anchor's own value comes from the EM and is merely corroborated
-            # by the block it sits in; a non-anchor's is reached by propagating
-            # along edges observed on molecules. Both are read-backed in the
-            # sense that a block links them, but only the second has any
-            # molecule evidence for the SNP itself, so they are named apart.
+            # See @return: only the propagated case has molecule evidence for
+            # the SNP itself; an anchor's value is the EM's, merely corroborated.
             phase_source = dplyr::if_else(
                 snp_id %in% anchors$snp_id,
                 "read_backed_anchor",
@@ -539,13 +488,8 @@ phase_snps <- function(
             phase_conflict = !is.na(orientation) & orientation == "conflict"
         ) %>%
         dplyr::left_join(dplyr::select(anchor_status, snp_id, is_outlier_anchor), by = "snp_id") %>%
-        # Two independent ways a block can be untrustworthy, folded into one
-        # flag because they mean the same thing downstream: do not rely on this
-        # SNP's phase. The anchors can disagree about how to orient the block
-        # (above), or the block's own edges can contradict each other, in which
-        # case phase_snps() already found no orientation satisfies them all --
-        # a block that cannot be internally consistent is not made trustworthy
-        # by anchors that happen to agree on which way round to put it.
+        # Anchor disagreement and phase_snps()'s own edge conflicts are two
+        # independent reasons not to trust a SNP's phase, folded into one flag.
         dplyr::mutate(
             phase_conflict = phase_conflict |
                 dplyr::coalesce(is_outlier_anchor, FALSE) |
@@ -553,23 +497,14 @@ phase_snps <- function(
         ) %>%
         dplyr::select(snp_id, phase_block = block, allele_on_x1_molecule, phase_source, phase_conflict)
 
-    # An anchor that phase_snps() never linked to any partner (e.g. a
-    # single-heterozygous-SNP gene) still has a perfectly good EM-derived
-    # phase of its own -- there is just nothing to pool it with. Rather than
-    # leaving it invisible to haplotype_expression_by_molecule(), it becomes
-    # its own block of one, mirroring how the original prototype treated an
-    # unphased SNP ("a block of one, with H1 defined as REF"). Negative ids
-    # keep these visually and numerically distinct from phase_snps()'s
-    # (always positive) block ids.
+    # See @details: an anchor phase_snps() never linked becomes its own
+    # negative-id block of one rather than being dropped.
     unlinked_anchors <- anchors %>%
         dplyr::filter(!snp_id %in% phase$snp_id) %>%
         dplyr::transmute(
             snp_id,
             phase_block = -dplyr::row_number(),
             allele_on_x1_molecule = allele_on_x1_em,
-            # Copied verbatim from the EM: no molecule ever linked this SNP to
-            # another, so nothing here is read-backed and labelling it so would
-            # misreport the one case with no molecule evidence at all.
             phase_source = "em",
             phase_conflict = FALSE
         )
