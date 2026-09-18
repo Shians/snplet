@@ -174,10 +174,12 @@ import_cellsnp <- function(
         }
     }
 
-    # Read cellSNP matrices
-    coverage <- Matrix::readMM(dp_file)
-    alt_count <- Matrix::readMM(ad_file)
-    oth_count <- Matrix::readMM(oth_file)
+    # Read cellSNP matrices. read_mtx() parses the coordinate triples with
+    # readr rather than Matrix::readMM()'s scan()-based reader, which measurably
+    # speeds up the multi-hundred-megabyte matrices cellSNP-lite produces.
+    coverage <- read_mtx(dp_file)
+    alt_count <- read_mtx(ad_file)
+    oth_count <- read_mtx(oth_file)
     ref_count <- coverage - alt_count # Only subtract alt_count
 
     # Read SNP information from VCF file
@@ -275,7 +277,8 @@ import_cellsnp <- function(
         barcode_info = barcode_info,
         donor_snp_info = donor_snp_info,
         donor_map = donor_map,
-        snp_gene_map = snp_gene_map
+        snp_gene_map = snp_gene_map,
+        total_count = coverage
     )
 
     # Import is when a BAM path is actually known -- this cellSNP run was made
@@ -357,6 +360,55 @@ import_cellsnp <- function(
 
     donor_calls %>%
         dplyr::filter(snp_id %in% snp_info$snp_id, !is.na(zygosity))
+}
+
+#' Read a MatrixMarket coordinate file into a sparse Matrix
+#'
+#' A faster drop-in for \code{Matrix::readMM()} on the plain-text
+#' \code{.mtx} files cellSNP-lite produces: parses the coordinate triples
+#' with \code{readr::read_delim()} (a vectorised C++ parser) rather than
+#' \code{readMM()}'s \code{scan()}-based reader, which measurably speeds up
+#' import on cellSNP-lite's multi-hundred-megabyte matrices. Restricted to
+#' the coordinate/integer-or-real \code{%%MatrixMarket} format cellSNP-lite
+#' writes (a banner line, an arbitrary number of \code{%} comment lines, then
+#' \code{nrow ncol nnz}); a general MatrixMarket file (symmetric, complex,
+#' pattern, or array format) should still use \code{Matrix::readMM()}.
+#'
+#' @param mtx_file Path to a \code{.mtx} file
+#'
+#' @return A sparse \code{dgCMatrix}
+#' @keywords internal
+read_mtx <- function(mtx_file) {
+    # The banner plus however many "%"-prefixed comment lines precede the
+    # "nrow ncol nnz" line -- MatrixMarket allows any number, and cellSNP-lite's
+    # own files are inconsistent about how many they write.
+    header_lines <- readr::read_lines(mtx_file, n_max = 64)
+    is_comment <- stringr::str_starts(header_lines, "%")
+    n_header <- match(FALSE, is_comment) - 1L
+
+    dims <- scan(mtx_file, what = "character", skip = n_header, nlines = 1, quiet = TRUE)
+    dims <- as.integer(dims)
+
+    triples <- readr::read_delim(
+        mtx_file,
+        delim = " ",
+        skip = n_header + 1,
+        col_names = c("i", "j", "x"),
+        col_types = readr::cols(
+            i = readr::col_integer(),
+            j = readr::col_integer(),
+            x = readr::col_double()
+        ),
+        progress = FALSE
+    )
+
+    Matrix::sparseMatrix(
+        i = triples$i,
+        j = triples$j,
+        x = triples$x,
+        dims = dims[1:2],
+        index1 = TRUE
+    )
 }
 
 #' Read the base VCF file from cellSNP output
