@@ -15,7 +15,7 @@
 #'
 #' Reads the region(s) spanned by `snp` from an indexed BAM and, for every
 #' alignment overlapping a target position, records the base and quality
-#' called there together with the read's identity, the information needed
+#' called there together with the read's identity — the information needed
 #' to later group calls into molecules and phase blocks. Equivalent in
 #' principle to `GenomicAlignments::pileLettersAt()`, but retains the read of
 #' origin, which that function discards.
@@ -164,8 +164,7 @@ extract_snp_calls <- function(
 #' Map each SNP position into query coordinates for every overlapping read
 #'
 #' Inlines the logic of `GenomicAlignments:::.pileLettersOnSingleRefAt` so the
-#' read of origin survives, precisely what is needed to group calls into
-#' molecules.
+#' read of origin survives — the piece needed to group calls into molecules.
 #'
 #' @param galn A GAlignments object.
 #' @param snp_gr A GRanges of target SNPs, width 1, same seqlevels as `galn`.
@@ -248,11 +247,11 @@ extract_snp_calls <- function(
 
 #' Cut a BAM down to the reads that matter, using threaded samtools
 #'
-#' Rsamtools decompresses every read in a window before R can discard it;
+#' Rsamtools decompresses every read in a window before R can discard it.
 #' `samtools` can apply the same barcode/UMI/quality criteria in threaded C
-#' first, which is where nearly all of the speed comes from. This is a pure
-#' accelerator: the filters applied afterwards in R remain the definition of
-#' what is kept, so the two paths cannot diverge.
+#' first, which is where nearly all of the speed comes from. It only ever
+#' speeds things up: the filters applied afterwards in R remain the
+#' definition of what is kept, so the two paths cannot diverge.
 #'
 #' @param bam_file Path to an indexed BAM.
 #' @param windows A GRanges of merged fetch windows.
@@ -314,15 +313,15 @@ extract_snp_calls <- function(
 #' Duplicate reads of one molecule vote on the allele at each SNP. Only REF
 #' and ALT are retained; OTH is a sequencing error at a known biallelic site
 #' and carries no haplotype information, so it is excluded before the vote
-#' rather than after -- a molecule read as 3 OTH and 1 REF still yields its
-#' REF call instead of being discarded for having no majority allele.
+#' rather than after. A molecule read as 3 OTH and 1 REF still yields its REF
+#' call, instead of being discarded for having no majority allele.
 #'
 #' A molecule whose reads tie between REF and ALT has no majority to read off
 #' and is dropped, matching how \code{\link{haplotype_expression_by_molecule}}
-#' and \code{\link{molecule_haplotype_counts}} treat a tied haplotype vote.
-#' Note that a BAM whose reads are already UMI-collapsed gives one read per
-#' molecule, so neither case arises: the vote that matters there is across the
-#' several SNPs a molecule spans, which those two functions take.
+#' and \code{\link{molecule_haplotype_counts}} treat a tied haplotype vote. A
+#' BAM whose reads are already UMI-collapsed gives one read per molecule, so
+#' neither case arises: the vote that matters there is across the several
+#' SNPs a molecule spans, which those two functions take.
 #'
 #' @param tallies A tibble, required, as returned by
 #'   `extract_snp_calls()$tallies`, with columns `barcode`, `umi`, `snp_id`,
@@ -363,8 +362,8 @@ molecule_snp_alleles <- function(tallies) {
 #'
 #' A molecule is one transcript, so every read behind it should agree on
 #' alignment strand; a majority vote absorbs the rare mismapped or chimeric
-#' read rather than letting one read decide. This is alignment strand only;
-#' converting it to the strand of the original transcript (needed to
+#' read rather than letting one read decide. This is alignment strand only.
+#' Converting it to the strand of the original transcript (needed to
 #' disambiguate a SNP overlapping genes on opposite strands) additionally
 #' requires the BAM's sense/antisense orientation, since some demultiplexing
 #' pipelines flip reads relative to the transcript (see
@@ -373,13 +372,13 @@ molecule_snp_alleles <- function(tallies) {
 #' A molecule whose reads tie between the two strands has no majority to read
 #' off and reports `NA`, matching how \code{\link{molecule_snp_alleles}}
 #' treats a tied allele vote. A tie means the evidence does not say which
-#' strand the transcript came from, and a strand picked between two equal
-#' options would be used downstream exactly as a resolved one:
-#' `haplotype_expression_by_molecule()` attributes an ambiguous SNP's molecule
-#' to whichever overlapping gene shares its strand, so a guess there sends the
-#' molecule's counts to a gene it may not have come from, while `NA` correctly
-#' withholds it. Note that a UMI-collapsed BAM gives one read per molecule and
-#' so cannot tie.
+#' strand the transcript came from; a strand picked between two equal options
+#' would be used downstream exactly as a resolved one, since
+#' `haplotype_expression_by_molecule()` attributes an ambiguous SNP's
+#' molecule to whichever overlapping gene shares its strand. A guess there
+#' sends the molecule's counts to a gene it may not have come from, while
+#' `NA` correctly withholds it. A UMI-collapsed BAM gives one read per
+#' molecule and so cannot tie.
 #'
 #' @param reads A tibble, required, as returned by `extract_snp_calls()$reads`,
 #'   with columns `barcode`, `umi`, `qname`, `strand`.

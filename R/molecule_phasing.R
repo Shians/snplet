@@ -1,15 +1,15 @@
 # ==============================================================================
 # Molecule phasing: gene attribution and per-donor orchestration
 #
-# The entry points here sit on top of molecule_extraction.R (per-molecule
-# allele calls from a BAM) and molecule_phase_graph.R (turning those calls
-# into phased blocks): they resolve which BAM file(s) belong to each donor,
-# extract and phase that donor's molecules, and write the result back onto a
-# SNPData object or summarise it into gene-level counts.
+# These entry points sit on top of molecule_extraction.R (per-molecule allele
+# calls from a BAM) and molecule_phase_graph.R (phased blocks from those
+# calls). They resolve each donor's BAM file(s), extract and phase that
+# donor's molecules, and write the result onto a SNPData object or summarise
+# it into gene-level counts.
 #
 # add_molecule_phase() orients blocks to X1/X2 against assign_xci()'s EM
 # phase and stores read-backed phase alongside it. molecule_haplotype_counts()
-# instead reports blocks in their own block-local H1/H2 labelling, for callers
+# reports blocks in their own block-local H1/H2 labelling instead, for callers
 # that need molecule-level counts without committing to an absolute
 # orientation. assign_snp_genes() supplies the gene attribution both rely on
 # for SNPs that overlap more than one gene body.
@@ -17,25 +17,22 @@
 
 #' Assign each SNP to the gene(s) whose molecules it can be attributed to
 #'
-#' Deliberately distinct from `add_snp_gene_names()`, which comma-joins every
-#' overlapping gene into a single display label. A SNP overlapping two gene
-#' bodies on the same strand cannot have its molecules attributed to either
-#' one without guessing, and is dropped entirely. A SNP overlapping genes on
-#' different strands is not actually ambiguous at the molecule level: a
-#' read's own alignment strand (once corrected for the BAM's sense/antisense
+#' Distinct from `add_snp_gene_names()`, which comma-joins every overlapping
+#' gene into a single display label. A SNP overlapping two gene bodies on the
+#' same strand cannot have its molecules attributed to either one without
+#' guessing, and is dropped entirely. A SNP overlapping genes on different
+#' strands is not actually ambiguous at the molecule level: a read's own
+#' alignment strand (once corrected for the BAM's sense/antisense
 #' orientation, see `.infer_bam_strand_orientation()`) picks out which gene's
 #' transcript it came from. Such a SNP is kept with one row per
 #' strand-resolvable candidate gene, flagged `ambiguous = TRUE`, for
 #' `haplotype_expression_by_molecule()` to resolve per molecule using
 #' `molecule_read_strand()`. A candidate gene sharing its strand with another
-#' candidate at the same SNP is not resolvable even by strand and is dropped
-#' from that SNP's candidates. Pre-evaluation on real data found this
-#' recovers real SNPs (24 of 81 multi-gene overlaps in one donor's chrX<20Mb
-#' het set were opposite-strand); exon/splice-based recovery of same-strand
-#' overlaps was evaluated and rejected as not worth the added complexity for
-#' 6x less yield.
+#' candidate at the same SNP is not resolvable even by strand, and is dropped
+#' from that SNP's candidates. Exon/splice-based recovery of same-strand
+#' overlaps would add complexity for far less yield, so it was rejected.
 #'
-#' Any SNP can still take part in `phase_snps()` regardless of its gene
+#' A SNP can still take part in `phase_snps()` regardless of its gene
 #' assignment here, since phasing does not depend on gene assignment.
 #'
 #' @param snp_info A data.frame/tibble, required, with columns `snp_id`,
@@ -45,9 +42,9 @@
 #'
 #' @return A tibble with columns `snp_id`, `gene_name`, `gene_strand`, and
 #'   `ambiguous` (`TRUE` if the SNP overlaps more than one gene overall, so
-#'   this candidate must still be matched against a molecule's own strand
-#'   before use; `FALSE` if `gene_name` is this SNP's only candidate and
-#'   applies regardless of strand).
+#'   this candidate must be matched against a molecule's own strand before
+#'   use; `FALSE` if `gene_name` is this SNP's only candidate and applies
+#'   regardless of strand).
 #'
 #' @family molecule-level allele counting functions
 #' @export
@@ -89,36 +86,35 @@ assign_snp_genes <- function(snp_info, gene_anno) {
 
 #' Add read-backed molecule phase to a SNPData object's donor SNP metadata
 #'
-#' Extracts molecule-level allele calls from each library's BAM files, phases them
-#' with `phase_snps()`, orients the resulting blocks to X1/X2 against
+#' Extracts molecule-level allele calls from each library's BAM files, phases
+#' them with `phase_snps()`, orients the resulting blocks to X1/X2 against
 #' `assign_xci()`'s already-stored EM phase (see `.orient_phase_blocks()`),
 #' and writes the result into `donor_snp_info`. Additive only:
 #' `assign_xci()`'s own phase calls are never replaced, and
-#' `haplotype_expression()` is unaffected unless it is told to read the new
+#' `haplotype_expression()` is unaffected unless told to read the new
 #' columns.
 #'
 #' @inheritSection assign_xci Phase is inferred from expression, not genotyped
 #'
-#' @param x A SNPData object, required, that has already been fit by
-#'   `assign_xci()` or `assign_xci_by_clonotype()` (see
-#'   `.has_xci_diagnostics()`), with a `donor` column in `barcode_info`. Each
-#'   donor's cells must all carry the same `library_id`, since a donor's BAM
-#'   files are looked up by its library; a donor spanning two libraries is an
-#'   error. `library_id` may instead be unset for every cell, in which case the
-#'   object is treated as a single library, but a mix of labelled and
-#'   unlabelled cells is an error.
+#' @param x A SNPData object, required, already fit by `assign_xci()` or
+#'   `assign_xci_by_clonotype()` (see `.has_xci_diagnostics()`), with a
+#'   `donor` column in `barcode_info`. Each donor's cells must all carry the
+#'   same `library_id`, since a donor's BAM files are looked up by its
+#'   library; a donor spanning two libraries is an error. `library_id` may
+#'   instead be unset for every cell, treating the object as a single
+#'   library, but a mix of labelled and unlabelled cells is an error.
 #' @param bam_files A named character vector or list, optional (default
 #'   `NULL`, taking the paths recorded in `library_info(x)$bam_files` by
 #'   `import_cellsnp()` or `add_library_bams()`, and erroring if none were),
 #'   `library_id = path(s)`, giving the indexed BAM file or files holding that
-#'   library's reads. Names must match `barcode_info(x)$library_id`, or, for an
-#'   object with no library labels at all, be a single entry of any name.
+#'   library's reads. Names must match `barcode_info(x)$library_id`, or, for
+#'   an object with no library labels at all, be a single entry of any name.
 #'   Several files under one library are pooled per molecule, so a molecule
-#'   split across them votes once with all of its reads; listing the same file
-#'   twice is an error, as it would double every count it contributes.
-#'   Libraries whose donors are all `"doublet"` or `"unassigned"` contribute
-#'   nothing, since neither is a real donor with its own genotype to phase
-#'   against.
+#'   split across them votes once with all of its reads; listing the same
+#'   file twice is an error, since it would double every count it
+#'   contributes. Libraries whose donors are all `"doublet"` or
+#'   `"unassigned"` contribute nothing, since neither is a real donor with
+#'   its own genotype to phase against.
 #' @param target_chrom Character scalar (default `"chrX"`, matching
 #'   `assign_xci()`'s own restriction). Canonical chromosome to restrict
 #'   het-SNP selection to.
@@ -130,33 +126,37 @@ assign_snp_genes <- function(snp_info, gene_anno) {
 #'   by molecules from at least `min_cells` distinct cells; see its
 #'   \sQuote{Accepting an edge} section.
 #'
-#' @return A SNPData object with `donor_snp_info` gaining the columns
-#'   `allele_on_x1_em` (the EM's own phase, unchanged, given its own name for
-#'   symmetry with `allele_on_x1_molecule`), `allele_on_x1_molecule`,
-#'   `phase_block`, `phase_source` (`"read_backed_propagated"`,
-#'   `"read_backed_anchor"` or `"em"`, recording how much molecule evidence
-#'   stands behind each SNP's phase; only the first is derived from molecules
-#'   spanning the SNP itself, and `startsWith(phase_source, "read_backed")`
-#'   selects the two block-based cases together), `phase_conflict`, and a
-#'   re-derived
-#'   `allele_on_x1`: the EM's value where present (so nothing downstream that
-#'   already reads `allele_on_x1` changes behaviour), else the molecule value,
-#'   else `NA` where `phase_conflict` is `TRUE`. Also carries a
-#'   `"molecule_calls"` attribute (a tibble with columns `donor`, `barcode`,
-#'   `umi`, `snp_id`, `allele`, `transcript_strand` (`"+"`/`"-"`/`NA`, the
-#'   molecule's inferred transcript strand, see
-#'   `.infer_bam_strand_orientation()` and `molecule_read_strand()`, used by
-#'   `haplotype_expression_by_molecule()` to resolve SNPs `assign_snp_genes()`
-#'   flagged `ambiguous`), the per-donor `molecule_snp_alleles()` output
-#'   already computed here), which `haplotype_expression_by_molecule()` reads
-#'   straight off the object it is given: nothing needs passing by hand or
-#'   re-extracting from the BAM. Being an attribute, it does not survive
-#'   operations that rebuild the object, so subset before this call rather than
-#'   after. A second attribute, `"bam_calibration"`,
-#'   records one row per BAM file scanned with columns `bam_file`,
-#'   `orientation` (`"sense"`/`"antisense"`/`NA` where it could not be
-#'   inferred), `n_ts_reads`, `concordance`, and `n_scanned`, so the strand
-#'   call applied to each file's molecules can be inspected after the fact.
+#' @return A SNPData object with `donor_snp_info` gaining these columns:
+#'   \itemize{
+#'     \item `allele_on_x1_em`: the EM's own phase, unchanged, under a name
+#'       that pairs with `allele_on_x1_molecule`.
+#'     \item `allele_on_x1_molecule`, `phase_block`, `phase_conflict`.
+#'     \item `phase_source`: `"read_backed_propagated"`,
+#'       `"read_backed_anchor"`, or `"em"`, recording how much molecule
+#'       evidence stands behind each SNP's phase. Only the first is derived
+#'       from molecules spanning the SNP itself;
+#'       `startsWith(phase_source, "read_backed")` selects the two
+#'       block-based cases together.
+#'     \item `allele_on_x1`, re-derived: the EM's value where present (so
+#'       nothing downstream that already reads `allele_on_x1` changes
+#'       behaviour), else the molecule value, else `NA` where
+#'       `phase_conflict` is `TRUE`.
+#'   }
+#'   The object also carries two attributes. `"molecule_calls"` is a tibble
+#'   with columns `donor`, `barcode`, `umi`, `snp_id`, `allele`, and
+#'   `transcript_strand` (`"+"`/`"-"`/`NA`, the molecule's inferred
+#'   transcript strand; see `.infer_bam_strand_orientation()` and
+#'   `molecule_read_strand()`). It is the per-donor `molecule_snp_alleles()`
+#'   output already computed here, and lets
+#'   `haplotype_expression_by_molecule()` resolve SNPs `assign_snp_genes()`
+#'   flagged `ambiguous`, reading it straight off the object it is given
+#'   rather than re-extracting from the BAM. Being an attribute, it does not
+#'   survive operations that rebuild the object, so subset before this call
+#'   rather than after. `"bam_calibration"` records one row per BAM file
+#'   scanned, with columns `bam_file`, `orientation`
+#'   (`"sense"`/`"antisense"`/`NA` where it could not be inferred),
+#'   `n_ts_reads`, `concordance`, and `n_scanned`, so the strand call applied
+#'   to each file's molecules can be inspected afterwards.
 #'
 #' @family molecule-level allele counting functions
 #' @family X-chromosome inactivation functions
@@ -558,14 +558,14 @@ add_molecule_phase <- function(
 #' Demultiplexing tools such as Flexiplex reorient reads before alignment,
 #' and 5' vs 3' protocol data end up flipped in opposite directions (5'
 #' reads sense to the transcript, 3' reads its reverse complement), with no
-#' record of which happened left in the BAM. A spliced read's `ts:A:+/-` tag
-#' (the transcript strand minimap2 calls from the GT-AG splice-junction
-#' signal) is independent of that flip, so comparing a read's own alignment
-#' strand to its `ts` value reveals the orientation for that read; pooling
-#' this over enough `ts`-tagged reads calibrates the whole BAM, since one BAM
-#' is assumed to use a single protocol throughout. Reads are scanned in
-#' batches and the scan stops as soon as the split is decisive, rather than
-#' reading the whole file.
+#' record in the BAM of which happened. A spliced read's `ts:A:+/-` tag (the
+#' transcript strand minimap2 calls from the GT-AG splice-junction signal) is
+#' independent of that flip, so comparing a read's own alignment strand to
+#' its `ts` value reveals that read's orientation. Pooling this over enough
+#' `ts`-tagged reads calibrates the whole BAM, since one BAM is assumed to
+#' use a single protocol throughout. Reads are scanned in batches, and the
+#' scan stops as soon as the split is decisive rather than reading the whole
+#' file.
 #'
 #' @param bam_file Path to a BAM (read sequentially; need not be indexed).
 #' @param batch_size Reads scanned per batch. Default 5000.
@@ -670,18 +670,18 @@ add_molecule_phase <- function(
 #' @details
 #' Unlike XCI, an autosomal gene's two haplotypes have no external signal
 #' (silencing skew, an EM fit) to say which physical chromosome copy is
-#' "haplotype 1" versus "haplotype 2" -- see
-#' \code{\link{add_molecule_phase}} and `.orient_phase_blocks()` in the
-#' source for how XCI supplies that signal via `assign_xci()`'s anchors.
-#' `phase_snps()`'s block-local `H1`/`H2` labels are therefore reported
-#' as-is: consistent for every cell of one donor within a single phase
-#' block (both haplotypes come from that donor's own genome, so every cell
-#' shares them), but arbitrary and \strong{not comparable across blocks or
-#' across donors}. A gene whose heterozygous SNPs are not all spanned by a
-#' shared molecule splits into more than one block, and each block's `H1`
-#' is unrelated to any other block's `H1` -- there is no valid way to sum
-#' them into one gene-level count, so this function keeps them as separate
-#' rows rather than guessing an orientation.
+#' "haplotype 1" versus "haplotype 2"; see \code{\link{add_molecule_phase}}
+#' and `.orient_phase_blocks()` in the source for how XCI supplies that
+#' signal via `assign_xci()`'s anchors. `phase_snps()`'s block-local
+#' `H1`/`H2` labels are therefore reported as-is: consistent for every cell
+#' of one donor within a single phase block (both haplotypes come from that
+#' donor's own genome, so every cell shares them), but arbitrary and
+#' \strong{not comparable across blocks or across donors}. A gene whose
+#' heterozygous SNPs are not all spanned by a shared molecule splits into
+#' more than one block, and each block's `H1` is unrelated to any other
+#' block's `H1`. There is no valid way to sum them into one gene-level
+#' count, so this function keeps them as separate rows rather than guessing
+#' an orientation.
 #'
 #' A symmetric imbalance statistic, e.g. \code{pmin(h1_count, h2_count) /
 #' (h1_count + h2_count)}, is still meaningful per row and can be compared

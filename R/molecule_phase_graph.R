@@ -2,7 +2,7 @@
 # Read-backed phasing graph
 #
 # molecule_snp_alleles() (see molecule_extraction.R) gives one allele call per
-# (molecule, SNP). The functions here turn those calls into phase: phase_snps()
+# (molecule, SNP). The functions here turn those calls into phase. phase_snps()
 # builds a graph of SNP pairs linked by molecules that span both, accepts an
 # edge where the evidence for "same haplotype" or "opposite" is strong enough,
 # and reads off each connected component's relative phase from a spanning
@@ -16,8 +16,8 @@
 #' Two het SNPs observed on the same molecule sit on the same physical
 #' haplotype, so their alleles co-occur non-randomly: mostly REF/REF and
 #' ALT/ALT if the two REF alleles share a haplotype ("same"), or REF/ALT and
-#' ALT/REF if they do not ("opposite"). This is read-backed phasing, and long
-#' reads supply it directly, without needing a statistical fit.
+#' ALT/REF if they do not ("opposite"). This is read-backed phasing: long
+#' reads supply it directly, with no statistical fit needed.
 #'
 #' Orientation propagates across accepted edges, flipping on "opposite"
 #' links; each connected component becomes a phase block. Blocks cannot be
@@ -41,8 +41,8 @@
 #' The two factors read separately: \code{|2k - n|} is the \emph{margin},
 #' agreements minus disagreements, and \code{log((1-e)/e)} is what one
 #' molecule is worth in log-odds, fixed by \code{e}. Evidence is therefore
-#' additive per molecule -- each agreeing molecule adds that weight, each
-#' disagreeing one subtracts it -- and an edge is accepted once the total
+#' additive per molecule: each agreeing molecule adds that weight, each
+#' disagreeing one subtracts it, and an edge is accepted once the total
 #' reaches `min_llr`.
 #'
 #' This replaces the fraction cutoff used previously, which conflated how
@@ -60,41 +60,39 @@
 #' silent, so a gene's molecules there are near-monoallelic: the SNPs agree
 #' because one haplotype was sampled repeatedly, not because both were seen to
 #' co-occur. Ambient RNA and an undetected doublet are likewise properties of
-#' a barcode, flipping that cell's molecules together rather than one at a
+#' a barcode: they flip that cell's molecules together rather than one at a
 #' time. Molecules from a single cell therefore inflate \code{n} without
-#' adding proportionate evidence, and `min_cells` requires an edge to be
+#' adding proportionate evidence, so `min_cells` requires an edge to be
 #' corroborated across barcodes before it is accepted. It is a floor on
 #' independence, not a second likelihood: the LLR itself still counts
 #' molecules.
 #'
 #' The count is taken over the cells backing the relation the edge is accepted
 #' on, not over every cell spanning the pair. The two differ precisely when a
-#' cell dissents, and it is that case the distinction matters for: four
-#' molecules from one cell reading "same" alongside one from another reading
-#' "opposite" spans two barcodes but rests, as far as "same" is concerned, on
-#' a single cell. Counting the dissenter towards the relation it contradicts
-#' would let it vouch for exactly the single-cell edge `min_cells` exists to
-#' reject.
+#' cell dissents: four molecules from one cell reading "same" alongside one
+#' from another reading "opposite" spans two barcodes but rests, as far as
+#' "same" is concerned, on a single cell. Counting the dissenter towards the
+#' relation it contradicts would let it vouch for exactly the single-cell edge
+#' `min_cells` exists to reject.
 #'
-#' Note that \code{e} is treated as independent across molecules, which
-#' sequencing error is and contamination is not: ambient RNA is correlated
-#' within a cell and a doublet flips many molecules together. Where
-#' contamination rather than base-calling error dominates, the LLR is
-#' optimistic, so set \code{e} from observed discordance rather than from a
-#' sequencing-error prior, and treat `min_llr` as a threshold to calibrate
-#' rather than a p-value.
+#' \code{e} is treated as independent across molecules, which sequencing
+#' error is and contamination is not: ambient RNA is correlated within a cell
+#' and a doublet flips many molecules together. Where contamination rather
+#' than base-calling error dominates, the LLR is optimistic, so set \code{e}
+#' from observed discordance rather than from a sequencing-error prior, and
+#' treat `min_llr` as a threshold to calibrate rather than a p-value.
 #'
 #' @section Internally inconsistent blocks:
 #' Orientations are fixed by a spanning tree of each component, so any edge
-#' that closes a cycle is not needed to phase its endpoints -- but it is an
-#' independent prediction of the relation between them. Where such an edge
+#' that closes a cycle is not needed to phase its endpoints, but it is still
+#' an independent prediction of the relation between them. Where such an edge
 #' contradicts the orientations already assigned, no assignment of alleles to
 #' two haplotypes can satisfy every accepted edge at once. That is impossible
 #' for a diploid genome, so at least one edge in the block is wrong: most
 #' often a spurious link from ambient RNA, a mismapped paralogue, or an
 #' undetected doublet whose two genotypes are read as one.
 #'
-#' Such blocks are still returned, oriented by the spanning tree as before --
+#' Such blocks are still returned, oriented by the spanning tree as before:
 #' the contradiction says one edge is wrong, not which one, and dropping the
 #' block would discard its majority of sound edges along with the bad one.
 #' They are instead flagged \code{block_conflict = TRUE} with
@@ -321,36 +319,37 @@ phase_snps <- function(
 # allele is REF at that block's first-visited SNP). Orienting H1 to the X1/X2
 # labels used elsewhere in the package requires an external reference: a phase
 # block's own molecules cannot supply this, because a true escapee's expression
-# doesn't track XCI state by definition -- correlating a block against active_x
+# doesn't track XCI state by definition. Correlating a block against active_x
 # would fail on exactly the genes this feature exists to rescue, the same way
-# assign_xci()'s own keep_llr filter does. Anchors -- SNPs assign_xci() already
-# phased via the EM -- are used instead: whether H1 matches X1 or X2 is read off
+# assign_xci()'s own keep_llr filter does. Anchors (SNPs assign_xci() already
+# phased via the EM) are used instead: whether H1 matches X1 or X2 is read off
 # any anchor reachable in the same connected component, and propagated to the
 # rest of the block.
 #
-# Note what this does and does not buy. The *relative* phase within a block is
-# genuinely physical: two SNPs seen on one molecule are on one chromosome, and
-# that is observed, not inferred. The *absolute* orientation to X1/X2 is not --
-# it is inherited wholesale from the EM anchors, which are expression-derived
-# (see assign_xci()'s "Phase is inferred from expression, not genotyped"). A
-# gene whose EM phase is inverted therefore has its whole read-backed block
-# oriented to match that inversion, silently and without conflict, since every
-# anchor in the block agrees. Molecules are single transcripts, so blocks never
-# span genes and no cross-gene linkage exists to expose it. Read-backed phasing
-# refines phase within a gene; it does not replace DNA-based phasing.
+# What this does and does not buy: the *relative* phase within a block is
+# genuinely physical, since two SNPs seen on one molecule are on one
+# chromosome, and that is observed, not inferred. The *absolute* orientation
+# to X1/X2 is not: it is inherited wholesale from the EM anchors, which are
+# expression-derived (see assign_xci()'s "Phase is inferred from expression,
+# not genotyped"). A gene whose EM phase is inverted therefore has its whole
+# read-backed block oriented to match that inversion, silently and without
+# conflict, since every anchor in the block agrees. Molecules are single
+# transcripts, so blocks never span genes and no cross-gene linkage exists to
+# expose it. Read-backed phasing refines phase within a gene; it does not
+# replace DNA-based phasing.
 # ==============================================================================
 
 #' Orient read-backed phase blocks to X1/X2 using assign_xci()'s EM phase
 #'
 #' A `phase_snps()` block's H1/H2 labelling is arbitrary and local to that
-#' block; this maps it onto the same X1/X2 convention `assign_xci()` and
+#' block. This maps it onto the same X1/X2 convention `assign_xci()` and
 #' `haplotype_expression()` use, by finding SNPs in the block already phased
 #' by the EM ("anchors") and reading off whether H1 agrees with X1 or X2 at
-#' each. The chromosome the anchors are estimating is a single physical object,
-#' so independently derived anchors within one component should never
-#' legitimately disagree; where they do, this is treated as a signal to
-#' investigate (most likely a low-power or noisy per-gene EM fit, occasionally a
-#' spurious `phase_snps()` edge), not as evidence to average away.
+#' each. The chromosome the anchors are estimating is a single physical
+#' object, so independently derived anchors within one component should never
+#' legitimately disagree. Where they do, this is treated as a signal to
+#' investigate (most likely a low-power or noisy per-gene EM fit, occasionally
+#' a spurious `phase_snps()` edge), not as evidence to average away.
 #'
 #' Agreement among anchors is therefore evidence of a consistent fit, not of a
 #' correct one: the anchors are expression-derived, so a systematically inverted
