@@ -44,14 +44,14 @@ A tibble with columns `snp_id`, `phase_block`, `allele_on_x1_molecule`
 }
 \description{
 A `phase_snps()` block's H1/H2 labelling is arbitrary and local to that
-block; this maps it onto the same X1/X2 convention `assign_xci()` and
+block. This maps it onto the same X1/X2 convention `assign_xci()` and
 `haplotype_expression()` use, by finding SNPs in the block already phased
 by the EM ("anchors") and reading off whether H1 agrees with X1 or X2 at
-each. The chromosome the anchors are estimating is a single physical object,
-so independently derived anchors within one component should never
-legitimately disagree; where they do, this is treated as a signal to
-investigate (most likely a low-power or noisy per-gene EM fit, occasionally a
-spurious `phase_snps()` edge), not as evidence to average away.
+each. The chromosome the anchors are estimating is a single physical
+object, so independently derived anchors within one component should never
+legitimately disagree. Where they do, this is treated as a signal to
+investigate (most likely a low-power or noisy per-gene EM fit, occasionally
+a spurious `phase_snps()` edge), not as evidence to average away.
 }
 \details{
 Agreement among anchors is therefore evidence of a consistent fit, not of a

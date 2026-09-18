@@ -18,27 +18,16 @@ add_molecule_phase(
 )
 }
 \arguments{
-\item{x}{A SNPData object, required, that has already been fit by
-`assign_xci()` or `assign_xci_by_clonotype()` (see
-`.has_xci_diagnostics()`), with a `donor` column in `barcode_info`. Each
-donor's cells must all carry the same `library_id`, since a donor's BAM
-files are looked up by its library; a donor spanning two libraries is an
-error. `library_id` may instead be unset for every cell, in which case the
-object is treated as a single library, but a mix of labelled and
-unlabelled cells is an error.}
+\item{x}{A SNPData object, required, already fit by `assign_xci()` or
+`assign_xci_by_clonotype()` (see `.has_xci_diagnostics()`), with a
+`donor` column in `barcode_info`. See Details for per-donor library
+constraints.}
 
 \item{bam_files}{A named character vector or list, optional (default
 `NULL`, taking the paths recorded in `library_info(x)$bam_files` by
 `import_cellsnp()` or `add_library_bams()`, and erroring if none were),
 `library_id = path(s)`, giving the indexed BAM file or files holding that
-library's reads. Names must match `barcode_info(x)$library_id`, or, for an
-object with no library labels at all, be a single entry of any name.
-Several files under one library are pooled per molecule, so a molecule
-split across them votes once with all of its reads; listing the same file
-twice is an error, as it would double every count it contributes.
-Libraries whose donors are all `"doublet"` or `"unassigned"` contribute
-nothing, since neither is a real donor with its own genotype to phase
-against.}
+library's reads. See Details for naming and pooling rules.}
 
 \item{target_chrom}{Character scalar (default `"chrX"`, matching
 `assign_xci()`'s own restriction). Canonical chromosome to restrict
@@ -54,42 +43,69 @@ by molecules from at least `min_cells` distinct cells; see its
 \sQuote{Accepting an edge} section.}
 }
 \value{
-A SNPData object with `donor_snp_info` gaining the columns
-  `allele_on_x1_em` (the EM's own phase, unchanged, given its own name for
-  symmetry with `allele_on_x1_molecule`), `allele_on_x1_molecule`,
-  `phase_block`, `phase_source` (`"read_backed_propagated"`,
-  `"read_backed_anchor"` or `"em"`, recording how much molecule evidence
-  stands behind each SNP's phase; only the first is derived from molecules
-  spanning the SNP itself, and `startsWith(phase_source, "read_backed")`
-  selects the two block-based cases together), `phase_conflict`, and a
-  re-derived
-  `allele_on_x1`: the EM's value where present (so nothing downstream that
-  already reads `allele_on_x1` changes behaviour), else the molecule value,
-  else `NA` where `phase_conflict` is `TRUE`. Also carries a
-  `"molecule_calls"` attribute (a tibble with columns `donor`, `barcode`,
-  `umi`, `snp_id`, `allele`, `transcript_strand` (`"+"`/`"-"`/`NA`, the
-  molecule's inferred transcript strand, see
-  `.infer_bam_strand_orientation()` and `molecule_read_strand()`, used by
-  `haplotype_expression_by_molecule()` to resolve SNPs `assign_snp_genes()`
-  flagged `ambiguous`), the per-donor `molecule_snp_alleles()` output
-  already computed here), which `haplotype_expression_by_molecule()` reads
-  straight off the object it is given: nothing needs passing by hand or
-  re-extracting from the BAM. Being an attribute, it does not survive
-  operations that rebuild the object, so subset before this call rather than
-  after. A second attribute, `"bam_calibration"`,
-  records one row per BAM file scanned with columns `bam_file`,
-  `orientation` (`"sense"`/`"antisense"`/`NA` where it could not be
-  inferred), `n_ts_reads`, `concordance`, and `n_scanned`, so the strand
-  call applied to each file's molecules can be inspected after the fact.
+A SNPData object with `donor_snp_info` gaining these columns:
+  \itemize{
+    \item `allele_on_x1_em`: the EM's own phase, unchanged, under a name
+      that pairs with `allele_on_x1_molecule`.
+    \item `allele_on_x1_molecule`, `phase_block`, `phase_conflict`.
+    \item `phase_source`: `"read_backed_propagated"`,
+      `"read_backed_anchor"`, or `"em"`, recording how much molecule
+      evidence stands behind each SNP's phase. Only the first is derived
+      from molecules spanning the SNP itself;
+      `startsWith(phase_source, "read_backed")` selects the two
+      block-based cases together.
+    \item `allele_on_x1`, re-derived: the EM's value where present (so
+      nothing downstream that already reads `allele_on_x1` changes
+      behaviour), else the molecule value, else `NA` where
+      `phase_conflict` is `TRUE`.
+  }
+  The object also carries two attributes:
+  \itemize{
+    \item `"molecule_calls"`: a tibble with columns `donor`, `barcode`,
+      `umi`, `snp_id`, `allele`, and `transcript_strand`
+      (`"+"`/`"-"`/`NA`, the molecule's inferred transcript strand; see
+      `.infer_bam_strand_orientation()` and `molecule_read_strand()`).
+      It is the per-donor `molecule_snp_alleles()` output already
+      computed here, and lets `haplotype_expression_by_molecule()`
+      resolve SNPs `assign_snp_genes()` flagged `ambiguous` by reading it
+      straight off the object it is given, rather than re-extracting
+      from the BAM. Being an attribute, it does not survive operations
+      that rebuild the object, so subset before this call rather than
+      after.
+    \item `"bam_calibration"`: one row per BAM file scanned, with columns
+      `bam_file`, `orientation` (`"sense"`/`"antisense"`/`NA` where it
+      could not be inferred), `n_ts_reads`, `concordance`, and
+      `n_scanned`, so the strand call applied to each file's molecules
+      can be inspected afterwards.
+  }
 }
 \description{
-Extracts molecule-level allele calls from each library's BAM files, phases them
-with `phase_snps()`, orients the resulting blocks to X1/X2 against
-`assign_xci()`'s already-stored EM phase (see `.orient_phase_blocks()`),
-and writes the result into `donor_snp_info`. Additive only:
-`assign_xci()`'s own phase calls are never replaced, and
-`haplotype_expression()` is unaffected unless it is told to read the new
-columns.
+Sharpens `assign_xci()`'s expression-derived X1/X2 phase with direct
+evidence from long reads: molecules spanning two heterozygous SNPs settle
+whether they sit on the same physical haplotype, without relying on a
+statistical fit. Extracts molecule-level allele calls from each library's
+BAM files, phases them with `phase_snps()`, orients the resulting blocks
+to X1/X2 against `assign_xci()`'s already-stored EM phase (see
+`.orient_phase_blocks()`), and writes the result into `donor_snp_info`.
+}
+\details{
+The change is additive: `assign_xci()`'s own phase calls are never
+replaced, and `haplotype_expression()` is unaffected unless told to read
+the new columns.
+
+
+BAM files are looked up by library, not by donor, so each donor's cells
+must share one `library_id`: a donor spanning two libraries is an error,
+as is a `library_id` set for some cells but not others. Leaving
+`library_id` unset for every cell treats the object as a single library.
+
+`bam_files` names must match `barcode_info(x)$library_id`, or, for an
+object with no library labels at all, be a single entry of any name.
+Several files under one library are pooled per molecule, so a molecule
+split across them votes once with all of its reads; listing the same file
+twice is an error, since it would double every count it contributes.
+Libraries whose donors are all `"doublet"` or `"unassigned"` contribute
+nothing, since neither has a real genotype to phase against.
 }
 \section{Phase is inferred from expression, not genotyped}{
 

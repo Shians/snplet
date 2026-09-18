@@ -56,8 +56,8 @@ A tibble with columns `snp_id`, `block` (integer phase-block id,
 Two het SNPs observed on the same molecule sit on the same physical
 haplotype, so their alleles co-occur non-randomly: mostly REF/REF and
 ALT/ALT if the two REF alleles share a haplotype ("same"), or REF/ALT and
-ALT/REF if they do not ("opposite"). This is read-backed phasing, and long
-reads supply it directly, without needing a statistical fit.
+ALT/REF if they do not ("opposite"). This is read-backed phasing: long
+reads supply it directly, with no statistical fit needed.
 }
 \details{
 Orientation propagates across accepted edges, flipping on "opposite"
@@ -83,8 +83,8 @@ the binomial coefficient cancelling because it depends on the data alone.
 The two factors read separately: \code{|2k - n|} is the \emph{margin},
 agreements minus disagreements, and \code{log((1-e)/e)} is what one
 molecule is worth in log-odds, fixed by \code{e}. Evidence is therefore
-additive per molecule -- each agreeing molecule adds that weight, each
-disagreeing one subtracts it -- and an edge is accepted once the total
+additive per molecule: each agreeing molecule adds that weight, each
+disagreeing one subtracts it, and an edge is accepted once the total
 reaches `min_llr`.
 
 This replaces the fraction cutoff used previously, which conflated how
@@ -102,43 +102,41 @@ same two chromosome copies, and on the X the inactive copy is largely
 silent, so a gene's molecules there are near-monoallelic: the SNPs agree
 because one haplotype was sampled repeatedly, not because both were seen to
 co-occur. Ambient RNA and an undetected doublet are likewise properties of
-a barcode, flipping that cell's molecules together rather than one at a
+a barcode: they flip that cell's molecules together rather than one at a
 time. Molecules from a single cell therefore inflate \code{n} without
-adding proportionate evidence, and `min_cells` requires an edge to be
+adding proportionate evidence, so `min_cells` requires an edge to be
 corroborated across barcodes before it is accepted. It is a floor on
 independence, not a second likelihood: the LLR itself still counts
 molecules.
 
 The count is taken over the cells backing the relation the edge is accepted
 on, not over every cell spanning the pair. The two differ precisely when a
-cell dissents, and it is that case the distinction matters for: four
-molecules from one cell reading "same" alongside one from another reading
-"opposite" spans two barcodes but rests, as far as "same" is concerned, on
-a single cell. Counting the dissenter towards the relation it contradicts
-would let it vouch for exactly the single-cell edge `min_cells` exists to
-reject.
+cell dissents: four molecules from one cell reading "same" alongside one
+from another reading "opposite" spans two barcodes but rests, as far as
+"same" is concerned, on a single cell. Counting the dissenter towards the
+relation it contradicts would let it vouch for exactly the single-cell edge
+`min_cells` exists to reject.
 
-Note that \code{e} is treated as independent across molecules, which
-sequencing error is and contamination is not: ambient RNA is correlated
-within a cell and a doublet flips many molecules together. Where
-contamination rather than base-calling error dominates, the LLR is
-optimistic, so set \code{e} from observed discordance rather than from a
-sequencing-error prior, and treat `min_llr` as a threshold to calibrate
-rather than a p-value.
+\code{e} is treated as independent across molecules, which sequencing
+error is and contamination is not: ambient RNA is correlated within a cell
+and a doublet flips many molecules together. Where contamination rather
+than base-calling error dominates, the LLR is optimistic, so set \code{e}
+from observed discordance rather than from a sequencing-error prior, and
+treat `min_llr` as a threshold to calibrate rather than a p-value.
 }
 
 \section{Internally inconsistent blocks}{
 
 Orientations are fixed by a spanning tree of each component, so any edge
-that closes a cycle is not needed to phase its endpoints -- but it is an
-independent prediction of the relation between them. Where such an edge
+that closes a cycle is not needed to phase its endpoints, but it is still
+an independent prediction of the relation between them. Where such an edge
 contradicts the orientations already assigned, no assignment of alleles to
 two haplotypes can satisfy every accepted edge at once. That is impossible
 for a diploid genome, so at least one edge in the block is wrong: most
 often a spurious link from ambient RNA, a mismapped paralogue, or an
 undetected doublet whose two genotypes are read as one.
 
-Such blocks are still returned, oriented by the spanning tree as before --
+Such blocks are still returned, oriented by the spanning tree as before:
 the contradiction says one edge is wrong, not which one, and dropping the
 block would discard its majority of sound edges along with the bad one.
 They are instead flagged \code{block_conflict = TRUE} with

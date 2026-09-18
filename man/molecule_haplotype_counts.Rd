@@ -53,27 +53,31 @@ A tibble with one row per (`donor`, `gene_name`, `phase_block`),
   total.
 }
 \description{
-Extracts molecule-level allele calls from each donor's BAM files, phases
-heterozygous SNPs with `phase_snps()`, and counts each gene's molecules
-once per phase block they fall in -- the general-purpose counterpart to
-`haplotype_expression_by_molecule()` for genes with no X-inactivation
-signal to orient blocks against.
+Counts each gene's molecules once per read-backed phase block they fall
+in, for genes with no X-inactivation signal available to orient those
+blocks against — the general-purpose counterpart to
+`haplotype_expression_by_molecule()`. Extracts molecule-level allele calls
+from each donor's BAM files and phases heterozygous SNPs with
+`phase_snps()` to form the blocks.
 }
 \details{
 Unlike XCI, an autosomal gene's two haplotypes have no external signal
 (silencing skew, an EM fit) to say which physical chromosome copy is
-"haplotype 1" versus "haplotype 2" -- see
-\code{\link{add_molecule_phase}} and `.orient_phase_blocks()` in the
-source for how XCI supplies that signal via `assign_xci()`'s anchors.
+"haplotype 1" versus "haplotype 2"; see \code{\link{add_molecule_phase}}
+and `.orient_phase_blocks()` in the source for how XCI supplies that
+signal via `assign_xci()`'s anchors.
+
 `phase_snps()`'s block-local `H1`/`H2` labels are therefore reported
-as-is: consistent for every cell of one donor within a single phase
-block (both haplotypes come from that donor's own genome, so every cell
-shares them), but arbitrary and \strong{not comparable across blocks or
-across donors}. A gene whose heterozygous SNPs are not all spanned by a
-shared molecule splits into more than one block, and each block's `H1`
-is unrelated to any other block's `H1` -- there is no valid way to sum
-them into one gene-level count, so this function keeps them as separate
-rows rather than guessing an orientation.
+as-is: consistent for every cell of one donor within a single phase block
+(both haplotypes come from that donor's own genome, so every cell shares
+them), but arbitrary and \strong{not comparable across blocks or across
+donors}.
+
+A gene whose heterozygous SNPs are not all spanned by a shared molecule
+splits into more than one block, and each block's `H1` is unrelated to any
+other block's `H1`. There is no valid way to sum them into one gene-level
+count, so this function keeps them as separate rows rather than guessing
+an orientation.
 
 A symmetric imbalance statistic, e.g. \code{pmin(h1_count, h2_count) /
 (h1_count + h2_count)}, is still meaningful per row and can be compared

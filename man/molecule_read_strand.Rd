@@ -18,8 +18,8 @@ A tibble with one row per (`barcode`, `umi`) and columns
 \description{
 A molecule is one transcript, so every read behind it should agree on
 alignment strand; a majority vote absorbs the rare mismapped or chimeric
-read rather than letting one read decide. This is alignment strand only;
-converting it to the strand of the original transcript (needed to
+read rather than letting one read decide. This is alignment strand only.
+Converting it to the strand of the original transcript (needed to
 disambiguate a SNP overlapping genes on opposite strands) additionally
 requires the BAM's sense/antisense orientation, since some demultiplexing
 pipelines flip reads relative to the transcript (see
@@ -29,13 +29,13 @@ pipelines flip reads relative to the transcript (see
 A molecule whose reads tie between the two strands has no majority to read
 off and reports `NA`, matching how \code{\link{molecule_snp_alleles}}
 treats a tied allele vote. A tie means the evidence does not say which
-strand the transcript came from, and a strand picked between two equal
-options would be used downstream exactly as a resolved one:
-`haplotype_expression_by_molecule()` attributes an ambiguous SNP's molecule
-to whichever overlapping gene shares its strand, so a guess there sends the
-molecule's counts to a gene it may not have come from, while `NA` correctly
-withholds it. Note that a UMI-collapsed BAM gives one read per molecule and
-so cannot tie.
+strand the transcript came from; a strand picked between two equal options
+would be used downstream exactly as a resolved one, since
+`haplotype_expression_by_molecule()` attributes an ambiguous SNP's
+molecule to whichever overlapping gene shares its strand. A guess there
+sends the molecule's counts to a gene it may not have come from, while
+`NA` correctly withholds it. A UMI-collapsed BAM gives one read per
+molecule and so cannot tie.
 }
 \seealso{
 Other molecule-level allele counting functions:

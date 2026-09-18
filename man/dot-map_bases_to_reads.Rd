@@ -21,7 +21,6 @@ A tibble with columns `snp_idx` (position in `snp_gr`/`snp_ids`),
 }
 \description{
 Inlines the logic of `GenomicAlignments:::.pileLettersOnSingleRefAt` so the
-read of origin survives, precisely what is needed to group calls into
-molecules.
+read of origin survives — the piece needed to group calls into molecules.
 }
 \keyword{internal}

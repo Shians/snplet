@@ -61,7 +61,7 @@ A list of two tibbles:
 \description{
 Reads the region(s) spanned by `snp` from an indexed BAM and, for every
 alignment overlapping a target position, records the base and quality
-called there together with the read's identity, the information needed
+called there together with the read's identity — the information needed
 to later group calls into molecules and phase blocks. Equivalent in
 principle to `GenomicAlignments::pileLettersAt()`, but retains the read of
 origin, which that function discards.

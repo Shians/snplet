@@ -36,13 +36,13 @@ A list with `orientation` (`"sense"` or `"antisense"`,
 Demultiplexing tools such as Flexiplex reorient reads before alignment,
 and 5' vs 3' protocol data end up flipped in opposite directions (5'
 reads sense to the transcript, 3' reads its reverse complement), with no
-record of which happened left in the BAM. A spliced read's `ts:A:+/-` tag
-(the transcript strand minimap2 calls from the GT-AG splice-junction
-signal) is independent of that flip, so comparing a read's own alignment
-strand to its `ts` value reveals the orientation for that read; pooling
-this over enough `ts`-tagged reads calibrates the whole BAM, since one BAM
-is assumed to use a single protocol throughout. Reads are scanned in
-batches and the scan stops as soon as the split is decisive, rather than
-reading the whole file.
+record in the BAM of which happened. A spliced read's `ts:A:+/-` tag (the
+transcript strand minimap2 calls from the GT-AG splice-junction signal) is
+independent of that flip, so comparing a read's own alignment strand to
+its `ts` value reveals that read's orientation. Pooling this over enough
+`ts`-tagged reads calibrates the whole BAM, since one BAM is assumed to
+use a single protocol throughout. Reads are scanned in batches, and the
+scan stops as soon as the split is decisive rather than reading the whole
+file.
 }
 \keyword{internal}
