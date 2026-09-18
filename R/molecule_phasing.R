@@ -7,7 +7,7 @@
 # donor's molecules, and write the result onto a SNPData object or summarise
 # it into gene-level counts.
 #
-# add_molecule_phase() orients blocks to X1/X2 against assign_xci()'s EM
+# phase_from_molecules() orients blocks to X1/X2 against assign_xci()'s EM
 # phase and stores read-backed phase alongside it. molecule_haplotype_counts()
 # reports blocks in their own block-local H1/H2 labelling instead, for callers
 # that need molecule-level counts without committing to an absolute
@@ -179,7 +179,7 @@ assign_snp_genes <- function(snp_info, gene_anno) {
 #' @family molecule-level allele counting functions
 #' @family X-chromosome inactivation functions
 #' @export
-add_molecule_phase <- function(
+phase_from_molecules <- function(
     x,
     bam_files = NULL,
     target_chrom = "chrX",
@@ -294,7 +294,7 @@ add_molecule_phase <- function(
 
 # Resolves donor/library/BAM inputs, extracts per-molecule allele calls for
 # each donor's het SNPs, and read-backed phases them -- everything
-# add_molecule_phase() and molecule_haplotype_counts() both need before they
+# phase_from_molecules() and molecule_haplotype_counts() both need before they
 # part ways (the former orients blocks to X1/X2, the latter reports them
 # block-local). `snp_ids_fn(donor_id)` returns the het-SNP set to extract.
 #
@@ -506,7 +506,7 @@ add_molecule_phase <- function(
         stop(
             "Donor(s) with cells in more than one library: ",
             paste(unique(split_donors), collapse = ", "),
-            ". add_molecule_phase() looks up a donor's BAM files by its library, so each donor must sit in one."
+            ". phase_from_molecules() looks up a donor's BAM files by its library, so each donor must sit in one."
         )
     }
     donor_library
@@ -691,7 +691,7 @@ add_molecule_phase <- function(
 #'   at import, or \code{\link{infer_zygosity}}).
 #' @param bam_files A named character vector or list, optional (default
 #'   `NULL`, taking the paths recorded in `library_info(x)$bam_files`),
-#'   `library_id = path(s)`. See \code{\link{add_molecule_phase}}'s
+#'   `library_id = path(s)`. See \code{\link{phase_from_molecules}}'s
 #'   `bam_files` argument for the full matching rules; the same rules apply
 #'   here.
 #' @param target_chrom Character vector, optional (default `NULL`, every
@@ -718,7 +718,7 @@ add_molecule_phase <- function(
 #' @details
 #' Unlike XCI, an autosomal gene's two haplotypes have no external signal
 #' (silencing skew, an EM fit) to say which physical chromosome copy is
-#' "haplotype 1" versus "haplotype 2"; see \code{\link{add_molecule_phase}}
+#' "haplotype 1" versus "haplotype 2"; see \code{\link{phase_from_molecules}}
 #' and `.orient_phase_blocks()` in the source for how XCI supplies that
 #' signal via `assign_xci()`'s anchors.
 #'

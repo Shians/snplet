@@ -113,7 +113,7 @@
 #' escape_result <- test_escape(snp_data)
 #'
 #' # Uses read-backed molecule counts automatically once they are available
-#' snp_data <- add_molecule_phase(snp_data, bam_files = c(lib1 = "lib1.bam"))
+#' snp_data <- phase_from_molecules(snp_data, bam_files = c(lib1 = "lib1.bam"))
 #' escape_result <- test_escape(snp_data)
 #' }
 setGeneric(
@@ -297,7 +297,7 @@ setMethod("test_escape", signature(x = "SNPData"), function(x, p = NULL, rho = N
 #'
 #' Which source was used is logged and returned as \code{count_source} rather
 #' than left implicit, since it depends on the object's state: the same call on
-#' the same data before and after \code{\link{add_molecule_phase}} gives
+#' the same data before and after \code{\link{phase_from_molecules}} gives
 #' different counts, and the column is what makes that visible in the result.
 #'
 #' @param x A SNPData object with stored XCI diagnostics, required.

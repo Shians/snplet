@@ -299,7 +299,7 @@ as_singlecellexperiment <- function(snpdata) {
 #'
 #' \code{\link{haplotype_expression}} (or
 #' \code{\link{haplotype_expression_by_molecule}}, used automatically once
-#' \code{\link{add_molecule_phase}} has run, matching \code{\link{test_escape}}'s
+#' \code{\link{phase_from_molecules}} has run, matching \code{\link{test_escape}}'s
 #' own source selection) excludes a (donor, gene) pair with no qualifying SNP
 #' entirely, rather than reporting zero coverage for it — so the gene x donor
 #' grid is not dense before this function pads it. A missing pair becomes

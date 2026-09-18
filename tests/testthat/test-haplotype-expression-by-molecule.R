@@ -17,7 +17,7 @@ library(Matrix)
 # One donor, 4 cells (2 X1-active, 2 X2-active). GENE1 has three heterozygous
 # SNPs: snpA/snpB share phase_block 1 (the dominant block, more molecules),
 # snpC sits alone in phase_block 2 (stranded). allele_on_x1 = "REF" for all
-# three (i.e. REF reads = X1, ALT reads = X2), simulating post-add_molecule_phase()
+# three (i.e. REF reads = X1, ALT reads = X2), simulating post-phase_from_molecules()
 # state without needing a real BAM or EM fit.
 make_molecule_hap_fixture <- function() {
     ref <- matrix(0L, nrow = 3, ncol = 4)
@@ -82,7 +82,7 @@ make_molecule_hap_fixture <- function() {
 }
 
 # haplotype_expression_by_molecule() reads its molecule calls off the object,
-# where add_molecule_phase() would have left them; these fixtures skip the BAM
+# where phase_from_molecules() would have left them; these fixtures skip the BAM
 # extraction and attach the calls directly.
 with_molecule_calls <- function(obj, molecule_calls) {
     attr(obj, "molecule_calls") <- molecule_calls
@@ -105,7 +105,7 @@ test_that("haplotype_expression_by_molecule() errors when no XCI diagnostics are
 test_that("haplotype_expression_by_molecule() errors when molecule phase has not been added", {
     fixture <- make_molecule_hap_fixture()
     # Strip the phase_block/allele_on_x1_molecule columns to simulate a SNPData
-    # that only ever had assign_xci() run, not add_molecule_phase()
+    # that only ever had assign_xci() run, not phase_from_molecules()
     obj <- fixture$obj
     donor_snp_info <- donor_snp_info(obj)
     donor_snp_info$phase_block <- NULL
@@ -114,7 +114,7 @@ test_that("haplotype_expression_by_molecule() errors when molecule phase has not
     # Verify a clear error names the missing prerequisite step
     expect_error(
         haplotype_expression_by_molecule(obj),
-        "Run add_molecule_phase"
+        "Run phase_from_molecules"
     )
 })
 
@@ -122,7 +122,7 @@ test_that("haplotype_expression_by_molecule() errors when the object carries no 
     fixture <- make_molecule_hap_fixture()
 
     # The fixture has stored phase but no "molecule_calls" attribute, as an
-    # object subset or rebuilt after add_molecule_phase() would be.
+    # object subset or rebuilt after phase_from_molecules() would be.
     # Verify the error names the step that attaches them rather than returning
     # an empty result
     expect_error(

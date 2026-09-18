@@ -30,11 +30,14 @@
 #' @param clonotype_column Character scalar (default \code{"raw_clonotype_id"}).
 #'   Name of the column in \code{vdj_file} containing clonotype information
 #'   (only used if \code{vdj_file} is provided).
-#' @param bam_files Character vector, optional (default \code{NULL}, recording
-#'   no paths). The BAM file or files this cellSNP run was made from, stored
-#'   against \code{library_id} in \code{library_info} so that
-#'   \code{\link{add_molecule_phase}} can find them without being told again.
-#'   Paths are kept as given and only checked when read.
+#' @param bam_files An unnamed character vector, optional (default \code{NULL},
+#'   recording no paths). The BAM file or files this cellSNP run was made from.
+#'   Requires \code{library_id} (this whole vector is stored against it as one
+#'   library's paths in \code{library_info}, via \code{\link{add_library_bams}}),
+#'   so that \code{\link{phase_from_molecules}} can find them without being told
+#'   again. Must not be named: this call covers a single library, so any names
+#'   on \code{bam_files} itself would be silently discarded rather than used as
+#'   per-library keys; each path is checked to exist.
 #'
 #' @return A SNPData object
 #'
@@ -133,6 +136,19 @@ import_cellsnp <- function(
         stop(
             "bam_files was supplied but library_id was not: BAM paths are recorded against ",
             "library_id in library_info, so set library_id = to use bam_files."
+        )
+    }
+
+    # One import call covers one library, so bam_files is keyed by library_id
+    # automatically below; any names on bam_files itself would be silently
+    # discarded by that wrapping (add_library_bams()'s per-library keys come
+    # from the outer list this constructs, not from bam_files' own names),
+    # so a named vector is rejected here rather than left to fail silently.
+    if (!is.null(bam_files) && !is.null(names(bam_files))) {
+        stop(
+            "bam_files must be an unnamed character vector of path(s) for the ",
+            "single library named by library_id; names on bam_files are ignored ",
+            "and would be silently dropped."
         )
     }
 
@@ -282,7 +298,7 @@ import_cellsnp <- function(
     )
 
     # Import is when a BAM path is actually known -- this cellSNP run was made
-    # from it -- so recording it here means add_molecule_phase() never has to
+    # from it -- so recording it here means phase_from_molecules() never has to
     # be told again, and the path survives every later merge.
     if (!is.null(bam_files)) {
         snp_data <- add_library_bams(snp_data, stats::setNames(list(bam_files), library_id))
@@ -366,13 +382,14 @@ import_cellsnp <- function(
 #'
 #' A faster drop-in for \code{Matrix::readMM()} on the plain-text
 #' \code{.mtx} files cellSNP-lite produces: parses the coordinate triples
-#' with \code{readr::read_delim()} (a vectorised C++ parser) rather than
-#' \code{readMM()}'s \code{scan()}-based reader, which measurably speeds up
-#' import on cellSNP-lite's multi-hundred-megabyte matrices. Restricted to
-#' the coordinate/integer-or-real \code{%%MatrixMarket} format cellSNP-lite
-#' writes (a banner line, an arbitrary number of \code{%} comment lines, then
-#' \code{nrow ncol nnz}); a general MatrixMarket file (symmetric, complex,
-#' pattern, or array format) should still use \code{Matrix::readMM()}.
+#' with \code{readr::read_delim()} (a vectorised C++ parser) rather than the
+#' \code{scan()}-based reader that \code{Matrix::readMM()} uses, which
+#' measurably speeds up import on cellSNP-lite's multi-hundred-megabyte
+#' matrices. Restricted to the coordinate, integer-or-real MatrixMarket format
+#' cellSNP-lite writes (a banner line, an arbitrary number of comment lines
+#' starting with a percent sign, then \code{nrow ncol nnz}); a general
+#' MatrixMarket file (symmetric, complex, pattern, or array format) should
+#' still use \code{Matrix::readMM()}.
 #'
 #' @param mtx_file Path to a \code{.mtx} file
 #'

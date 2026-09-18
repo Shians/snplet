@@ -545,7 +545,7 @@ setReplaceMethod("snp_gene_map", signature(x = "SNPData", value = "data.frame"),
 #' Record the BAM file(s) each library's reads came from
 #'
 #' Attaches BAM paths to an object's `library_info`, where
-#' `add_molecule_phase()` can find them without being told again. Paths are
+#' `phase_from_molecules()` can find them without being told again. Paths are
 #' recorded per library rather than per donor because that is what they are a
 #' property of: one library's BAM holds all of its donors' cells.
 #'

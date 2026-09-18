@@ -73,11 +73,11 @@ row for that read: a genuine no-call rather than a coerced base. Only
 }
 \seealso{
 Other molecule-level allele counting functions:
-\code{\link[=add_molecule_phase]{add_molecule_phase()}},
 \code{\link[=assign_snp_genes]{assign_snp_genes()}},
 \code{\link[=molecule_haplotype_counts]{molecule_haplotype_counts()}},
 \code{\link[=molecule_read_strand]{molecule_read_strand()}},
 \code{\link[=molecule_snp_alleles]{molecule_snp_alleles()}},
+\code{\link[=phase_from_molecules]{phase_from_molecules()}},
 \code{\link[=phase_snps]{phase_snps()}}
 }
 \concept{molecule-level allele counting functions}

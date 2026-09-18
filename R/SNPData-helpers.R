@@ -277,7 +277,7 @@
 }
 
 # Normalises the `bam_files` argument shared by import_cellsnp(),
-# add_library_bams(), and add_molecule_phase() into a named list of character
+# add_library_bams(), and phase_from_molecules() into a named list of character
 # vectors, one element per library.
 .as_library_bam_list <- function(bam_files, arg_name = "bam_files") {
     if (length(bam_files) == 0) {

@@ -22,7 +22,7 @@ The SNPData object with `library_info(x)$bam_files` updated.
 }
 \description{
 Attaches BAM paths to an object's `library_info`, where
-`add_molecule_phase()` can find them without being told again. Paths are
+`phase_from_molecules()` can find them without being told again. Paths are
 recorded per library rather than per donor because that is what they are a
 property of: one library's BAM holds all of its donors' cells.
 }

@@ -36,7 +36,7 @@ per cell.
 
 \code{\link{haplotype_expression}} (or
 \code{\link{haplotype_expression_by_molecule}}, used automatically once
-\code{\link{add_molecule_phase}} has run, matching \code{\link{test_escape}}'s
+\code{\link{phase_from_molecules}} has run, matching \code{\link{test_escape}}'s
 own source selection) excludes a (donor, gene) pair with no qualifying SNP
 entirely, rather than reporting zero coverage for it — so the gene x donor
 grid is not dense before this function pads it. A missing pair becomes
@@ -93,11 +93,11 @@ fit <- edgeR::glmFit(y, design)
 }
 \seealso{
 Other X-chromosome inactivation functions:
-\code{\link[=add_molecule_phase]{add_molecule_phase()}},
 \code{\link[=assign_xci]{assign_xci()}},
 \code{\link[=assign_xci_by_clonotype]{assign_xci_by_clonotype()}},
 \code{\link[=haplotype_expression]{haplotype_expression()}},
 \code{\link[=haplotype_expression_by_molecule]{haplotype_expression_by_molecule()}},
+\code{\link[=phase_from_molecules]{phase_from_molecules()}},
 \code{\link[=plot_xci_heatmap]{plot_xci_heatmap()}},
 \code{\link[=test_escape]{test_escape()}},
 \code{\link[=xci_assignments]{xci_assignments()}},

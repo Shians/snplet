@@ -38,7 +38,7 @@
 * Added detection of internally inconsistent phase blocks to `phase_snps()`, reported as the
   new `n_block_conflicts` and `block_conflict` columns. An edge closing a cycle predicts a
   relation the block has already fixed; where the two disagree no phasing can satisfy every
-  edge at once, which previously passed silently. `add_molecule_phase()` folds this into
+  edge at once, which previously passed silently. `phase_from_molecules()` folds this into
   `phase_conflict`
 * Changed `phase_source` in `donor_snp_info` from the constant `"read_backed"` to one of
   `"read_backed_propagated"` (phase observed on molecules spanning the SNP and an anchor),
@@ -107,7 +107,7 @@
 
 * Added read-backed molecule-level phasing: `extract_snp_calls()` for per-(molecule, SNP)
   allele calls from an indexed BAM, `molecule_snp_alleles()`, `phase_snps()` for phasing
-  heterozygous SNPs from the molecules that span them, and `add_molecule_phase()` to orient
+  heterozygous SNPs from the molecules that span them, and `phase_from_molecules()` to orient
   the resulting blocks against the EM phase and store them on the object
 * Added `haplotype_expression_by_molecule()`, which counts each molecule once per gene instead
   of once per SNP it covers

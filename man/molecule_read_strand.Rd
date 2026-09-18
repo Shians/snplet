@@ -39,11 +39,11 @@ molecule and so cannot tie.
 }
 \seealso{
 Other molecule-level allele counting functions:
-\code{\link[=add_molecule_phase]{add_molecule_phase()}},
 \code{\link[=assign_snp_genes]{assign_snp_genes()}},
 \code{\link[=extract_snp_calls]{extract_snp_calls()}},
 \code{\link[=molecule_haplotype_counts]{molecule_haplotype_counts()}},
 \code{\link[=molecule_snp_alleles]{molecule_snp_alleles()}},
+\code{\link[=phase_from_molecules]{phase_from_molecules()}},
 \code{\link[=phase_snps]{phase_snps()}}
 }
 \concept{molecule-level allele counting functions}

@@ -162,7 +162,7 @@
 # side: two cellSNP runs over the same library legitimately share a BAM, and a
 # library present in both objects has the same reads behind it either way. A
 # path that is genuinely wrong is caught where it is used, by
-# add_molecule_phase()'s existence and duplicate checks, rather than guessed at
+# phase_from_molecules()'s existence and duplicate checks, rather than guessed at
 # here.
 .merge_library_bams <- function(merged, x, y) {
     if (nrow(merged@library_info) == 0) {

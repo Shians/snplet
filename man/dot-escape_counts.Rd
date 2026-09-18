@@ -23,7 +23,7 @@ per gene. Both are returned at one row per (donor, gene).
 \details{
 Which source was used is logged and returned as \code{count_source} rather
 than left implicit, since it depends on the object's state: the same call on
-the same data before and after \code{\link{add_molecule_phase}} gives
+the same data before and after \code{\link{phase_from_molecules}} gives
 different counts, and the column is what makes that visible in the result.
 }
 \keyword{internal}

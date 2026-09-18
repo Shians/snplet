@@ -24,7 +24,7 @@ at import, or \code{\link{infer_zygosity}}).}
 
 \item{bam_files}{A named character vector or list, optional (default
 `NULL`, taking the paths recorded in `library_info(x)$bam_files`),
-`library_id = path(s)`. See \code{\link{add_molecule_phase}}'s
+`library_id = path(s)`. See \code{\link{phase_from_molecules}}'s
 `bam_files` argument for the full matching rules; the same rules apply
 here.}
 
@@ -63,7 +63,7 @@ from each donor's BAM files and phases heterozygous SNPs with
 \details{
 Unlike XCI, an autosomal gene's two haplotypes have no external signal
 (silencing skew, an EM fit) to say which physical chromosome copy is
-"haplotype 1" versus "haplotype 2"; see \code{\link{add_molecule_phase}}
+"haplotype 1" versus "haplotype 2"; see \code{\link{phase_from_molecules}}
 and `.orient_phase_blocks()` in the source for how XCI supplies that
 signal via `assign_xci()`'s anchors.
 
@@ -95,11 +95,11 @@ hap_blocks$maf <- pmin(hap_blocks$h1_count, hap_blocks$h2_count) / hap_blocks$co
 }
 \seealso{
 Other molecule-level allele counting functions:
-\code{\link[=add_molecule_phase]{add_molecule_phase()}},
 \code{\link[=assign_snp_genes]{assign_snp_genes()}},
 \code{\link[=extract_snp_calls]{extract_snp_calls()}},
 \code{\link[=molecule_read_strand]{molecule_read_strand()}},
 \code{\link[=molecule_snp_alleles]{molecule_snp_alleles()}},
+\code{\link[=phase_from_molecules]{phase_from_molecules()}},
 \code{\link[=phase_snps]{phase_snps()}}
 }
 \concept{molecule-level allele counting functions}

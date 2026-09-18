@@ -447,7 +447,7 @@ test_that("test_escape() on a SNPData reports where the counts came from", {
     result <- test_escape(make_escape_fixture())
 
     # Without stored molecule phase the counts come from per-SNP reads, and the
-    # column says so: the same call on the same data after add_molecule_phase()
+    # column says so: the same call on the same data after phase_from_molecules()
     # counts differently, so the source cannot be left implicit
     expect_equal(unique(result$count_source), "snp")
 })

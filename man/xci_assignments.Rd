@@ -57,7 +57,7 @@ follow:
 
 Separating these cases needs phase independent of expression (DNA-based
 genotyping, or trio/population phasing), which this package does not
-have. \code{\link{add_molecule_phase}} supplies true physical linkage
+have. \code{\link{phase_from_molecules}} supplies true physical linkage
 between SNPs co-observed on one molecule, but a molecule is a single
 transcript: it cannot link across genes, and its blocks are still
 oriented to X1/X2 using the expression-derived fit, so it refines phase
@@ -66,12 +66,12 @@ within a gene without escaping this constraint.
 
 \seealso{
 Other X-chromosome inactivation functions:
-\code{\link[=add_molecule_phase]{add_molecule_phase()}},
 \code{\link[=as_escape_experiment]{as_escape_experiment()}},
 \code{\link[=assign_xci]{assign_xci()}},
 \code{\link[=assign_xci_by_clonotype]{assign_xci_by_clonotype()}},
 \code{\link[=haplotype_expression]{haplotype_expression()}},
 \code{\link[=haplotype_expression_by_molecule]{haplotype_expression_by_molecule()}},
+\code{\link[=phase_from_molecules]{phase_from_molecules()}},
 \code{\link[=plot_xci_heatmap]{plot_xci_heatmap()}},
 \code{\link[=test_escape]{test_escape()}},
 \code{\link[=xci_haplotypes]{xci_haplotypes()}}

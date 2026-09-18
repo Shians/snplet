@@ -295,6 +295,20 @@ test_that("import_cellsnp() with bam_files but no library_id errors clearly", {
     )
 })
 
+test_that("import_cellsnp() rejects a named bam_files vector", {
+    cellsnp_dir <- system.file("extdata/example_snpdata", package = "snplet")
+    gene_annotation <- data.frame(chrom = "chr1", start = 1, end = 1e9, gene_name = "dummy")
+
+    # Verify names on bam_files are rejected rather than silently discarded --
+    # one import call covers a single library, so per-element names (which might
+    # look like a way to key paths by library, mirroring add_library_bams())
+    # would otherwise be dropped without warning by the internal library_id wrap
+    expect_error(
+        import_cellsnp(cellsnp_dir, gene_annotation, library_id = "lib_A", bam_files = c(run1 = "dummy.bam")),
+        "bam_files must be an unnamed character vector"
+    )
+})
+
 test_that("import_cellsnp completes without error and returns a populated SNPData object", {
     # Verify import completes without error
     snp_data <- expect_no_error(import_example_snpdata())

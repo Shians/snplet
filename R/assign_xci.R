@@ -64,7 +64,7 @@
 #'
 #' Separating these cases needs phase independent of expression (DNA-based
 #' genotyping, or trio/population phasing), which this package does not
-#' have. \code{\link{add_molecule_phase}} supplies true physical linkage
+#' have. \code{\link{phase_from_molecules}} supplies true physical linkage
 #' between SNPs co-observed on one molecule, but a molecule is a single
 #' transcript: it cannot link across genes, and its blocks are still
 #' oriented to X1/X2 using the expression-derived fit, so it refines phase
