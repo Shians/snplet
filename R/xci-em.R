@@ -1,3 +1,18 @@
+# Per-donor X-chromosome inactivation (XCI) inference.
+#
+# .filter_to_informative_het_snps() narrows a donor's SNPData down to one
+# heterozygous chrX SNP per gene. .infer_xci() then fits a beta-binomial
+# mixture model by EM over those genes' REF/ALT counts, jointly calling each
+# gene's phase (which allele sits on the active X) and escape fraction, and
+# each cell's active-X identity; it takes the best of several random
+# restarts and flags genes that turned out uninformative for the call.
+# .rephase_all_genes() is a sibling driver that re-fits phase and escape for
+# every gene, including ones .infer_xci() excluded, against the cell
+# assignment .infer_xci() already froze — so excluded genes are still scored
+# without influencing that assignment. Both drivers share the EM machinery
+# (.run_em() and its E/M-steps) and the beta-binomial kernel at the bottom of
+# the file.
+
 .filter_to_informative_het_snps <- function(snp_data, donor = NULL) {
     # Takes a single donor's SNPData and filters it down to chrX SNPs, then to
     # heterozygous SNPs, then to one SNP per gene (the highest-coverage one).
@@ -136,6 +151,32 @@
     fit
 }
 
+.filter_uninformative_genes <- function(dat, n_genes, h_g, pi_g, rho, post, mad_threshold = 2) {
+    # n_genes is the total gene count, including any already dropped by
+    # .filter_outlier_genes. Drops genes with a non-positive log-likelihood
+    # ratio (.compute_gene_llr), then drops genes with an outlying escape
+    # fraction by robust z-score against mad_threshold. This only decides
+    # xci_informative status and does not change the posterior. Returns a
+    # logical vector of length n_genes.
+    gene_llr <- .compute_gene_llr(dat, post, h_g, pi_g, rho)
+
+    # Genes absent from dat have no observations above min_cov — exclude them
+    keep_llr <- rep(FALSE, n_genes)
+    keep_llr[gene_llr$gene[gene_llr$llr > 0]] <- TRUE # LLR > 0: data supports current assignment
+
+    # Secondary pass: remove genes with unusually high escape fraction relative
+    # to the rest of the sample. Guard against zero MAD (all pi_g identical).
+    pi_mad <- stats::mad(pi_g)
+    keep_pi <- if (pi_mad > 0) {
+        # Robust z-score relative to the sample's own escape distribution
+        (pi_g - stats::median(pi_g)) / pi_mad <= mad_threshold
+    } else {
+        rep(TRUE, n_genes) # all pi_g identical — no outliers possible
+    }
+
+    keep_llr & keep_pi
+}
+
 .compute_gene_llr <- function(dat, post, h_g, pi_g, rho) {
     # Takes the long observation tibble (.pivot_counts_to_long), the per-cell
     # posterior (.e_step), and the fitted phase, escape fraction, and
@@ -163,30 +204,106 @@
         dplyr::summarise(llr = sum(llr), .groups = "drop")
 }
 
-.filter_uninformative_genes <- function(dat, n_genes, h_g, pi_g, rho, post, mad_threshold = 2) {
-    # n_genes is the total gene count, including any already dropped by
-    # .filter_outlier_genes. Drops genes with a non-positive log-likelihood
-    # ratio (.compute_gene_llr), then drops genes with an outlying escape
-    # fraction by robust z-score against mad_threshold. This only decides
-    # xci_informative status and does not change the posterior. Returns a
-    # logical vector of length n_genes.
-    gene_llr <- .compute_gene_llr(dat, post, h_g, pi_g, rho)
+.filter_outlier_genes <- function(ref_mat, alt_mat, min_cells = 10, min_cov = 1, mad_threshold = 2) {
+    # The pre-EM gene filter. Takes genes x cells REF/ALT count matrices,
+    # drops genes covered in fewer than min_cells cells, then drops genes
+    # whose REF/ALT skew, folded to the range [0.5, 1], is an outlier by
+    # robust z-score against mad_threshold. Returns a logical vector of length
+    # nrow(ref_mat).
 
-    # Genes absent from dat have no observations above min_cov — exclude them
-    keep_llr <- rep(FALSE, n_genes)
-    keep_llr[gene_llr$gene[gene_llr$llr > 0]] <- TRUE # LLR > 0: data supports current assignment
+    # Coverage per cell-gene pair
+    n_mat <- ref_mat + alt_mat
+    covered <- n_mat >= min_cov
 
-    # Secondary pass: remove genes with unusually high escape fraction relative
-    # to the rest of the sample. Guard against zero MAD (all pi_g identical).
-    pi_mad <- stats::mad(pi_g)
-    keep_pi <- if (pi_mad > 0) {
-        # Robust z-score relative to the sample's own escape distribution
-        (pi_g - stats::median(pi_g)) / pi_mad <= mad_threshold
+    # Per gene: how many cells have sufficient coverage, and how many of those favour REF. A
+    # tied cell (ref == alt) is split 0.5/0.5 rather than counted toward neither allele: the
+    # strict ref > alt count silently pulls a gene's skew toward 0.5 by an amount that depends
+    # on how many cells happen to tie, which is worst at low coverage — precisely where it is
+    # most needed to tell moderate escape apart from a true 1:1 gene.
+    n_expressing <- rowSums(covered)
+    ref_majority <- rowSums(covered & (ref_mat > alt_mat)) + 0.5 * rowSums(covered & (ref_mat == alt_mat))
+
+    # Drop genes seen in too few cells — not enough information to estimate allelic skew
+    passes_count_filter <- n_expressing >= min_cells
+
+    # Allelic skew: fraction of covered cells favouring REF, folded to [0.5, 1]
+    # so that genes skewed toward either allele score equally high
+    skew <- ref_majority[passes_count_filter] / n_expressing[passes_count_filter]
+    skew <- pmax(skew, 1 - skew)
+
+    # Robust z-score: genes with unusually extreme skew relative to the rest are
+    # likely systematic (e.g. mapping bias, escape from XCI) rather than informative.
+    # Guard against zero MAD (all skew values identical).
+    skew_mad <- stats::mad(skew)
+    passes_skew_filter <- if (skew_mad > 0) {
+        z <- (skew - stats::median(skew)) / skew_mad
+        abs(z) <= mad_threshold
     } else {
-        rep(TRUE, n_genes) # all pi_g identical — no outliers possible
+        rep(TRUE, length(skew)) # all skew identical — no outliers possible
     }
 
-    keep_llr & keep_pi
+    keep <- rep(FALSE, nrow(ref_mat))
+    keep[passes_count_filter] <- passes_skew_filter
+    keep
+}
+
+.pivot_counts_to_long <- function(ref_mat, alt_mat, min_cov = 1) {
+    # Takes genes x cells REF/ALT count matrices and pivots them to one row
+    # per cell-gene pair with at least min_cov total reads. Returns a tibble
+    # with one row per covered pair, giving the gene and cell matrix indices,
+    # the ref and alt counts, and their sum n.
+    n_mat <- ref_mat + alt_mat
+    # Matrix::which handles sparse lgCMatrix; base which() does not dispatch S4
+    idx <- Matrix::which(n_mat >= min_cov, arr.ind = TRUE)
+    tibble::tibble(
+        gene = idx[, 1],
+        cell = idx[, 2],
+        ref = ref_mat[idx],
+        alt = alt_mat[idx],
+        n = n_mat[idx]
+    )
+}
+
+.rephase_all_genes <- function(ref_mat, alt_mat, post, rho, min_cov = 1, max_iter = 50, tol = 1e-4) {
+    # Re-fits phase and escape fraction for every gene against a frozen cell
+    # assignment, so genes dropped from the EM as uninformative for calling
+    # active-X are still phased and scored without influencing that call.
+    # Alternates .m_step_phase and .m_step_pi with no E-step. Takes the full,
+    # unfiltered per-donor count matrices, the frozen per-cell posterior from
+    # the informative-gene fit (xci_result$post), and the overdispersion from
+    # that fit (xci_result$rho). Returns a list with h_g (integer phase, 0
+    # meaning REF is on X1) and pi_g (numeric escape fraction), both of length
+    # nrow(ref_mat); both are NA for genes with no covered cell.
+    n_genes <- nrow(ref_mat)
+    dat <- .pivot_counts_to_long(ref_mat, alt_mat, min_cov)
+    # Only cells the informative-gene fit actually scored carry a posterior; an unscored cell
+    # would default to 0 in .m_step_phase's post lookup, silently reading as "certainly
+    # X2-active" and corrupting phase for genes uniquely covered there.
+    dat <- dplyr::filter(dat, cell %in% post$cell)
+
+    h_g <- rep(0L, n_genes)
+    pi_g <- rep(0.05, n_genes)
+    if (nrow(dat) > 0) {
+        dedup <- .build_ll_dedup(dat)
+        for (iter in seq_len(max_iter)) {
+            ll <- .betabinom_ll_both(dedup, pi_g, rho)
+            h_g <- .m_step_phase(dat, post, h_g, ll)
+            pi_g_new <- .m_step_pi(dat, post, h_g)
+            converged <- max(abs(pi_g_new - pi_g)) < tol
+            pi_g <- pi_g_new
+            if (converged) {
+                break
+            }
+        }
+    }
+
+    # Genes absent from dat have no covered cell and cannot be phased at all, unlike the 0.05
+    # filler .m_step_pi otherwise supplies for bookkeeping.
+    covered <- seq_len(n_genes) %in% unique(dat$gene)
+    list(
+        h_g = ifelse(covered, h_g, NA_integer_),
+        pi_g = ifelse(covered, pi_g, NA_real_)
+    )
 }
 
 .run_em <- function(dat, n_genes, max_iter = 50, tol = 1e-4, init_seed = 1) {
@@ -415,48 +532,6 @@
     stats::optimize(neg_expected_ll, interval = rho_bounds)$minimum
 }
 
-.rephase_all_genes <- function(ref_mat, alt_mat, post, rho, min_cov = 1, max_iter = 50, tol = 1e-4) {
-    # Re-fits phase and escape fraction for every gene against a frozen cell
-    # assignment, so genes dropped from the EM as uninformative for calling
-    # active-X are still phased and scored without influencing that call.
-    # Alternates .m_step_phase and .m_step_pi with no E-step. Takes the full,
-    # unfiltered per-donor count matrices, the frozen per-cell posterior from
-    # the informative-gene fit (xci_result$post), and the overdispersion from
-    # that fit (xci_result$rho). Returns a list with h_g (integer phase, 0
-    # meaning REF is on X1) and pi_g (numeric escape fraction), both of length
-    # nrow(ref_mat); both are NA for genes with no covered cell.
-    n_genes <- nrow(ref_mat)
-    dat <- .pivot_counts_to_long(ref_mat, alt_mat, min_cov)
-    # Only cells the informative-gene fit actually scored carry a posterior; an unscored cell
-    # would default to 0 in .m_step_phase's post lookup, silently reading as "certainly
-    # X2-active" and corrupting phase for genes uniquely covered there.
-    dat <- dplyr::filter(dat, cell %in% post$cell)
-
-    h_g <- rep(0L, n_genes)
-    pi_g <- rep(0.05, n_genes)
-    if (nrow(dat) > 0) {
-        dedup <- .build_ll_dedup(dat)
-        for (iter in seq_len(max_iter)) {
-            ll <- .betabinom_ll_both(dedup, pi_g, rho)
-            h_g <- .m_step_phase(dat, post, h_g, ll)
-            pi_g_new <- .m_step_pi(dat, post, h_g)
-            converged <- max(abs(pi_g_new - pi_g)) < tol
-            pi_g <- pi_g_new
-            if (converged) {
-                break
-            }
-        }
-    }
-
-    # Genes absent from dat have no covered cell and cannot be phased at all, unlike the 0.05
-    # filler .m_step_pi otherwise supplies for bookkeeping.
-    covered <- seq_len(n_genes) %in% unique(dat$gene)
-    list(
-        h_g = ifelse(covered, h_g, NA_integer_),
-        pi_g = ifelse(covered, pi_g, NA_real_)
-    )
-}
-
 .loglik_obs <- function(ref, n, p, rho) {
     # Wraps VGAM::dbetabinom for use outside the EM's hot loop. ref and n are
     # the observed REF counts and totals, p is the expected REF fraction, and
@@ -508,65 +583,5 @@
     list(
         L0 = L0u[dedup$idx],
         L1 = L1u[dedup$idx]
-    )
-}
-
-.filter_outlier_genes <- function(ref_mat, alt_mat, min_cells = 10, min_cov = 1, mad_threshold = 2) {
-    # The pre-EM gene filter. Takes genes x cells REF/ALT count matrices,
-    # drops genes covered in fewer than min_cells cells, then drops genes
-    # whose REF/ALT skew, folded to the range [0.5, 1], is an outlier by
-    # robust z-score against mad_threshold. Returns a logical vector of length
-    # nrow(ref_mat).
-
-    # Coverage per cell-gene pair
-    n_mat <- ref_mat + alt_mat
-    covered <- n_mat >= min_cov
-
-    # Per gene: how many cells have sufficient coverage, and how many of those favour REF. A
-    # tied cell (ref == alt) is split 0.5/0.5 rather than counted toward neither allele: the
-    # strict ref > alt count silently pulls a gene's skew toward 0.5 by an amount that depends
-    # on how many cells happen to tie, which is worst at low coverage — precisely where it is
-    # most needed to tell moderate escape apart from a true 1:1 gene.
-    n_expressing <- rowSums(covered)
-    ref_majority <- rowSums(covered & (ref_mat > alt_mat)) + 0.5 * rowSums(covered & (ref_mat == alt_mat))
-
-    # Drop genes seen in too few cells — not enough information to estimate allelic skew
-    passes_count_filter <- n_expressing >= min_cells
-
-    # Allelic skew: fraction of covered cells favouring REF, folded to [0.5, 1]
-    # so that genes skewed toward either allele score equally high
-    skew <- ref_majority[passes_count_filter] / n_expressing[passes_count_filter]
-    skew <- pmax(skew, 1 - skew)
-
-    # Robust z-score: genes with unusually extreme skew relative to the rest are
-    # likely systematic (e.g. mapping bias, escape from XCI) rather than informative.
-    # Guard against zero MAD (all skew values identical).
-    skew_mad <- stats::mad(skew)
-    passes_skew_filter <- if (skew_mad > 0) {
-        z <- (skew - stats::median(skew)) / skew_mad
-        abs(z) <= mad_threshold
-    } else {
-        rep(TRUE, length(skew)) # all skew identical — no outliers possible
-    }
-
-    keep <- rep(FALSE, nrow(ref_mat))
-    keep[passes_count_filter] <- passes_skew_filter
-    keep
-}
-
-.pivot_counts_to_long <- function(ref_mat, alt_mat, min_cov = 1) {
-    # Takes genes x cells REF/ALT count matrices and pivots them to one row
-    # per cell-gene pair with at least min_cov total reads. Returns a tibble
-    # with one row per covered pair, giving the gene and cell matrix indices,
-    # the ref and alt counts, and their sum n.
-    n_mat <- ref_mat + alt_mat
-    # Matrix::which handles sparse lgCMatrix; base which() does not dispatch S4
-    idx <- Matrix::which(n_mat >= min_cov, arr.ind = TRUE)
-    tibble::tibble(
-        gene = idx[, 1],
-        cell = idx[, 2],
-        ref = ref_mat[idx],
-        alt = alt_mat[idx],
-        n = n_mat[idx]
     )
 }

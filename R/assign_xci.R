@@ -1,3 +1,14 @@
+# Public entry points for X-chromosome inactivation (XCI) assignment, and the
+# orchestration behind them: assign_xci() and assign_xci_by_clonotype() both
+# delegate to .fit_xci(), which splits a SNPData object by donor, fits each
+# donor in parallel (one failure does not abort the others), and stores the
+# results back onto the object. .fit_xci_donor() is the per-donor pipeline;
+# it calls out to the EM engine in xci-em.R (.filter_to_informative_het_snps,
+# .infer_xci, .rephase_all_genes) and packages the result. by = "clonotype"
+# threads through every layer as the modelling unit: counts are aggregated to
+# clonotypes before fitting, and assignments are projected back to cells
+# afterwards.
+
 #' Assign the active X chromosome to cells
 #'
 #' Identifies which X chromosome is active in female cells based on allelic
@@ -370,19 +381,6 @@ setMethod(
     )
 }
 
-#' Projects a clonotype-level fit's posteriors down to individual cells.
-#' @keywords internal
-.project_to_cells <- function(fit, cell_to_clonotype, by) {
-    if (by != "clonotype") {
-        return(fit)
-    }
-    fit$cell_assignments <- fit$assignments %>%
-        dplyr::rename(clonotype = cell_id) %>%
-        dplyr::inner_join(cell_to_clonotype, by = "clonotype") %>%
-        dplyr::select(cell_id, post_X1_active, post_X2_active, assignment)
-    fit
-}
-
 #' Assembles a per-donor XCI fit from an EM result.
 #' @keywords internal
 .assemble_xci_fit <- function(xci_result, donor, ref_mat, alt_mat, snp_info, unit_ids, unit = c("cell", "clonotype")) {
@@ -446,4 +444,17 @@ setMethod(
         median_pi_g = median_pi_g,
         skew = xci_result$prior
     )
+}
+
+#' Projects a clonotype-level fit's posteriors down to individual cells.
+#' @keywords internal
+.project_to_cells <- function(fit, cell_to_clonotype, by) {
+    if (by != "clonotype") {
+        return(fit)
+    }
+    fit$cell_assignments <- fit$assignments %>%
+        dplyr::rename(clonotype = cell_id) %>%
+        dplyr::inner_join(cell_to_clonotype, by = "clonotype") %>%
+        dplyr::select(cell_id, post_X1_active, post_X2_active, assignment)
+    fit
 }
