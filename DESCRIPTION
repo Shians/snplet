@@ -79,6 +79,8 @@ Collate:
     'add_snp_gene_names.R'
     'assign_xci.R'
     'haplotype_expression.R'
+    'molecule_extraction.R'
+    'molecule_phase_graph.R'
     'molecule_phasing.R'
     'plot_xci_heatmap.R'
     'plots.R'
