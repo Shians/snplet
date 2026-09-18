@@ -2,10 +2,12 @@
 % Please edit documentation in R/assign_xci.R
 \name{.assemble_xci_fit}
 \alias{.assemble_xci_fit}
-\title{Assembles a per-donor XCI fit from an EM result.}
+\title{Assembles a per-donor XCI fit from an EM result and its re-phased genes,
+deriving the donor's empirical escape null along the way.}
 \usage{
 .assemble_xci_fit(
   xci_result,
+  all_genes,
   donor,
   ref_mat,
   alt_mat,
@@ -15,6 +17,7 @@
 )
 }
 \description{
-Assembles a per-donor XCI fit from an EM result.
+Assembles a per-donor XCI fit from an EM result and its re-phased genes,
+deriving the donor's empirical escape null along the way.
 }
 \keyword{internal}

@@ -51,16 +51,13 @@ This approach:
   \item Is biologically motivated since clonally related cells should share X-inactivation state
 }
 
-The algorithm works as follows:
-\enumerate{
-  \item Filters to heterozygous SNPs on the X chromosome for each donor
-  \item Selects the SNP with highest coverage per gene to avoid redundancy
-  \item Aggregates ALT and REF counts by clonotype
-  \item Removes outlier genes with atypical allelic skew
-  \item Runs a beta-binomial EM algorithm with multiple random initialisations
-  \item Assigns clonotypes to X1 or X2 based on posterior probability
-  \item Projects clonotype assignments back to individual cells
-}
+The algorithm is the one described in \code{\link{assign_xci}}, with the
+clonotype as the modelling unit rather than the cell: REF and ALT counts
+are aggregated by clonotype before the gene filters and the EM run, so it
+is clonotypes that are assigned to X1 or X2 by posterior probability.
+Those assignments are then projected back onto the individual cells making
+up each clonotype. Cells whose clonotype is \code{NA} are excluded from the
+fit.
 }
 \section{Phase is inferred from expression, not genotyped}{
 
