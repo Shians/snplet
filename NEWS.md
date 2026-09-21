@@ -1,69 +1,36 @@
 # snplet 0.6.5
 
-* Added `xci_skew` to `donor_info` via a new fitted X1-active prior in the XCI EM. This is the
-  model's own estimate of the fraction of a donor's cells with X1 active, fit jointly with
-  phase and escape rather than counted from the confidence-thresholded hard calls in
-  `active_x`, which excludes low-confidence cells and so underestimates skew in
-  coverage-limited donors
-* Fixed `molecule_snp_alleles()` excluding `OTH` after the per-read vote rather than before,
-  which let an error allele take the majority and discard the molecule's REF/ALT reads along
-  with it. A molecule read as 3 `OTH` and 1 `REF` now yields its `REF` call
-* Fixed `molecule_snp_alleles()` resolving a tied REF/ALT vote by row order, making the result
-  depend on the order reads arrived in. Tied molecules are now dropped, as
-  `haplotype_expression_by_molecule()` and `molecule_haplotype_counts()` already do with a tied
-  haplotype vote. Neither fix changes results on a UMI-collapsed BAM, where a molecule has one
-  read and so nothing to tie
-* Fixed `molecule_read_strand()` resolving a tied alignment-strand vote by row order, so a
-  molecule whose reads split evenly between strands was assigned one of them arbitrarily.
-  It now reports `NA`, matching the tie rule applied elsewhere. The strand decides which of
-  two opposite-strand genes an ambiguous SNP's molecule is attributed to, so a guess sent its
-  counts to a gene it may not have come from, where `NA` correctly withholds it;
-  unambiguous SNPs, which need no strand to attribute, are unaffected. As above, a
-  UMI-collapsed BAM has one read per molecule and so cannot tie
-* Changed `phase_snps()` to accept a SNP pair as an edge on the likelihood ratio between the
-  two haplotype hypotheses rather than the fraction of molecules agreeing, via the new
-  `error_rate` and `min_llr` arguments. Evidence scales with the margin between agreeing and
-  disagreeing molecules, not their ratio, so edges resting on few molecules are no longer
-  required to be unanimous: 4 of 5 agreeing is now accepted. `min_consistency` is deprecated,
-  ignored, and warns
+* Added `xci_skew` to `donor_info` via a new fitted X1-active prior in the XCI EM.
 * Added a `min_cells` argument to `phase_snps()` (default 2), requiring an edge to be backed
-  by molecules from more than one cell. Molecules from a single cell are not independent
-  evidence: on the X the inactive copy is largely silent, so a gene's molecules there sample
-  one haplotype repeatedly, and ambient RNA or an undetected doublet is a property of the
-  barcode. The count is taken over the cells voting for the relation the edge is accepted on,
-  not over every cell spanning the SNP pair, so a cell whose molecules argue for the losing
-  relation cannot vouch for its rival: four molecules from one cell reading "same" plus one
-  from another reading "opposite" spans two barcodes but rests on a single cell, and is
-  rejected. Set to 1 for the previous behaviour
+  by molecules from more than one cell.
 * Added detection of internally inconsistent phase blocks to `phase_snps()`, reported as the
-  new `n_block_conflicts` and `block_conflict` columns. An edge closing a cycle predicts a
-  relation the block has already fixed; where the two disagree no phasing can satisfy every
-  edge at once, which previously passed silently. `phase_from_molecules()` folds this into
-  `phase_conflict`
-* Changed `phase_source` in `donor_snp_info` from the constant `"read_backed"` to one of
-  `"read_backed_propagated"` (phase observed on molecules spanning the SNP and an anchor),
-  `"read_backed_anchor"` (the EM's own value, corroborated by its block) or `"em"` (an anchor
-  no molecule linked to anything, copied verbatim from the EM). The single value conflated
-  three provenances, labelling as read-backed even SNPs no molecule had contributed to;
-  `startsWith(phase_source, "read_backed")` selects the two block-based cases together
-* Added `molecule_haplotype_counts()`, the general-purpose counterpart to
-  `haplotype_expression_by_molecule()` for genes with no X-inactivation signal to orient
-  phase blocks against: it counts each gene's molecules once per `phase_snps()` block, using
-  the block-local H1/H2 labels as-is since there is no external signal to orient them further
-* Added a `test_escape()` method taking a SNPData object directly, which draws the counts,
-  the null escape fraction and the overdispersion from the donor's own fit rather than
-  requiring them to be supplied
+  new `n_block_conflicts` and `block_conflict` columns.
+* Added `molecule_haplotype_counts()`, counting each gene's molecules once per `phase_snps()`
+  block using block-local H1/H2 labels, for genes with no XCI signal to orient phase against
+* Added a `test_escape()` method taking a SNPData object directly, drawing the counts, null
+  escape fraction, and overdispersion from the donor's own fit
 * Added gene-level pooling of read-backed phase blocks, so a molecule spanning several of a
   gene's heterozygous SNPs is counted once rather than once per SNP
 * Added a `snp_gene_map` slot to SNPData, populated by `import_cellsnp()` when the gene
-  annotation carries a `strand` column, giving each SNP-to-gene candidate its own row for
-  molecule attribution at multi-gene SNPs
-* Changed `haplotype_expression()` to report one row per gene by default, electing a
-  representative SNP, with the per-SNP output available via `by_snp = TRUE`
+  annotation carries a `strand` column, for molecule attribution at multi-gene SNPs
+* Changed `phase_snps()` to accept a SNP pair as an edge on the likelihood ratio between the
+  two haplotype hypotheses rather than the fraction of molecules agreeing, via the new
+  `error_rate` and `min_llr` arguments.
+* Changed `phase_source` in `donor_snp_info` from the constant `"read_backed"` to one of
+  `"read_backed_propagated"` (phase observed on molecules spanning the SNP and an anchor),
+  `"read_backed_anchor"` (the EM's own value, corroborated by its block) or `"em"` (an anchor
+  no molecule linked to anything).
+* Changed `haplotype_expression()` to report one row per gene by default, with per-SNP output
+  available via `by_snp = TRUE`
 * Changed `import_cellsnp()` to check BAM files when given, and moved `library_id` earlier in
   the argument list
+* Fixed `molecule_snp_alleles()` excluding `OTH` after the per-read vote rather than before, which
+  let an error allele win the majority and discard the molecule's REF/ALT reads with it
+* Fixed `molecule_snp_alleles()` resolving a tied REF/ALT vote by row order instead of dropping
+  the molecule, as is already done elsewhere for tied haplotype votes
+* Fixed `molecule_read_strand()` resolving a tied strand vote by row order instead of reporting
+  `NA`, which could attribute an ambiguous SNP's molecule to the wrong gene
 * Fixed the beta-binomial CDF being evaluated outside its support during escape testing
-* Removed unused imports flagged by roxygen2 8.0
 
 # snplet 0.6.4
 
