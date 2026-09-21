@@ -580,13 +580,15 @@ setMethod(
 #' block (\code{\link{phase_snps}}) when no single molecule spans all of
 #' them, most commonly at a spliced/unspliced boundary (a mature mRNA and its
 #' unspliced precursor rarely share a molecule). For each (\code{gene_name},
-#' \code{donor}), only the block backed by the most distinct molecules is
-#' pooled; molecules whose SNPs fall in any other block are real evidence but
-#' cannot be pooled with the dominant block's haplotype labels, so they are
-#' reported as \code{n_stranded_molecules} rather than dropped without record.
+#' \code{donor}), the block backed by the most distinct molecules is the
+#' dominant one; molecules whose SNPs fall in any other block are reported
+#' separately as \code{n_secondary_block_molecules} rather than folded in
+#' without record, and are counted alongside the dominant block's when
+#' \code{pool_blocks = TRUE} (the default) or left out when \code{FALSE} --
+#' see \sQuote{Pooling a gene's phase blocks}.
 #'
 #' A molecule's haplotype is called by majority vote across the SNPs it
-#' covers within the dominant block only; a tie is dropped as
+#' covers within the blocks being counted; a tie is dropped as
 #' \code{"ambiguous"} (residual base-calling noise once phase is accounted
 #' for). Only genes with a stored, resolved \code{allele_on_x1} and
 #' \code{phase_block} (i.e. processed by \code{\link{phase_from_molecules}})
@@ -615,7 +617,7 @@ setMethod(
 #' @param pool_blocks Logical (default \code{TRUE}). If \code{TRUE}, count
 #'   molecules from every one of a gene's phase blocks. If \code{FALSE}, count
 #'   only the gene's largest block, leaving the rest reported but uncounted in
-#'   \code{n_stranded_molecules}. See \sQuote{Pooling a gene's phase blocks}.
+#'   \code{n_secondary_block_molecules}. See \sQuote{Pooling a gene's phase blocks}.
 #'
 #' @section Pooling a gene's phase blocks:
 #' \code{\link{phase_snps}} cannot link two SNPs no single molecule spans, so
@@ -682,8 +684,12 @@ setMethod(
 #'   \code{inactive_count}, \code{coverage}, \code{escape_fraction}
 #'   (\code{inactive_count / coverage}), \code{escapes}
 #'   (\code{escape_fraction >= escape_threshold}), \code{phase_block_used}
-#'   (the gene's largest phase block), \code{dominant_molecules}
-#'   (molecules backing that block), \code{n_stranded_molecules}
+#'   (the gene's largest phase block, unsigned), \code{is_em_singleton}
+#'   (\code{TRUE} when that block is a singleton EM anchor with no read-backed
+#'   phasing evidence -- see \code{\link{.orient_phase_blocks}}'s negative
+#'   \code{phase_block} convention, collapsed here into this flag rather than
+#'   left for callers to infer from the sign), \code{dominant_molecules}
+#'   (molecules backing that block), \code{n_secondary_block_molecules}
 #'   (molecules of the same gene in any other block -- counted when
 #'   \code{pool_blocks} is \code{TRUE}, reported but uncounted when it is
 #'   \code{FALSE}), \code{n_blocks_pooled} (blocks actually counted, always 1
@@ -773,7 +779,7 @@ setMethod(
         calls$is_x1 <- calls$is_oriented_allele
         block_counts <- .molecule_gene_block_counts(calls, pool_blocks = pool_blocks)
         best_block <- block_counts$best_block
-        stranded <- block_counts$stranded
+        secondary <- block_counts$secondary
         blocks_counted <- block_counts$blocks_counted
         counted <- block_counts$counted
 
@@ -871,14 +877,19 @@ setMethod(
                 escapes = escape_fraction >= escape_threshold
             ) %>%
             dplyr::left_join(best_block, by = c("donor", "gene_name")) %>%
-            dplyr::left_join(stranded, by = c("donor", "gene_name")) %>%
+            dplyr::left_join(secondary, by = c("donor", "gene_name")) %>%
             dplyr::left_join(blocks_counted, by = c("donor", "gene_name")) %>%
             dplyr::left_join(discordant, by = c("donor", "gene_name")) %>%
             dplyr::mutate(
-                n_stranded_molecules = dplyr::coalesce(n_stranded_molecules, 0L),
+                n_secondary_block_molecules = dplyr::coalesce(n_secondary_block_molecules, 0L),
                 discordant_block_molecules = dplyr::coalesce(discordant_block_molecules, 0L)
             ) %>%
+            # A negative phase_block is .orient_phase_blocks()'s marker for a singleton
+            # EM-anchor block (no read-backed phasing evidence); surfaced here as its own
+            # flag rather than left for callers to infer from the sign.
+            dplyr::mutate(is_em_singleton = phase_block < 0) %>%
             dplyr::rename(phase_block_used = phase_block) %>%
+            dplyr::mutate(phase_block_used = abs(phase_block_used)) %>%
             dplyr::arrange(dplyr::pick(dplyr::any_of(c("donor", "gene_name", "active_x"))))
     }
 )

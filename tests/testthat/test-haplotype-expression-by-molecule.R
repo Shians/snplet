@@ -16,9 +16,9 @@ library(Matrix)
 
 # One donor, 4 cells (2 X1-active, 2 X2-active). GENE1 has three heterozygous
 # SNPs: snpA/snpB share phase_block 1 (the dominant block, more molecules),
-# snpC sits alone in phase_block 2 (stranded). allele_on_x1 = "REF" for all
-# three (i.e. REF reads = X1, ALT reads = X2), simulating post-phase_from_molecules()
-# state without needing a real BAM or EM fit.
+# snpC sits alone in phase_block 2 (the secondary block). allele_on_x1 = "REF"
+# for all three (i.e. REF reads = X1, ALT reads = X2), simulating
+# post-phase_from_molecules() state without needing a real BAM or EM fit.
 make_molecule_hap_fixture <- function() {
     ref <- matrix(0L, nrow = 3, ncol = 4)
     alt <- matrix(0L, nrow = 3, ncol = 4)
@@ -168,7 +168,7 @@ test_that("haplotype_expression_by_molecule() counts a multi-SNP molecule once, 
     expect_equal(x1_row$active_count, 1)
 })
 
-test_that("haplotype_expression_by_molecule() reports non-dominant-block molecules as stranded, not dropped", {
+test_that("haplotype_expression_by_molecule() reports non-dominant-block molecules as secondary, not dropped", {
     fixture <- make_molecule_hap_fixture()
     snpA <- fixture$snp_ids[["snpA"]]
     snpB <- fixture$snp_ids[["snpB"]]
@@ -219,8 +219,52 @@ test_that("haplotype_expression_by_molecule() reports non-dominant-block molecul
 
     # Verify the dominant block (more molecules) is the one pooled
     expect_equal(unique(result$phase_block_used), 1L)
-    # Check the lone molecule in the other block is counted as stranded, not silently lost
-    expect_equal(unique(result$n_stranded_molecules), 1L)
+    # Check the lone molecule in the other block is counted as secondary, not silently lost
+    expect_equal(unique(result$n_secondary_block_molecules), 1L)
+})
+
+test_that("haplotype_expression_by_molecule() reports phase_block_used unsigned and flags EM singletons", {
+    fixture <- make_molecule_hap_fixture()
+    snpA <- fixture$snp_ids[["snpA"]]
+    snpB <- fixture$snp_ids[["snpB"]]
+
+    # .orient_phase_blocks() marks a singleton EM-anchor block (no read-backed
+    # phasing evidence) with a negative phase_block; simulate that here on the
+    # dominant block to check it surfaces as phase_block_used = 1 (unsigned)
+    # plus is_em_singleton = TRUE, rather than leaving callers to read the sign.
+    obj <- fixture$obj
+    donor_snp_info <- donor_snp_info(obj)
+    donor_snp_info$phase_block[donor_snp_info$phase_block == 1L] <- -1L
+    donor_snp_info$phase_source[donor_snp_info$phase_block == -1L] <- "em"
+    obj@donor_snp_info <- donor_snp_info
+
+    molecule_calls <- tibble::tribble(
+        ~donor             ,
+        ~barcode           ,
+        ~umi               ,
+        ~snp_id            ,
+        ~allele            ,
+        ~transcript_strand ,
+        "donor0"           ,
+        "cell1"            ,
+        "u1"               ,
+        snpA               ,
+        "REF"              ,
+        "+"                ,
+        "donor0"           ,
+        "cell1"            ,
+        "u1"               ,
+        snpB               ,
+        "REF"              ,
+        "+"
+    )
+
+    result <- haplotype_expression_by_molecule(with_molecule_calls(obj, molecule_calls))
+
+    # Verify the negative phase_block is reported unsigned
+    expect_equal(unique(result$phase_block_used), 1L)
+    # Check the singleton EM-anchor block is flagged rather than left implicit in the sign
+    expect_true(unique(result$is_em_singleton))
 })
 
 test_that("haplotype_expression_by_molecule() drops a molecule with a tied haplotype vote", {
@@ -568,12 +612,12 @@ test_that("haplotype_expression_by_molecule() counts other blocks' molecules whe
         pool_blocks = TRUE
     )
 
-    # Verify the block-2 molecule is counted rather than stranded
+    # Verify the block-2 molecule is counted rather than left out
     expect_equal(result$coverage, 3)
     # Confirm both of the gene's blocks were counted
     expect_equal(result$n_blocks_pooled, 2L)
-    # Check the block-2 molecule is still reported in the stranded tally
-    expect_equal(result$n_stranded_molecules, 1L)
+    # Check the block-2 molecule is still reported in the secondary-block tally
+    expect_equal(result$n_secondary_block_molecules, 1L)
 })
 
 test_that("haplotype_expression_by_molecule() counts only the largest block when pool_blocks is FALSE", {
