@@ -39,6 +39,11 @@
 #'   returned by \code{\link{assign_snp_genes}}. Built at import from the gene
 #'   annotation, when that annotation carries a \code{strand} column; rows for
 #'   SNPs not in \code{snp_info} are dropped.
+#' @param total_count A sparse Matrix (SNPs x cells), optional (default \code{NULL},
+#'   meaning derive it as \code{alt_count + ref_count}). Precomputed total coverage,
+#'   for a caller that already has it (e.g. \code{\link{import_cellsnp}}'s DP matrix)
+#'   and wants to skip re-deriving it from \code{ref_count}/\code{alt_count}. Checked
+#'   against \code{alt_count + ref_count} by row-sum margins, not element-by-element.
 #' @param object A SNPData object, required. Passed to the show method.
 #' @param x A SNPData object, required.
 #' @param i Numeric or logical vector, optional. Subsets SNPs (rows).
@@ -195,10 +200,14 @@ setMethod(
         donor_info = NULL,
         donor_snp_info = NULL,
         donor_map = NULL,
-        snp_gene_map = NULL
+        snp_gene_map = NULL,
+        total_count = NULL
     ) {
         oth_count <- .validate_count_dims(ref_count, alt_count, oth_count)
         .validate_info_dims(ref_count, alt_count, snp_info, barcode_info)
+        if (!is.null(total_count)) {
+            total_count <- .validate_total_count(total_count, ref_count, alt_count)
+        }
 
         snp_info <- .assign_snp_ids(snp_info)
         barcode_info <- .assign_cell_ids(barcode_info)
@@ -219,15 +228,20 @@ setMethod(
             }
         }
 
-        donor_info <- donor_info %||% .default_donor_info(barcode_info)
-        donor_snp_info <- donor_snp_info %||% .empty_donor_snp_info()
+        if (is.null(donor_info)) {
+            donor_info <- .default_donor_info(barcode_info)
+        }
+        if (is.null(donor_snp_info)) {
+            donor_snp_info <- .empty_donor_snp_info()
+        }
 
-        deduped <- .dedupe_snps(ref_count, alt_count, oth_count, snp_info, donor_snp_info)
+        deduped <- .dedupe_snps(ref_count, alt_count, oth_count, snp_info, donor_snp_info, total_count)
         ref_count <- deduped$ref_count
         alt_count <- deduped$alt_count
         oth_count <- deduped$oth_count
         snp_info <- deduped$snp_info
         donor_snp_info <- deduped$donor_snp_info
+        total_count <- deduped$total_count
 
         # convert to tibble
         snp_info <- tibble::as_tibble(snp_info)
@@ -252,7 +266,7 @@ setMethod(
         .Object@alt_count <- alt_count
         .Object@oth_count <- oth_count
         .Object@chr_style <- chr_style
-        metrics <- .recompute_metrics(snp_info, barcode_info, donor_info, ref_count, alt_count)
+        metrics <- .recompute_metrics(snp_info, barcode_info, donor_info, ref_count, alt_count, total_count)
         .Object@snp_info <- metrics$snp_info
         .Object@barcode_info <- metrics$barcode_info
         .Object@donor_info <- metrics$donor_info
@@ -354,7 +368,8 @@ setGeneric(
         donor_info = NULL,
         donor_snp_info = NULL,
         donor_map = NULL,
-        snp_gene_map = NULL
+        snp_gene_map = NULL,
+        total_count = NULL
     ) {
         standardGeneric("SNPData")
     }
@@ -378,7 +393,8 @@ setMethod(
         donor_info = NULL,
         donor_snp_info = NULL,
         donor_map = NULL,
-        snp_gene_map = NULL
+        snp_gene_map = NULL,
+        total_count = NULL
     ) {
         new(
             "SNPData",
@@ -390,7 +406,8 @@ setMethod(
             donor_info = donor_info,
             donor_snp_info = donor_snp_info,
             donor_map = donor_map,
-            snp_gene_map = snp_gene_map
+            snp_gene_map = snp_gene_map,
+            total_count = total_count
         )
     }
 )
@@ -528,7 +545,7 @@ setReplaceMethod("snp_gene_map", signature(x = "SNPData", value = "data.frame"),
 #' Record the BAM file(s) each library's reads came from
 #'
 #' Attaches BAM paths to an object's `library_info`, where
-#' `add_molecule_phase()` can find them without being told again. Paths are
+#' `phase_from_molecules()` can find them without being told again. Paths are
 #' recorded per library rather than per donor because that is what they are a
 #' property of: one library's BAM holds all of its donors' cells.
 #'

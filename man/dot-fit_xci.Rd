@@ -2,7 +2,7 @@
 % Please edit documentation in R/assign_xci.R
 \name{.fit_xci}
 \alias{.fit_xci}
-\title{Fit X-chromosome inactivation model (internal engine)}
+\title{Shared EM-fitting engine behind assign_xci and assign_xci_by_clonotype, per donor.}
 \usage{
 .fit_xci(
   x,
@@ -11,32 +11,7 @@
   by = c("cell", "clonotype")
 )
 }
-\arguments{
-\item{x}{SNPData object containing X chromosome SNP data with donor
-assignments and heterozygosity information. For \code{by = "clonotype"},
-clonotype information must also be present.}
-
-\item{n_inits}{Number of random initialisations for the EM algorithm.}
-
-\item{confidence_threshold}{Posterior probability threshold for hard
-assignment.}
-
-\item{by}{Modelling unit, \code{"cell"} or \code{"clonotype"}.}
-}
-\value{
-The input SNPData object with diagnostics written into its metadata
-  slots.
-}
 \description{
-Runs the beta-binomial EM algorithm for each donor and returns a full fit
-object containing per-unit assignments, per-gene haplotypes, and the final
-allele count matrices used in the model. The modelling unit is either the
-cell (\code{by = "cell"}) or the clonotype (\code{by = "clonotype"}).
-}
-\details{
-This is the shared engine behind \code{\link{assign_xci}} and
-\code{\link{assign_xci_by_clonotype}}. It is not exported; the public
-entry points return a SNPData object carrying the diagnostics in its metadata
-slots.
+Shared EM-fitting engine behind assign_xci and assign_xci_by_clonotype, per donor.
 }
 \keyword{internal}

@@ -65,6 +65,7 @@ utils::globalVariables(c(
     "umi",
     "allele",
     "n_calls",
+    "n_top",
     "n_files",
     "qname",
     "base",
@@ -75,6 +76,8 @@ utils::globalVariables(c(
     "snp_b",
     "same",
     "n_same",
+    "n_cells_same",
+    "n_cells_opposite",
     "relation",
     "consistency",
     "n_genes",
@@ -89,6 +92,7 @@ utils::globalVariables(c(
     "orientation",
     "own_vote",
     "is_outlier_anchor",
+    "block_conflict",
     "phase_conflict",
     "phase_source",
     "phase_block",
@@ -111,7 +115,11 @@ utils::globalVariables(c(
     "transcript_strand",
     "xci_median_pi_g",
     "xci_rho",
-    "n_cells"
+    "n_cells",
+    ".oriented_allele",
+    "is_oriented_allele",
+    "h1_count",
+    "h2_count"
 ))
 
 percentile_summary <- function(x, percentiles = c(0.1, 0.25, 0.75, 0.9, 0.95, 0.99)) {

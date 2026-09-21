@@ -66,7 +66,8 @@ SNPData(
   donor_info = NULL,
   donor_snp_info = NULL,
   donor_map = NULL,
-  snp_gene_map = NULL
+  snp_gene_map = NULL,
+  total_count = NULL
 )
 
 \S4method{SNPData}{Matrix,Matrix,data.frame,data.frame}(
@@ -78,7 +79,8 @@ SNPData(
   donor_info = NULL,
   donor_snp_info = NULL,
   donor_map = NULL,
-  snp_gene_map = NULL
+  snp_gene_map = NULL,
+  total_count = NULL
 )
 
 ref_count(x)
@@ -221,6 +223,12 @@ One row per (\code{snp_id}, candidate \code{gene_name}) with columns
 returned by \code{\link{assign_snp_genes}}. Built at import from the gene
 annotation, when that annotation carries a \code{strand} column; rows for
 SNPs not in \code{snp_info} are dropped.}
+
+\item{total_count}{A sparse Matrix (SNPs x cells), optional (default \code{NULL},
+meaning derive it as \code{alt_count + ref_count}). Precomputed total coverage,
+for a caller that already has it (e.g. \code{\link{import_cellsnp}}'s DP matrix)
+and wants to skip re-deriving it from \code{ref_count}/\code{alt_count}. Checked
+against \code{alt_count + ref_count} by row-sum margins, not element-by-element.}
 
 \item{value}{A data.frame, required. Replacement value for
 \code{barcode_info<-} or \code{snp_info<-}.}

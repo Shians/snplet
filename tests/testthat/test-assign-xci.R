@@ -146,6 +146,15 @@ test_that("assign_xci always labels the majority active-X group X1", {
 
         # Confirm the larger group is always reported as X1
         expect_equal(names(which.max(tab)), "X1")
+
+        # This donor's true composition is 40 X2-active cells to 10 X1-active
+        # (40/50 = 0.8 X2-active, i.e. 0.2 X1-active before the X1/X2 relabel
+        # above always names the majority X1, so the fitted skew should
+        # recover ~0.8 X1-active post-relabel). Confirm the EM's own fitted
+        # prior (xci_skew) lands close to that true fraction, not just the
+        # majority-label direction checked above.
+        skew <- donor_info(stored)$xci_skew
+        expect_true(abs(skew - 0.8) < 0.1)
     }
 })
 
@@ -253,10 +262,12 @@ test_that("assign_xci promotes diagnostics into SNPData slots and survives subse
     # Check barcode diagnostics were written
     expect_true(all(c("active_x", "xci_post_X1_active") %in% colnames(barcode_info)))
     # Check per-donor diagnostics were written to donor_info
-    expect_true(all(c("xci_rho", "xci_median_pi_g") %in% colnames(donor_info)))
+    expect_true(all(c("xci_rho", "xci_median_pi_g", "xci_skew") %in% colnames(donor_info)))
     # Confirm rho and the median escape fraction are valid, non-NA values
     expect_true(all(!is.na(donor_info$xci_rho) & donor_info$xci_rho >= 0 & donor_info$xci_rho < 1))
     expect_true(all(!is.na(donor_info$xci_median_pi_g)))
+    # Confirm the fitted skew (X1-active prior) is a valid, non-NA probability
+    expect_true(all(!is.na(donor_info$xci_skew) & donor_info$xci_skew > 0 & donor_info$xci_skew < 1))
     # Check the per-SNP informative flag was NOT duplicated into snp_info; it
     # belongs solely to donor_snp_info since informativeness is donor-specific
     expect_false("xci_informative" %in% colnames(snp_info))

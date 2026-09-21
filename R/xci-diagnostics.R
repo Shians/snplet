@@ -88,9 +88,13 @@ setMethod("xci_haplotypes", signature(x = "SNPData"), function(x) {
 #' SNP x donor with \code{xci_informative} (whether the gene drove active-X
 #' calling), \code{allele_on_x1} and \code{xci_escape_fraction}; \code{donor_info}
 #' gains one row per donor with \code{xci_median_pi_g} (median escape fraction
-#' among informative genes, a per-donor empirical background/noise level) and
-#' \code{xci_rho}. For a clonotype-level fit the per-cell projection is used
-#' for barcode annotation.
+#' among informative genes, a per-donor empirical background/noise level),
+#' \code{xci_rho}, and \code{xci_skew} (the EM's fitted X1-active prior: the
+#' model's own estimate of what fraction of this donor's cells have X1
+#' active, i.e. the quantified XCI skew, fit jointly with phase and escape
+#' rather than read off the confidence-thresholded hard calls afterwards).
+#' For a clonotype-level fit the per-cell projection is used for barcode
+#' annotation.
 #'
 #' \code{xci_rho} is \emph{not} the EM's per-cell beta-binomial overdispersion
 #' (\code{xci_result$rho} inside \code{.infer_xci()}); that value is fit
@@ -119,7 +123,7 @@ setMethod("xci_haplotypes", signature(x = "SNPData"), function(x) {
                 xci_post_X1_active = post_X1_active,
                 # Record the unit the model was fit on so downstream plotting can
                 # aggregate cells back to clonotypes when appropriate.
-                xci_fit_unit = f$unit %||% "cell"
+                xci_fit_unit = if (is.null(f$unit)) "cell" else f$unit
             )
     }) %>%
         dplyr::bind_rows()
@@ -138,7 +142,7 @@ setMethod("xci_haplotypes", signature(x = "SNPData"), function(x) {
         dplyr::bind_rows()
 
     donor_diag <- purrr::map(donor_fits, function(f) {
-        tibble::tibble(donor = f$donor, xci_median_pi_g = f$median_pi_g)
+        tibble::tibble(donor = f$donor, xci_median_pi_g = f$median_pi_g, xci_skew = f$skew)
     }) %>%
         dplyr::bind_rows()
 

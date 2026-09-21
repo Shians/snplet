@@ -263,16 +263,14 @@ test_that("import_cellsnp() labels every cell with the supplied library_id", {
     expect_equal(unique(barcode_info(snp_data)$library_id), "lib_A")
 })
 
-test_that("import_cellsnp() errors when library_id is not supplied", {
+test_that("import_cellsnp() leaves library_id as NA when not supplied", {
     cellsnp_dir <- system.file("extdata/example_snpdata", package = "snplet")
     gene_annotation <- data.frame(chrom = "chr1", start = 1, end = 1e9, gene_name = "dummy")
 
-    # Verify the label is demanded up front rather than defaulted, since it
-    # cannot be recovered from the counts once the object exists
-    expect_error(
-        import_cellsnp(cellsnp_dir, gene_annotation),
-        "library_id is required"
-    )
+    # Verify a single-library workflow can omit library_id entirely
+    snp_data <- expect_no_error(import_cellsnp(cellsnp_dir, gene_annotation))
+    # Check that every cell is left with an NA library_id rather than a guess
+    expect_true(all(is.na(barcode_info(snp_data)$library_id)))
 })
 
 test_that("import_cellsnp() rejects a library_id that is not a single string", {
@@ -282,7 +280,32 @@ test_that("import_cellsnp() rejects a library_id that is not a single string", {
     # Check that a vector of labels is refused, since one run is one library
     expect_error(
         import_cellsnp(cellsnp_dir, gene_annotation, library_id = c("lib_A", "lib_B")),
-        "single non-NA string"
+        "single string"
+    )
+})
+
+test_that("import_cellsnp() with bam_files but no library_id errors clearly", {
+    cellsnp_dir <- system.file("extdata/example_snpdata", package = "snplet")
+    gene_annotation <- data.frame(chrom = "chr1", start = 1, end = 1e9, gene_name = "dummy")
+
+    # Verify bam_files cannot be recorded without a library_id to key them against
+    expect_error(
+        import_cellsnp(cellsnp_dir, gene_annotation, bam_files = "dummy.bam"),
+        "bam_files was supplied but library_id was not"
+    )
+})
+
+test_that("import_cellsnp() rejects a named bam_files vector", {
+    cellsnp_dir <- system.file("extdata/example_snpdata", package = "snplet")
+    gene_annotation <- data.frame(chrom = "chr1", start = 1, end = 1e9, gene_name = "dummy")
+
+    # Verify names on bam_files are rejected rather than silently discarded --
+    # one import call covers a single library, so per-element names (which might
+    # look like a way to key paths by library, mirroring add_library_bams())
+    # would otherwise be dropped without warning by the internal library_id wrap
+    expect_error(
+        import_cellsnp(cellsnp_dir, gene_annotation, library_id = "lib_A", bam_files = c(run1 = "dummy.bam")),
+        "bam_files must be an unnamed character vector"
     )
 })
 
@@ -845,6 +868,80 @@ test_that("export_cellsnp rejects repeated barcodes", {
     expect_error(export_cellsnp(snp_data, out_dir), "cannot write repeated barcodes")
     # Ensure the offending barcode is named in the message
     expect_error(export_cellsnp(snp_data, out_dir), cells$barcode[1], fixed = TRUE)
+})
+
+# ==============================================================================
+# Test: as_singlecellexperiment()
+# ==============================================================================
+
+test_that("as_singlecellexperiment() wraps counts as assays with matching dimnames", {
+    skip_if_not_installed("SingleCellExperiment")
+    snp_data <- get_example_snpdata()
+
+    sce <- as_singlecellexperiment(snp_data)
+
+    # Verify the container class and dimensions match the SNPData object
+    expect_s4_class(sce, "SingleCellExperiment")
+    expect_equal(dim(sce), dim(snp_data))
+    # Verify ref/alt assays are present and identical to the source matrices
+    expect_equal(as.matrix(SummarizedExperiment::assay(sce, "ref")), as.matrix(ref_count(snp_data)))
+    expect_equal(as.matrix(SummarizedExperiment::assay(sce, "alt")), as.matrix(alt_count(snp_data)))
+    # Confirm rows/columns are dimnamed by snp_id/cell_id, matching snp_info/barcode_info
+    expect_equal(rownames(sce), snp_info(snp_data)$snp_id)
+    expect_equal(colnames(sce), barcode_info(snp_data)$cell_id)
+})
+
+test_that("as_singlecellexperiment() omits an all-zero oth assay", {
+    skip_if_not_installed("SingleCellExperiment")
+    ref <- Matrix::Matrix(matrix(c(5L, 3L, 2L, 8L), 2, 2), sparse = TRUE)
+    alt <- Matrix::Matrix(matrix(c(1L, 2L, 4L, 1L), 2, 2), sparse = TRUE)
+    oth <- Matrix::Matrix(matrix(0L, 2, 2), sparse = TRUE)
+    snp_data <- SNPData(
+        ref_count = ref,
+        alt_count = alt,
+        oth_count = oth,
+        snp_info = data.frame(chrom = "chr1", pos = c(1L, 2L), ref = "A", alt = "G"),
+        barcode_info = data.frame(barcode = c("c1", "c2"))
+    )
+
+    sce <- as_singlecellexperiment(snp_data)
+
+    # Verify an all-zero oth_count is left out rather than carried as dead weight
+    expect_false("oth" %in% names(SummarizedExperiment::assays(sce)))
+})
+
+test_that("as_singlecellexperiment() keeps a non-zero oth assay", {
+    skip_if_not_installed("SingleCellExperiment")
+    ref <- Matrix::Matrix(matrix(c(5L, 3L, 2L, 8L), 2, 2), sparse = TRUE)
+    alt <- Matrix::Matrix(matrix(c(1L, 2L, 4L, 1L), 2, 2), sparse = TRUE)
+    oth <- Matrix::Matrix(matrix(c(0L, 0L, 1L, 0L), 2, 2), sparse = TRUE)
+    snp_data <- SNPData(
+        ref_count = ref,
+        alt_count = alt,
+        oth_count = oth,
+        snp_info = data.frame(chrom = "chr1", pos = c(1L, 2L), ref = "A", alt = "G"),
+        barcode_info = data.frame(barcode = c("c1", "c2"))
+    )
+
+    sce <- as_singlecellexperiment(snp_data)
+
+    # Verify a genuinely non-zero oth_count is carried through as its own assay
+    expect_true("oth" %in% names(SummarizedExperiment::assays(sce)))
+    expect_equal(as.matrix(SummarizedExperiment::assay(sce, "oth")), as.matrix(oth_count(snp_data)))
+})
+
+test_that("as_singlecellexperiment() carries barcode_info/snp_info columns into colData/rowData", {
+    skip_if_not_installed("SingleCellExperiment")
+    snp_data <- get_example_snpdata()
+
+    sce <- as_singlecellexperiment(snp_data)
+    col_data <- SummarizedExperiment::colData(sce)
+    row_data <- SummarizedExperiment::rowData(sce)
+
+    # Verify barcode_info columns (other than the cell_id used as dimnames) ride along
+    expect_true(all(setdiff(colnames(barcode_info(snp_data)), "cell_id") %in% colnames(col_data)))
+    # Verify snp_info columns (other than the snp_id used as dimnames) ride along
+    expect_true(all(setdiff(colnames(snp_info(snp_data)), "snp_id") %in% colnames(row_data)))
 })
 
 # ==============================================================================

@@ -2,14 +2,11 @@
 % Please edit documentation in R/assign_xci.R
 \name{.xci_unit_matrices}
 \alias{.xci_unit_matrices}
-\title{Build the count matrices for the requested modelling unit}
+\title{Builds the count matrices for the requested modelling unit (cell or clonotype).}
 \usage{
 .xci_unit_matrices(snp_data, by, donor = NULL)
 }
 \description{
-For \code{by = "cell"} the per-cell count matrices are used as-is. For
-\code{by = "clonotype"} cells with no clonotype are dropped and the
-remaining cells' counts are summed within each clonotype, so the EM sees
-one column per clonotype instead of per cell.
+Builds the count matrices for the requested modelling unit (cell or clonotype).
 }
 \keyword{internal}

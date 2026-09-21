@@ -78,7 +78,7 @@ counting one read once per SNP it covers:
 - `extract_snp_calls()` reads per-(molecule, SNP) allele calls from a BAM, using threaded
   `samtools` when available and falling back to Rsamtools/GenomicAlignments otherwise.
 - `phase_snps()` phases heterozygous SNPs from the molecules that span them, and
-  `add_molecule_phase()` orients the resulting blocks against the EM phase and writes them into
+  `phase_from_molecules()` orients the resulting blocks against the EM phase and writes them into
   the object.
 - `haplotype_expression_by_molecule()` then counts each molecule once per gene, which
   `test_escape()` prefers automatically when present.
@@ -154,7 +154,7 @@ If BAM files were recorded at import (or added later with `add_library_bams()`),
 phase and molecule-level counts can be added before testing:
 
 ```r
-snp_data <- add_molecule_phase(snp_data)
+snp_data <- phase_from_molecules(snp_data)
 hap_mol <- haplotype_expression_by_molecule(snp_data)
 
 # test_escape() uses the molecule counts automatically when they are present
@@ -162,7 +162,7 @@ escape <- test_escape(snp_data)
 ```
 
 See the function documentation (`?import_cellsnp`, `?assign_xci`, `?haplotype_expression`,
-`?add_molecule_phase`, `?test_escape`) for full details.
+`?phase_from_molecules`, `?test_escape`) for full details.
 
 ## License
 

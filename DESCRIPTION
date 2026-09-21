@@ -1,7 +1,7 @@
 Package: snplet
 Type: Package
 Title: Package for handling SNP based allele-specific expression analysis
-Version: 0.6.5
+Version: 0.7.0
 Authors@R: c(
     person(
       "Shian", "Su",
@@ -45,6 +45,7 @@ Imports:
     Seqinfo,
     scales,
     stringr,
+    SummarizedExperiment,
     tibble,
     tidyr,
     VGAM,
@@ -52,7 +53,9 @@ Imports:
     circlize
 Suggests:
     testthat,
-    withr
+    withr,
+    SingleCellExperiment,
+    edgeR
 SystemRequirements: samtools (optional; accelerates extract_snp_calls() when
     on PATH, otherwise falls back to pure Rsamtools/GenomicAlignments)
 License: Apache License (>= 2)
@@ -76,6 +79,8 @@ Collate:
     'add_snp_gene_names.R'
     'assign_xci.R'
     'haplotype_expression.R'
+    'molecule_extraction.R'
+    'molecule_phase_graph.R'
     'molecule_phasing.R'
     'plot_xci_heatmap.R'
     'plots.R'

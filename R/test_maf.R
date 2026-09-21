@@ -41,62 +41,12 @@
 #' test_maf(df)
 #' }
 test_maf <- function(x, p = 0.10) {
-    # validate input
-    stopifnot(is(x, "data.frame"))
-
-    req_cols <- c("ref_count", "alt_count", "total_count")
-    missing_cols <- setdiff(req_cols, colnames(x))
-    if (length(missing_cols) > 0) {
-        missing_list <- paste0(missing_cols, collapse = ", ")
-        stop(glue::glue("Missing required columns: {missing_list}"))
-    }
-
-    # validate that all counts are non-negative
-    negative_ref <- which(x$ref_count < 0)
-    if (length(negative_ref) > 0) {
-        if (length(negative_ref) <= 5) {
-            row_list <- paste0(negative_ref, collapse = ", ")
-        } else {
-            row_list <- paste0(paste0(head(negative_ref, 5), collapse = ", "), ", ...")
-        }
-        stop(glue::glue("Invalid data: ref_count < 0 in row(s): {row_list}"))
-    }
-
-    negative_alt <- which(x$alt_count < 0)
-    if (length(negative_alt) > 0) {
-        if (length(negative_alt) <= 5) {
-            row_list <- paste0(negative_alt, collapse = ", ")
-        } else {
-            row_list <- paste0(paste0(head(negative_alt, 5), collapse = ", "), ", ...")
-        }
-        stop(glue::glue("Invalid data: alt_count < 0 in row(s): {row_list}"))
-    }
-
-    negative_total <- which(x$total_count < 0)
-    if (length(negative_total) > 0) {
-        if (length(negative_total) <= 5) {
-            row_list <- paste0(negative_total, collapse = ", ")
-        } else {
-            row_list <- paste0(paste0(head(negative_total, 5), collapse = ", "), ", ...")
-        }
-        stop(glue::glue("Invalid data: total_count < 0 in row(s): {row_list}"))
-    }
-
-    # validate that ref_count + alt_count <= total_count
-    invalid_rows <- which(x$ref_count + x$alt_count > x$total_count)
-    if (length(invalid_rows) > 0) {
-        if (length(invalid_rows) <= 5) {
-            row_list <- paste0(invalid_rows, collapse = ", ")
-        } else {
-            row_list <- paste0(paste0(head(invalid_rows, 5), collapse = ", "), ", ...")
-        }
-        stop(glue::glue("Invalid data: ref_count + alt_count > total_count in row(s): {row_list}"))
-    }
+    .check_required_columns(x, c("ref_count", "alt_count", "total_count"))
+    .check_nonnegative_columns(x, c("ref_count", "alt_count", "total_count"))
+    .check_alleles_within_total(x)
 
     minor_allele_count <- pmin(x$ref_count, x$alt_count)
     total_count <- ceiling(x$total_count)
-    major_allele_count <- pmax(total_count - minor_allele_count, 0)
-
     p_val <- binom_test(minor_allele_count, total_count, p, alternative = "greater")
 
     result <- x %>%
@@ -107,4 +57,45 @@ test_maf <- function(x, p = 0.10) {
         )
 
     return(result)
+}
+
+# Formats up to 5 offending row indices for an error message, eliding the rest
+# behind "..." so a single malformed column does not flood stderr with a
+# thousand-row list.
+.format_row_list <- function(rows) {
+    if (length(rows) <= 5) {
+        return(paste0(rows, collapse = ", "))
+    }
+    paste0(paste0(head(rows, 5), collapse = ", "), ", ...")
+}
+
+.check_required_columns <- function(x, req_cols) {
+    stopifnot(is(x, "data.frame"))
+    missing_cols <- setdiff(req_cols, colnames(x))
+    if (length(missing_cols) > 0) {
+        missing_list <- paste0(missing_cols, collapse = ", ")
+        stop(glue::glue("Missing required columns: {missing_list}"))
+    }
+}
+
+.check_nonnegative_columns <- function(df, col_names) {
+    for (cn in col_names) {
+        .check_nonnegative_column(df[[cn]], cn)
+    }
+}
+
+.check_nonnegative_column <- function(values, col_name) {
+    negative_rows <- which(values < 0)
+    if (length(negative_rows) > 0) {
+        row_list <- .format_row_list(negative_rows)
+        stop(glue::glue("Invalid data: {col_name} < 0 in row(s): {row_list}"))
+    }
+}
+
+.check_alleles_within_total <- function(x) {
+    invalid_rows <- which(x$ref_count + x$alt_count > x$total_count)
+    if (length(invalid_rows) > 0) {
+        row_list <- .format_row_list(invalid_rows)
+        stop(glue::glue("Invalid data: ref_count + alt_count > total_count in row(s): {row_list}"))
+    }
 }

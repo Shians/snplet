@@ -7,11 +7,9 @@
 #'   cellSNP-lite output files.
 #' @param gene_annotation A data.frame, required, with columns \code{chrom},
 #'   \code{start}, \code{end}, \code{gene_name}. Gene annotations.
-#' @param library_id Character scalar, required. Name of the sequencing
-#'   library this cellSNP-lite run came from, stored on every cell. A 10x
-#'   barcode is unique only within its library, so \code{\link{merge_snpdata}}
-#'   needs this label to tell a repeated cell from two different cells that
-#'   happened to draw the same barcode.
+#' @param library_id Character scalar, optional (default \code{NA}). Name of
+#'   the sequencing library this cellSNP-lite run came from, stored on every
+#'   cell. See \sQuote{Merging libraries} below.
 #' @param vdj_file Character scalar, optional (default \code{NULL}). Path to
 #'   \code{filtered_contig_annotations.csv} from cellranger VDJ.
 #' @param vireo_folder Character scalar, optional (default \code{NULL}).
@@ -32,13 +30,25 @@
 #' @param clonotype_column Character scalar (default \code{"raw_clonotype_id"}).
 #'   Name of the column in \code{vdj_file} containing clonotype information
 #'   (only used if \code{vdj_file} is provided).
-#' @param bam_files Character vector, optional (default \code{NULL}, recording
-#'   no paths). The BAM file or files this cellSNP run was made from, stored
-#'   against \code{library_id} in \code{library_info} so that
-#'   \code{\link{add_molecule_phase}} can find them without being told again.
-#'   Paths are kept as given and only checked when read.
+#' @param bam_files An unnamed character vector, optional (default \code{NULL},
+#'   recording no paths). The BAM file or files this cellSNP run was made from.
+#'   Requires \code{library_id} (this whole vector is stored against it as one
+#'   library's paths in \code{library_info}, via \code{\link{add_library_bams}}),
+#'   so that \code{\link{phase_from_molecules}} can find them without being told
+#'   again. Must not be named: this call covers a single library, so any names
+#'   on \code{bam_files} itself would be silently discarded rather than used as
+#'   per-library keys; each path is checked to exist.
 #'
 #' @return A SNPData object
+#'
+#' @section Merging libraries:
+#' A 10x barcode is unique only within its library, so
+#' \code{\link{merge_snpdata}} uses \code{library_id} to tell a repeated cell
+#' from two different cells that happened to draw the same barcode, and
+#' refuses to merge any object carrying a \code{NA} \code{library_id}. A
+#' single-library workflow that never calls \code{merge_snpdata} can safely
+#' leave \code{library_id} unset.
+#'
 #' @family import and export functions
 #' @export
 #'
@@ -87,7 +97,7 @@
 import_cellsnp <- function(
     cellsnp_dir,
     gene_annotation,
-    library_id,
+    library_id = NA_character_,
     vdj_file = NULL,
     vireo_folder = NULL,
     donor_map = NULL,
@@ -107,19 +117,39 @@ import_cellsnp <- function(
         )
     }
 
-    # Required rather than defaulted: merge_snpdata() distinguishes a barcode
-    # shared within a library from one shared across libraries, and nothing in
-    # the cellSNP output records which library a run came from, so a default
-    # would silently make every object unmergeable.
-    if (missing(library_id)) {
+    # Left NA rather than defaulted to a guessed label: nothing in the cellSNP
+    # output records which library a run came from, and a guessed default
+    # (e.g. the directory name) risks two different libraries colliding
+    # silently at merge time. merge_snpdata() already refuses to merge any
+    # object with an NA library_id (see .check_library_ids()), so a
+    # single-library workflow that never merges can safely leave this unset,
+    # and a workflow that does merge is stopped there instead.
+    if (length(library_id) != 1) {
+        stop("library_id must be a single string naming the library this cellSNP run came from, or NA.")
+    }
+
+    # bam_files is recorded against library_id in library_info, so there is
+    # nothing to key it against when library_id was left NA. Checked ahead of
+    # file existence so this points at the real cause rather than a confusing
+    # add_library_bams() error once import has otherwise succeeded.
+    if (!is.null(bam_files) && is.na(library_id)) {
         stop(
-            "library_id is required: name the sequencing library this cellSNP run came from, ",
-            "e.g. import_cellsnp(..., library_id = \"run1\"). ",
-            "merge_snpdata() needs it to tell a repeated cell from two cells sharing a barcode."
+            "bam_files was supplied but library_id was not: BAM paths are recorded against ",
+            "library_id in library_info, so set library_id = to use bam_files."
         )
     }
-    if (length(library_id) != 1 || is.na(library_id)) {
-        stop("library_id must be a single non-NA string naming the library this cellSNP run came from.")
+
+    # One import call covers one library, so bam_files is keyed by library_id
+    # automatically below; any names on bam_files itself would be silently
+    # discarded by that wrapping (add_library_bams()'s per-library keys come
+    # from the outer list this constructs, not from bam_files' own names),
+    # so a named vector is rejected here rather than left to fail silently.
+    if (!is.null(bam_files) && !is.null(names(bam_files))) {
+        stop(
+            "bam_files must be an unnamed character vector of path(s) for the ",
+            "single library named by library_id; names on bam_files are ignored ",
+            "and would be silently dropped."
+        )
     }
 
     # Check if required files exist
@@ -160,10 +190,12 @@ import_cellsnp <- function(
         }
     }
 
-    # Read cellSNP matrices
-    coverage <- Matrix::readMM(dp_file)
-    alt_count <- Matrix::readMM(ad_file)
-    oth_count <- Matrix::readMM(oth_file)
+    # Read cellSNP matrices. read_mtx() parses the coordinate triples with
+    # readr rather than Matrix::readMM()'s scan()-based reader, which measurably
+    # speeds up the multi-hundred-megabyte matrices cellSNP-lite produces.
+    coverage <- read_mtx(dp_file)
+    alt_count <- read_mtx(ad_file)
+    oth_count <- read_mtx(oth_file)
     ref_count <- coverage - alt_count # Only subtract alt_count
 
     # Read SNP information from VCF file
@@ -261,11 +293,12 @@ import_cellsnp <- function(
         barcode_info = barcode_info,
         donor_snp_info = donor_snp_info,
         donor_map = donor_map,
-        snp_gene_map = snp_gene_map
+        snp_gene_map = snp_gene_map,
+        total_count = coverage
     )
 
     # Import is when a BAM path is actually known -- this cellSNP run was made
-    # from it -- so recording it here means add_molecule_phase() never has to
+    # from it -- so recording it here means phase_from_molecules() never has to
     # be told again, and the path survives every later merge.
     if (!is.null(bam_files)) {
         snp_data <- add_library_bams(snp_data, stats::setNames(list(bam_files), library_id))
@@ -343,6 +376,56 @@ import_cellsnp <- function(
 
     donor_calls %>%
         dplyr::filter(snp_id %in% snp_info$snp_id, !is.na(zygosity))
+}
+
+#' Read a MatrixMarket coordinate file into a sparse Matrix
+#'
+#' A faster drop-in for \code{Matrix::readMM()} on the plain-text
+#' \code{.mtx} files cellSNP-lite produces: parses the coordinate triples
+#' with \code{readr::read_delim()} (a vectorised C++ parser) rather than the
+#' \code{scan()}-based reader that \code{Matrix::readMM()} uses, which
+#' measurably speeds up import on cellSNP-lite's multi-hundred-megabyte
+#' matrices. Restricted to the coordinate, integer-or-real MatrixMarket format
+#' cellSNP-lite writes (a banner line, an arbitrary number of comment lines
+#' starting with a percent sign, then \code{nrow ncol nnz}); a general
+#' MatrixMarket file (symmetric, complex, pattern, or array format) should
+#' still use \code{Matrix::readMM()}.
+#'
+#' @param mtx_file Path to a \code{.mtx} file
+#'
+#' @return A sparse \code{dgCMatrix}
+#' @keywords internal
+read_mtx <- function(mtx_file) {
+    # The banner plus however many "%"-prefixed comment lines precede the
+    # "nrow ncol nnz" line -- MatrixMarket allows any number, and cellSNP-lite's
+    # own files are inconsistent about how many they write.
+    header_lines <- readr::read_lines(mtx_file, n_max = 64)
+    is_comment <- stringr::str_starts(header_lines, "%")
+    n_header <- match(FALSE, is_comment) - 1L
+
+    dims <- scan(mtx_file, what = "character", skip = n_header, nlines = 1, quiet = TRUE)
+    dims <- as.integer(dims)
+
+    triples <- readr::read_delim(
+        mtx_file,
+        delim = " ",
+        skip = n_header + 1,
+        col_names = c("i", "j", "x"),
+        col_types = readr::cols(
+            i = readr::col_integer(),
+            j = readr::col_integer(),
+            x = readr::col_double()
+        ),
+        progress = FALSE
+    )
+
+    Matrix::sparseMatrix(
+        i = triples$i,
+        j = triples$j,
+        x = triples$x,
+        dims = dims[1:2],
+        index1 = TRUE
+    )
 }
 
 #' Read the base VCF file from cellSNP output

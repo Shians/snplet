@@ -2,10 +2,12 @@
 % Please edit documentation in R/assign_xci.R
 \name{.assemble_xci_fit}
 \alias{.assemble_xci_fit}
-\title{Assemble a per-donor XCI fit from an EM result}
+\title{Assembles a per-donor XCI fit from an EM result and its re-phased genes,
+deriving the donor's empirical escape null along the way.}
 \usage{
 .assemble_xci_fit(
   xci_result,
+  all_genes,
   donor,
   ref_mat,
   alt_mat,
@@ -15,10 +17,7 @@
 )
 }
 \description{
-Shared post-EM assembly used by both the cell- and clonotype-level donor
-fitters. \code{unit_ids} label the columns of the count matrices (cell IDs
-or clonotype IDs); the resulting \code{assignments} tibble keys on
-\code{cell_id} regardless so accessors and the heatmap treat the modelling
-unit uniformly.
+Assembles a per-donor XCI fit from an EM result and its re-phased genes,
+deriving the donor's empirical escape null along the way.
 }
 \keyword{internal}

@@ -7,7 +7,7 @@
 import_cellsnp(
   cellsnp_dir,
   gene_annotation,
-  library_id,
+  library_id = NA_character_,
   vdj_file = NULL,
   vireo_folder = NULL,
   donor_map = NULL,
@@ -23,11 +23,9 @@ cellSNP-lite output files.}
 \item{gene_annotation}{A data.frame, required, with columns \code{chrom},
 \code{start}, \code{end}, \code{gene_name}. Gene annotations.}
 
-\item{library_id}{Character scalar, required. Name of the sequencing
-library this cellSNP-lite run came from, stored on every cell. A 10x
-barcode is unique only within its library, so \code{\link{merge_snpdata}}
-needs this label to tell a repeated cell from two different cells that
-happened to draw the same barcode.}
+\item{library_id}{Character scalar, optional (default \code{NA}). Name of
+the sequencing library this cellSNP-lite run came from, stored on every
+cell. See \sQuote{Merging libraries} below.}
 
 \item{vdj_file}{Character scalar, optional (default \code{NULL}). Path to
 \code{filtered_contig_annotations.csv} from cellranger VDJ.}
@@ -54,11 +52,14 @@ of the column in \code{vdj_file} containing cell barcodes (only used if
 Name of the column in \code{vdj_file} containing clonotype information
 (only used if \code{vdj_file} is provided).}
 
-\item{bam_files}{Character vector, optional (default \code{NULL}, recording
-no paths). The BAM file or files this cellSNP run was made from, stored
-against \code{library_id} in \code{library_info} so that
-\code{\link{add_molecule_phase}} can find them without being told again.
-Paths are kept as given and only checked when read.}
+\item{bam_files}{An unnamed character vector, optional (default \code{NULL},
+recording no paths). The BAM file or files this cellSNP run was made from.
+Requires \code{library_id} (this whole vector is stored against it as one
+library's paths in \code{library_info}, via \code{\link{add_library_bams}}),
+so that \code{\link{phase_from_molecules}} can find them without being told
+again. Must not be named: this call covers a single library, so any names
+on \code{bam_files} itself would be silently discarded rather than used as
+per-library keys; each path is checked to exist.}
 }
 \value{
 A SNPData object
@@ -67,6 +68,16 @@ A SNPData object
 This function imports data from cellSNP-lite output, with optional VDJ annotations from cellranger
 and donor information from Vireo to create a SNPData object.
 }
+\section{Merging libraries}{
+
+A 10x barcode is unique only within its library, so
+\code{\link{merge_snpdata}} uses \code{library_id} to tell a repeated cell
+from two different cells that happened to draw the same barcode, and
+refuses to merge any object carrying a \code{NA} \code{library_id}. A
+single-library workflow that never calls \code{merge_snpdata} can safely
+leave \code{library_id} unset.
+}
+
 \examples{
 \dontrun{
 # Import with VDJ and Vireo data
@@ -112,6 +123,7 @@ combined <- merge_snpdata(run1, run2)
 }
 \seealso{
 Other import and export functions:
+\code{\link[=as_singlecellexperiment]{as_singlecellexperiment()}},
 \code{\link[=export_cellsnp]{export_cellsnp()}},
 \code{\link[=get_example_snpdata]{get_example_snpdata()}}
 }

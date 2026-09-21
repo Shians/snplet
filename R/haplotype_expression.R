@@ -348,7 +348,14 @@ setMethod(
             tibble::tibble(
                 donor = d,
                 snp_id = snp_keep_info$snp_id,
-                gene_name = snp_keep_info$gene_name %||% NA_character_,
+                # snp_info need not carry gene_name at all, in which case `$`
+                # yields NULL and the column would vanish from the tibble
+                # rather than read as unknown.
+                gene_name = if (is.null(snp_keep_info$gene_name)) {
+                    NA_character_
+                } else {
+                    snp_keep_info$gene_name
+                },
                 active_x = g,
                 n_cells = sum(cols),
                 active_count = active_count,
@@ -582,9 +589,9 @@ setMethod(
 #' covers within the dominant block only; a tie is dropped as
 #' \code{"ambiguous"} (residual base-calling noise once phase is accounted
 #' for). Only genes with a stored, resolved \code{allele_on_x1} and
-#' \code{phase_block} (i.e. processed by \code{\link{add_molecule_phase}})
+#' \code{phase_block} (i.e. processed by \code{\link{phase_from_molecules}})
 #' contribute. A single-SNP gene contributes too if that SNP already has an
-#' EM-derived phase from \code{\link{assign_xci}}: \code{add_molecule_phase()}
+#' EM-derived phase from \code{\link{assign_xci}}: \code{phase_from_molecules()}
 #' gives it its own block of one, extending correct molecule-level counting
 #' to single-SNP genes. Only a single-SNP gene with \emph{no} EM-derived
 #' phase at all has no way to be oriented, and is left to
@@ -595,7 +602,7 @@ setMethod(
 #' @param x A SNPData object, required, that has had XCI diagnostics stored
 #'   by \code{\link{assign_xci}} (or \code{\link{assign_xci_by_clonotype}})
 #'   and subsequently had read-backed phase added by
-#'   \code{\link{add_molecule_phase}}, which is also where the per-molecule
+#'   \code{\link{phase_from_molecules}}, which is also where the per-molecule
 #'   allele calls come from (see \sQuote{Where the molecule calls come from}).
 #' @param escape_threshold Numeric, in \code{[0, 1]} (default 0.1).
 #'   Inactive-haplotype fraction at or above which a row is flagged as
@@ -614,7 +621,7 @@ setMethod(
 #' \code{\link{phase_snps}} cannot link two SNPs no single molecule spans, so
 #' one gene routinely ends up split across several phase blocks. Every SNP
 #' counted here nonetheless carries a globally oriented \code{allele_on_x1} --
-#' either the EM's own call, or an orientation \code{\link{add_molecule_phase}}
+#' either the EM's own call, or an orientation \code{\link{phase_from_molecules}}
 #' propagated to the block from an EM anchor -- so a molecule's haplotype means
 #' the same thing in every block, and pooling blocks is arithmetically sound
 #' rather than a mixing of incompatible labels.
@@ -641,12 +648,12 @@ setMethod(
 #'
 #' \describe{
 #'   \item{The per-molecule allele calls}{Read from the
-#'     \code{"molecule_calls"} attribute \code{\link{add_molecule_phase}} left
+#'     \code{"molecule_calls"} attribute \code{\link{phase_from_molecules}} left
 #'     there when it extracted them from the BAM files. They are an attribute
 #'     rather than a slot because they are BAM-derived working data keyed by
 #'     molecule, not part of the object's SNP-by-cell counts, and so are lost
 #'     by operations that rebuild the object: pass the object
-#'     \code{add_molecule_phase()} returned, and subset \emph{before} that call
+#'     \code{phase_from_molecules()} returned, and subset \emph{before} that call
 #'     rather than after.}
 #'   \item{The SNP-to-gene map}{Read from \code{\link{snp_gene_map}}, built by
 #'     \code{\link{import_cellsnp}} from the gene annotation it was given, and
@@ -697,7 +704,7 @@ setMethod(
 #' \dontrun{
 #' snp_data <- assign_xci(snp_data)
 #' # the molecule calls ride along on snp_data from here on
-#' snp_data <- add_molecule_phase(snp_data, bam_files = c(lib1 = "lib1.bam"))
+#' snp_data <- phase_from_molecules(snp_data, bam_files = c(lib1 = "lib1.bam"))
 #'
 #' hap <- haplotype_expression_by_molecule(snp_data)
 #'
@@ -725,9 +732,9 @@ setMethod(
             stop("No stored XCI diagnostics found. Run assign_xci(x) first.")
         }
         if (!all(c("phase_block", "allele_on_x1") %in% colnames(donor_snp_info))) {
-            stop("No stored molecule phase found. Run add_molecule_phase(x) first.")
+            stop("No stored molecule phase found. Run phase_from_molecules(x) first.")
         }
-        # The molecule calls are BAM-derived working data that add_molecule_phase()
+        # The molecule calls are BAM-derived working data that phase_from_molecules()
         # already extracted, so they are taken from the object rather than asked
         # for: there is no other way to derive them that would agree with the
         # phase blocks stored alongside. Being an attribute, they do not survive
@@ -736,7 +743,7 @@ setMethod(
         molecule_calls <- attr(x, "molecule_calls")
         if (is.null(molecule_calls)) {
             stop(
-                "This object carries no molecule calls; they are attached by add_molecule_phase(x). ",
+                "This object carries no molecule calls; they are attached by phase_from_molecules(x). ",
                 "Attributes are lost by operations that rebuild the object, so re-run it, ",
                 "or subset before it rather than after."
             )
@@ -762,46 +769,13 @@ setMethod(
             dplyr::filter(!is.na(allele_on_x1), !is.na(phase_block)) %>%
             dplyr::select(snp_id, donor, allele_on_x1, phase_block)
 
-        # is_x1: whether this molecule's allele at this SNP is the one the
-        # resolved phase names as sitting on X1 -- the gene-level analogue of
-        # haplotype_expression()'s per-SNP active/inactive split. A SNP
-        # assign_snp_genes() flagged ambiguous only counts towards a candidate
-        # gene for molecules whose own transcript strand matches that
-        # candidate's strand; strand-unknown or mismatched molecules are
-        # dropped for that SNP rather than guessed. Joining an ambiguous SNP's
-        # multiple molecules against its multiple gene candidates is a genuine
-        # many-to-many fan-out, narrowed back down by the strand filter below.
-        calls <- molecule_calls %>%
-            dplyr::inner_join(phase, by = c("snp_id", "donor")) %>%
-            dplyr::inner_join(snp_gene_map, by = "snp_id", relationship = "many-to-many") %>%
-            dplyr::filter(!ambiguous | (!is.na(transcript_strand) & transcript_strand == gene_strand)) %>%
-            dplyr::mutate(is_x1 = allele == allele_on_x1)
-
-        if (nrow(calls) == 0) {
-            stop("No molecule calls could be matched to a phased, singly-mapped-gene SNP.")
-        }
-
-        blocks <- calls %>%
-            dplyr::distinct(donor, gene_name, phase_block, barcode, umi) %>%
-            dplyr::count(donor, gene_name, phase_block, name = "molecules")
-        best_block <- blocks %>%
-            dplyr::slice_max(molecules, n = 1, by = c(donor, gene_name), with_ties = FALSE) %>%
-            dplyr::select(donor, gene_name, phase_block, dominant_molecules = molecules)
-        stranded <- blocks %>%
-            dplyr::anti_join(best_block, by = c("donor", "gene_name", "phase_block")) %>%
-            dplyr::summarise(n_stranded_molecules = sum(molecules), .by = c(donor, gene_name))
-
-        # Pooling is the default because every SNP reaching this point already
-        # carries a globally oriented allele_on_x1, so the blocks of one gene
-        # share a scale; counting only the largest is the conservative option
-        # rather than the correct one (see 'Pooling a gene's phase blocks').
-        counted <- calls
-        if (!pool_blocks) {
-            counted <- dplyr::semi_join(counted, best_block, by = c("donor", "gene_name", "phase_block"))
-        }
-        blocks_counted <- counted %>%
-            dplyr::distinct(donor, gene_name, phase_block) %>%
-            dplyr::summarise(n_blocks_pooled = dplyr::n(), .by = c(donor, gene_name))
+        calls <- .molecule_gene_phase_calls(molecule_calls, snp_gene_map, phase, orientation_col = "allele_on_x1")
+        calls$is_x1 <- calls$is_oriented_allele
+        block_counts <- .molecule_gene_block_counts(calls, pool_blocks = pool_blocks)
+        best_block <- block_counts$best_block
+        stranded <- block_counts$stranded
+        blocks_counted <- block_counts$blocks_counted
+        counted <- block_counts$counted
 
         cell_groups <- barcode_info %>%
             dplyr::filter(active_x %in% c("X1", "X2")) %>%

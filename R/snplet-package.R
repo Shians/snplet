@@ -33,7 +33,7 @@
 #' @importFrom scales percent label_comma label_number cut_short_scale
 #' @importFrom logger log_info log_success log_warn
 #' @importFrom glue glue
-#' @importFrom stringr str_remove str_to_title str_detect str_split_fixed
+#' @importFrom stringr str_remove str_to_title str_detect str_split_fixed str_starts
 #' @importFrom methods as is new setClass setGeneric setMethod show
 #' @importFrom BiocGenerics nrow ncol rownames colnames updateObject start end
 #' @importFrom magrittr %>%
@@ -43,7 +43,7 @@
 #' @importFrom ggplot2 geom_hline geom_point facet_grid vars expansion
 #' @importFrom ggplot2 coord_cartesian theme_classic theme_bw
 #' @importFrom ggrepel geom_text_repel
-#' @importFrom readr read_tsv read_csv write_tsv write_csv cols col_character col_integer
+#' @importFrom readr read_tsv read_csv read_delim write_tsv write_csv cols col_character col_integer col_double
 #' @importFrom plyranges as_granges join_overlap_left
 #' @importFrom fs path
 #' @importFrom furrr future_map future_map2
@@ -59,6 +59,7 @@
 #' @importFrom GenomicRanges reduce
 #' @importFrom Seqinfo seqnames seqlevels "seqlevels<-"
 #' @importFrom IRanges IRanges findOverlaps PartitioningByWidth togroup
-#' @importFrom S4Vectors mcols queryHits subjectHits
+#' @importFrom S4Vectors mcols queryHits subjectHits DataFrame
 #' @importFrom Biostrings subseq
+#' @importFrom SummarizedExperiment SummarizedExperiment assay assays rowData colData
 NULL

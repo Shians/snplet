@@ -31,6 +31,10 @@ SNPData object with an additional \code{active_x} column in
   so the result can be passed directly to
   \code{\link{plot_xci_heatmap}},
   \code{\link{xci_assignments}}, and \code{\link{xci_haplotypes}}.
+  \code{donor_info(x)$xci_skew} gives the fitted X1-active prior, here
+  estimated over clonotypes rather than cells: it is the skew of the
+  clonotype population the EM was fit on, which only equals cell-level
+  skew if clonotypes carry comparable cell counts.
 }
 \description{
 Identifies which X chromosome is active in female cells based on allelic
@@ -47,16 +51,13 @@ This approach:
   \item Is biologically motivated since clonally related cells should share X-inactivation state
 }
 
-The algorithm works as follows:
-\enumerate{
-  \item Filters to heterozygous SNPs on the X chromosome for each donor
-  \item Selects the SNP with highest coverage per gene to avoid redundancy
-  \item Aggregates ALT and REF counts by clonotype
-  \item Removes outlier genes with atypical allelic skew
-  \item Runs a beta-binomial EM algorithm with multiple random initialisations
-  \item Assigns clonotypes to X1 or X2 based on posterior probability
-  \item Projects clonotype assignments back to individual cells
-}
+The algorithm is the one described in \code{\link{assign_xci}}, with the
+clonotype as the modelling unit rather than the cell: REF and ALT counts
+are aggregated by clonotype before the gene filters and the EM run, so it
+is clonotypes that are assigned to X1 or X2 by posterior probability.
+Those assignments are then projected back onto the individual cells making
+up each clonotype. Cells whose clonotype is \code{NA} are excluded from the
+fit.
 }
 \section{Phase is inferred from expression, not genotyped}{
 
@@ -89,7 +90,7 @@ follow:
 
 Separating these cases needs phase independent of expression (DNA-based
 genotyping, or trio/population phasing), which this package does not
-have. \code{\link{add_molecule_phase}} supplies true physical linkage
+have. \code{\link{phase_from_molecules}} supplies true physical linkage
 between SNPs co-observed on one molecule, but a molecule is a single
 transcript: it cannot link across genes, and its blocks are still
 oriented to X1/X2 using the expression-derived fit, so it refines phase
@@ -111,10 +112,11 @@ plot_xci_heatmap(snp_data, donor = "donor1")
 }
 \seealso{
 Other X-chromosome inactivation functions:
-\code{\link[=add_molecule_phase]{add_molecule_phase()}},
+\code{\link[=as_escape_experiment]{as_escape_experiment()}},
 \code{\link[=assign_xci]{assign_xci()}},
 \code{\link[=haplotype_expression]{haplotype_expression()}},
 \code{\link[=haplotype_expression_by_molecule]{haplotype_expression_by_molecule()}},
+\code{\link[=phase_from_molecules]{phase_from_molecules()}},
 \code{\link[=plot_xci_heatmap]{plot_xci_heatmap()}},
 \code{\link[=test_escape]{test_escape()}},
 \code{\link[=xci_assignments]{xci_assignments()}},

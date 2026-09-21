@@ -23,6 +23,22 @@
     oth_count
 }
 
+.validate_total_count <- function(total_count, ref_count, alt_count) {
+    stopifnot(
+        "total_count must have the same number of rows (SNPs) as ref_count" = nrow(total_count) == nrow(ref_count),
+        "total_count must have the same number of columns (cells) as ref_count" = ncol(total_count) == ncol(ref_count)
+    )
+    # A full total_count == alt_count + ref_count check would cost as much as
+    # the addition it's meant to save, so this checks the row/column margins
+    # instead -- catching a mismatched or stale total_count in practice
+    # without materialising a second full sparse matrix.
+    row_diff <- Matrix::rowSums(total_count) - Matrix::rowSums(alt_count) - Matrix::rowSums(ref_count)
+    if (any(row_diff != 0)) {
+        stop("total_count does not match alt_count + ref_count (row sums differ)")
+    }
+    total_count
+}
+
 .validate_info_dims <- function(ref_count, alt_count, snp_info, barcode_info) {
     stopifnot(
         "ncol(alt_count) must equal nrow(barcode_info)" = ncol(alt_count) == nrow(barcode_info),
@@ -261,9 +277,12 @@
 }
 
 # Normalises the `bam_files` argument shared by import_cellsnp(),
-# add_library_bams(), and add_molecule_phase() into a named list of character
+# add_library_bams(), and phase_from_molecules() into a named list of character
 # vectors, one element per library.
 .as_library_bam_list <- function(bam_files, arg_name = "bam_files") {
+    if (length(bam_files) == 0) {
+        stop(arg_name, " is empty; supply at least one library's BAM file(s).")
+    }
     nms <- names(bam_files)
     if (is.null(nms) || anyNA(nms) || any(!nzchar(nms))) {
         stop(arg_name, " must be named, library_id = path(s).")
@@ -332,14 +351,15 @@
     dplyr::relocate(barcode_info, "library_id", .after = dplyr::all_of(anchor))
 }
 
-.dedupe_snps <- function(ref_count, alt_count, oth_count, snp_info, donor_snp_info) {
+.dedupe_snps <- function(ref_count, alt_count, oth_count, snp_info, donor_snp_info, total_count = NULL) {
     if (!any(duplicated(snp_info$snp_id))) {
         return(list(
             ref_count = ref_count,
             alt_count = alt_count,
             oth_count = oth_count,
             snp_info = snp_info,
-            donor_snp_info = donor_snp_info
+            donor_snp_info = donor_snp_info,
+            total_count = total_count
         ))
     }
 
@@ -375,7 +395,8 @@
         alt_count = alt_count[keep_snps, , drop = FALSE],
         oth_count = oth_count[keep_snps, , drop = FALSE],
         snp_info = kept_snp_info,
-        donor_snp_info = donor_snp_info[donor_snp_info$snp_id %in% kept_snp_info$snp_id, , drop = FALSE]
+        donor_snp_info = donor_snp_info[donor_snp_info$snp_id %in% kept_snp_info$snp_id, , drop = FALSE],
+        total_count = if (is.null(total_count)) NULL else total_count[keep_snps, , drop = FALSE]
     )
 }
 
@@ -423,8 +444,13 @@
     donor_info
 }
 
-.recompute_metrics <- function(snp_info, barcode_info, donor_info, ref_count, alt_count) {
-    total_count <- alt_count + ref_count
+.recompute_metrics <- function(snp_info, barcode_info, donor_info, ref_count, alt_count, total_count = NULL) {
+    # total_count = alt_count + ref_count by construction; a caller that
+    # already has it (e.g. import_cellsnp()'s DP matrix) passes it through to
+    # skip re-deriving it from two large sparse matrices.
+    if (is.null(total_count)) {
+        total_count <- alt_count + ref_count
+    }
     list(
         snp_info = .recompute_snp_stats(snp_info, total_count),
         barcode_info = .recompute_barcode_stats(barcode_info, total_count),

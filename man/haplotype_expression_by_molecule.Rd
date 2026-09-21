@@ -23,7 +23,7 @@ haplotype_expression_by_molecule(
 \item{x}{A SNPData object, required, that has had XCI diagnostics stored
 by \code{\link{assign_xci}} (or \code{\link{assign_xci_by_clonotype}})
 and subsequently had read-backed phase added by
-\code{\link{add_molecule_phase}}, which is also where the per-molecule
+\code{\link{phase_from_molecules}}, which is also where the per-molecule
 allele calls come from (see \sQuote{Where the molecule calls come from}).}
 
 \item{escape_threshold}{Numeric, in \code{[0, 1]} (default 0.1).
@@ -87,9 +87,9 @@ A molecule's haplotype is called by majority vote across the SNPs it
 covers within the dominant block only; a tie is dropped as
 \code{"ambiguous"} (residual base-calling noise once phase is accounted
 for). Only genes with a stored, resolved \code{allele_on_x1} and
-\code{phase_block} (i.e. processed by \code{\link{add_molecule_phase}})
+\code{phase_block} (i.e. processed by \code{\link{phase_from_molecules}})
 contribute. A single-SNP gene contributes too if that SNP already has an
-EM-derived phase from \code{\link{assign_xci}}: \code{add_molecule_phase()}
+EM-derived phase from \code{\link{assign_xci}}: \code{phase_from_molecules()}
 gives it its own block of one, extending correct molecule-level counting
 to single-SNP genes. Only a single-SNP gene with \emph{no} EM-derived
 phase at all has no way to be oriented, and is left to
@@ -100,7 +100,7 @@ phase at all has no way to be oriented, and is left to
 \code{\link{phase_snps}} cannot link two SNPs no single molecule spans, so
 one gene routinely ends up split across several phase blocks. Every SNP
 counted here nonetheless carries a globally oriented \code{allele_on_x1} --
-either the EM's own call, or an orientation \code{\link{add_molecule_phase}}
+either the EM's own call, or an orientation \code{\link{phase_from_molecules}}
 propagated to the block from an EM anchor -- so a molecule's haplotype means
 the same thing in every block, and pooling blocks is arithmetically sound
 rather than a mixing of incompatible labels.
@@ -129,12 +129,12 @@ are already on the object:
 
 \describe{
   \item{The per-molecule allele calls}{Read from the
-    \code{"molecule_calls"} attribute \code{\link{add_molecule_phase}} left
+    \code{"molecule_calls"} attribute \code{\link{phase_from_molecules}} left
     there when it extracted them from the BAM files. They are an attribute
     rather than a slot because they are BAM-derived working data keyed by
     molecule, not part of the object's SNP-by-cell counts, and so are lost
     by operations that rebuild the object: pass the object
-    \code{add_molecule_phase()} returned, and subset \emph{before} that call
+    \code{phase_from_molecules()} returned, and subset \emph{before} that call
     rather than after.}
   \item{The SNP-to-gene map}{Read from \code{\link{snp_gene_map}}, built by
     \code{\link{import_cellsnp}} from the gene annotation it was given, and
@@ -192,7 +192,7 @@ follow:
 
 Separating these cases needs phase independent of expression (DNA-based
 genotyping, or trio/population phasing), which this package does not
-have. \code{\link{add_molecule_phase}} supplies true physical linkage
+have. \code{\link{phase_from_molecules}} supplies true physical linkage
 between SNPs co-observed on one molecule, but a molecule is a single
 transcript: it cannot link across genes, and its blocks are still
 oriented to X1/X2 using the expression-derived fit, so it refines phase
@@ -203,7 +203,7 @@ within a gene without escaping this constraint.
 \dontrun{
 snp_data <- assign_xci(snp_data)
 # the molecule calls ride along on snp_data from here on
-snp_data <- add_molecule_phase(snp_data, bam_files = c(lib1 = "lib1.bam"))
+snp_data <- phase_from_molecules(snp_data, bam_files = c(lib1 = "lib1.bam"))
 
 hap <- haplotype_expression_by_molecule(snp_data)
 
@@ -214,10 +214,11 @@ snp_gene_map(snp_data) <- assign_snp_genes(snp_info(snp_data), gene_anno)
 }
 \seealso{
 Other X-chromosome inactivation functions:
-\code{\link[=add_molecule_phase]{add_molecule_phase()}},
+\code{\link[=as_escape_experiment]{as_escape_experiment()}},
 \code{\link[=assign_xci]{assign_xci()}},
 \code{\link[=assign_xci_by_clonotype]{assign_xci_by_clonotype()}},
 \code{\link[=haplotype_expression]{haplotype_expression()}},
+\code{\link[=phase_from_molecules]{phase_from_molecules()}},
 \code{\link[=plot_xci_heatmap]{plot_xci_heatmap()}},
 \code{\link[=test_escape]{test_escape()}},
 \code{\link[=xci_assignments]{xci_assignments()}},

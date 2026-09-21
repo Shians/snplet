@@ -13,9 +13,13 @@ they survive subsetting: barcode metadata gains \code{active_x} and
 SNP x donor with \code{xci_informative} (whether the gene drove active-X
 calling), \code{allele_on_x1} and \code{xci_escape_fraction}; \code{donor_info}
 gains one row per donor with \code{xci_median_pi_g} (median escape fraction
-among informative genes, a per-donor empirical background/noise level) and
-\code{xci_rho}. For a clonotype-level fit the per-cell projection is used
-for barcode annotation.
+among informative genes, a per-donor empirical background/noise level),
+\code{xci_rho}, and \code{xci_skew} (the EM's fitted X1-active prior: the
+model's own estimate of what fraction of this donor's cells have X1
+active, i.e. the quantified XCI skew, fit jointly with phase and escape
+rather than read off the confidence-thresholded hard calls afterwards).
+For a clonotype-level fit the per-cell projection is used for barcode
+annotation.
 }
 \details{
 \code{xci_rho} is \emph{not} the EM's per-cell beta-binomial overdispersion
