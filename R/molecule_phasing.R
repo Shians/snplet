@@ -872,10 +872,11 @@ molecule_haplotype_counts <- function(
 
 # Per-(donor, gene, phase_block) molecule bookkeeping shared by
 # haplotype_expression_by_molecule() and molecule_haplotype_counts(): the
-# dominant block, molecules stranded in other blocks, and which blocks
-# `pool_blocks` includes in `counted`. Pooling is only valid when
-# `is_oriented_allele` means the same thing across blocks (a globally oriented
-# phase); this function only counts molecules and leaves that call to the caller.
+# dominant block, molecules sitting in the gene's other (secondary) blocks,
+# and which blocks `pool_blocks` includes in `counted`. Pooling is only valid
+# when `is_oriented_allele` means the same thing across blocks (a globally
+# oriented phase); this function only counts molecules and leaves that call
+# to the caller.
 .molecule_gene_block_counts <- function(calls, pool_blocks) {
     blocks <- calls %>%
         dplyr::distinct(donor, gene_name, phase_block, barcode, umi) %>%
@@ -883,9 +884,9 @@ molecule_haplotype_counts <- function(
     best_block <- blocks %>%
         dplyr::slice_max(molecules, n = 1, by = c(donor, gene_name), with_ties = FALSE) %>%
         dplyr::select(donor, gene_name, phase_block, dominant_molecules = molecules)
-    stranded <- blocks %>%
+    secondary <- blocks %>%
         dplyr::anti_join(best_block, by = c("donor", "gene_name", "phase_block")) %>%
-        dplyr::summarise(n_stranded_molecules = sum(molecules), .by = c(donor, gene_name))
+        dplyr::summarise(n_secondary_block_molecules = sum(molecules), .by = c(donor, gene_name))
 
     counted <- calls
     if (!pool_blocks) {
@@ -895,5 +896,5 @@ molecule_haplotype_counts <- function(
         dplyr::distinct(donor, gene_name, phase_block) %>%
         dplyr::summarise(n_blocks_pooled = dplyr::n(), .by = c(donor, gene_name))
 
-    list(best_block = best_block, stranded = stranded, blocks_counted = blocks_counted, counted = counted)
+    list(best_block = best_block, secondary = secondary, blocks_counted = blocks_counted, counted = counted)
 }

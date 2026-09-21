@@ -100,7 +100,7 @@ utils::globalVariables(c(
     "haplotype",
     "molecules",
     "dominant_molecules",
-    "n_stranded_molecules",
+    "n_secondary_block_molecules",
     "n_blocks_pooled",
     "discordant_block_molecules",
     "block_molecules",
