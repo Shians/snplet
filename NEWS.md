@@ -1,4 +1,4 @@
-# snplet 0.6.5
+# snplet 7.0.0
 
 * Added `xci_skew` to `donor_info` via a new fitted X1-active prior in the XCI EM.
 * Added a `min_cells` argument to `phase_snps()` (default 2), requiring an edge to be backed
