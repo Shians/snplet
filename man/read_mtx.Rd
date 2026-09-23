@@ -2,26 +2,33 @@
 % Please edit documentation in R/SNPData-import.R
 \name{read_mtx}
 \alias{read_mtx}
-\title{Read a MatrixMarket coordinate file into a sparse Matrix}
+\title{Read a MatrixMarket file into a sparse Matrix}
 \usage{
 read_mtx(mtx_file)
 }
 \arguments{
-\item{mtx_file}{Path to a \code{.mtx} file}
+\item{mtx_file}{Path to a \code{.mtx} or \code{.mtx.gz} file}
 }
 \value{
 A sparse \code{dgCMatrix}
 }
 \description{
 A faster drop-in for \code{Matrix::readMM()} on the plain-text
-\code{.mtx} files cellSNP-lite produces: parses the coordinate triples
-with \code{readr::read_delim()} (a vectorised C++ parser) rather than the
+\code{.mtx} files cellSNP-lite produces: parses the coordinate entries
+with \code{readr::read_table()} (a vectorised C++ parser) rather than the
 \code{scan()}-based reader that \code{Matrix::readMM()} uses, which
-measurably speeds up import on cellSNP-lite's multi-hundred-megabyte
-matrices. Restricted to the coordinate, integer-or-real MatrixMarket format
-cellSNP-lite writes (a banner line, an arbitrary number of comment lines
-starting with a percent sign, then \code{nrow ncol nnz}); a general
-MatrixMarket file (symmetric, complex, pattern, or array format) should
-still use \code{Matrix::readMM()}.
+measurably speeds up import on multi-hundred-megabyte matrices.
+}
+\details{
+Accepts the variations the MatrixMarket format permits: fields separated
+by any run of spaces or tabs, leading and trailing whitespace, CRLF line
+endings, blank lines, any number of comment lines, gzip compression, and
+values in scientific notation. Both the sparse \code{coordinate} and dense
+\code{array} formats are read, with the \code{real}, \code{integer}, or
+(coordinate only) \code{pattern} field and the \code{general},
+\code{symmetric}, or \code{skew-symmetric} symmetry; the stored triangle
+of a symmetric matrix is mirrored into a full general matrix. A file
+without a banner line is read as \code{coordinate real general}. Complex
+and Hermitian matrices are rejected.
 }
 \keyword{internal}
