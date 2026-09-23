@@ -1206,3 +1206,190 @@ test_that("import_cellsnp() leaves the SNP-to-gene map empty for an unstranded a
     # Verify no map is guessed at without strand, which molecule attribution needs
     expect_equal(nrow(snp_gene_map(snp_data)), 0)
 })
+
+# ------------------------------------------------------------------------------
+# read_mtx(): MatrixMarket format variations
+# ------------------------------------------------------------------------------
+
+write_test_mtx <- function(lines, fileext = ".mtx") {
+    mtx_file <- withr::local_tempfile(fileext = fileext, .local_envir = parent.frame())
+    writeLines(lines, mtx_file)
+    mtx_file
+}
+
+mtx_banner <- "%%MatrixMarket matrix coordinate integer general"
+
+# The 3 x 4 matrix every well-formed general fixture below encodes
+expected_mtx <- Matrix::sparseMatrix(i = c(1, 2, 3), j = c(1, 3, 4), x = c(5, 7, 2), dims = c(3, 4))
+
+test_that("read_mtx() reads a space-separated coordinate file", {
+    mtx_file <- write_test_mtx(c(mtx_banner, "3 4 3", "1 1 5", "2 3 7", "3 4 2"))
+
+    result <- snplet:::read_mtx(mtx_file)
+
+    # Verify the parsed matrix matches the encoded entries and dimensions
+    expect_equal(result, expected_mtx)
+})
+
+test_that("read_mtx() reads a tab-separated coordinate file", {
+    mtx_file <- write_test_mtx(c(mtx_banner, "3\t4\t3", "1\t1\t5", "2\t3\t7", "3\t4\t2"))
+
+    result <- snplet:::read_mtx(mtx_file)
+
+    # Verify tab separators parse identically to single spaces
+    expect_equal(result, expected_mtx)
+})
+
+test_that("read_mtx() tolerates mixed, repeated, leading and trailing whitespace", {
+    mtx_file <- write_test_mtx(c(mtx_banner, "  3  4\t3 ", "1 \t1   5", "\t2 3 7\t", "3 4 2  "))
+
+    result <- snplet:::read_mtx(mtx_file)
+
+    # Confirm irregular whitespace does not produce NA indices
+    expect_equal(result, expected_mtx)
+})
+
+test_that("read_mtx() handles CRLF line endings, blank lines and many comment lines", {
+    comments <- rep("% a comment line", 100)
+    mtx_file <- write_test_mtx(c(
+        paste0(mtx_banner, "\r"),
+        comments,
+        "",
+        "3 4 3\r",
+        "1 1 5\r",
+        "",
+        "2 3 7\r",
+        "3 4 2\r"
+    ))
+
+    result <- snplet:::read_mtx(mtx_file)
+
+    # Verify the size line is found beyond the initial header read and blank lines are skipped
+    expect_equal(result, expected_mtx)
+})
+
+test_that("read_mtx() parses indices and values written in scientific notation", {
+    mtx_file <- write_test_mtx(c(mtx_banner, "3e+00 4 3", "1 1 5", "2 3 7e+00", "3e0 4 2"))
+
+    result <- snplet:::read_mtx(mtx_file)
+
+    # Confirm scientific notation is read as whole numbers
+    expect_equal(result, expected_mtx)
+})
+
+test_that("read_mtx() reads a gzip-compressed file", {
+    mtx_file <- withr::local_tempfile(fileext = ".mtx.gz")
+    gz_con <- gzfile(mtx_file, "w")
+    writeLines(c(mtx_banner, "3 4 3", "1 1 5", "2 3 7", "3 4 2"), gz_con)
+    close(gz_con)
+
+    result <- snplet:::read_mtx(mtx_file)
+
+    # Verify compressed input is decompressed transparently
+    expect_equal(result, expected_mtx)
+})
+
+test_that("read_mtx() reads a file without a banner as coordinate real general", {
+    mtx_file <- write_test_mtx(c("3 4 3", "1 1 5", "2 3 7", "3 4 2"))
+
+    result <- snplet:::read_mtx(mtx_file)
+
+    # Confirm the missing banner falls back to the general coordinate layout
+    expect_equal(result, expected_mtx)
+})
+
+test_that("read_mtx() assigns a value of one to every entry of a pattern file", {
+    mtx_file <- write_test_mtx(c(
+        "%%MatrixMarket matrix coordinate pattern general",
+        "3 4 3",
+        "1 1",
+        "2 3",
+        "3 4"
+    ))
+
+    result <- snplet:::read_mtx(mtx_file)
+
+    # Verify pattern entries become ones at the listed positions
+    expect_equal(result, Matrix::sparseMatrix(i = c(1, 2, 3), j = c(1, 3, 4), x = 1, dims = c(3, 4)))
+})
+
+test_that("read_mtx() mirrors the stored triangle of a symmetric file", {
+    mtx_file <- write_test_mtx(c(
+        "%%MatrixMarket matrix coordinate real symmetric",
+        "3 3 3",
+        "1 1 4",
+        "2 1 6",
+        "3 2 8"
+    ))
+
+    result <- snplet:::read_mtx(mtx_file)
+
+    # Verify off-diagonal entries appear in both triangles and the diagonal is not doubled
+    expect_equal(as.matrix(result), matrix(c(4, 6, 0, 6, 0, 8, 0, 8, 0), nrow = 3))
+})
+
+test_that("read_mtx() negates the mirrored triangle of a skew-symmetric file", {
+    mtx_file <- write_test_mtx(c(
+        "%%MatrixMarket matrix coordinate real skew-symmetric",
+        "2 2 1",
+        "2 1 3"
+    ))
+
+    result <- snplet:::read_mtx(mtx_file)
+
+    # Verify the upper triangle holds the negated lower-triangle entry
+    expect_equal(as.matrix(result), matrix(c(0, 3, -3, 0), nrow = 2))
+})
+
+test_that("read_mtx() converts a dense array file to a sparse general matrix", {
+    mtx_file <- write_test_mtx(c("%%MatrixMarket matrix array real general", "2 2", "1", "0", "0", "4"))
+
+    result <- snplet:::read_mtx(mtx_file)
+
+    # Verify array input is returned as a dgCMatrix
+    expect_s4_class(result, "dgCMatrix")
+    # Check the column-major values are placed correctly
+    expect_equal(as.matrix(result), matrix(c(1, 0, 0, 4), nrow = 2))
+})
+
+test_that("read_mtx() errors when the file holds fewer entries than declared", {
+    mtx_file <- write_test_mtx(c(mtx_banner, "3 4 3", "1 1 5", "2 3 7"))
+
+    # Ensure a truncated file is reported rather than silently accepted
+    expect_error(snplet:::read_mtx(mtx_file), "declares 3 entries but contains 2")
+})
+
+test_that("read_mtx() errors on a line with a missing field", {
+    mtx_file <- write_test_mtx(c(mtx_banner, "3 4 3", "1 1 5", "2 3", "3 4 2"))
+
+    # Ensure the malformed entry is located in the error message
+    expect_error(snplet:::read_mtx(mtx_file), "malformed entry at entry 2")
+})
+
+test_that("read_mtx() errors on a line with surplus fields", {
+    mtx_file <- write_test_mtx(c(mtx_banner, "3 4 3", "1 1 5", "2 3 7 9", "3 4 2"))
+
+    # Ensure surplus fields are not silently dropped
+    expect_error(snplet:::read_mtx(mtx_file), "malformed entry at entry 2")
+})
+
+test_that("read_mtx() errors on an index outside the declared dimensions", {
+    mtx_file <- write_test_mtx(c(mtx_banner, "3 4 3", "1 1 5", "2 5 7", "3 4 2"))
+
+    # Ensure out-of-range column indices are rejected
+    expect_error(snplet:::read_mtx(mtx_file), "invalid index at entry 2")
+})
+
+test_that("read_mtx() errors on a complex matrix", {
+    mtx_file <- write_test_mtx(c("%%MatrixMarket matrix coordinate complex general", "1 1 1", "1 1 2 3"))
+
+    # Ensure unsupported fields are rejected with a clear message
+    expect_error(snplet:::read_mtx(mtx_file), "unsupported field 'complex'")
+})
+
+test_that("read_mtx() errors on a malformed size line", {
+    mtx_file <- write_test_mtx(c(mtx_banner, "3 4", "1 1 5"))
+
+    # Ensure a coordinate size line missing nnz is reported
+    expect_error(snplet:::read_mtx(mtx_file), "malformed size line")
+})

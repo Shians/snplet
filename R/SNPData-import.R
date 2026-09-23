@@ -378,54 +378,298 @@ import_cellsnp <- function(
         dplyr::filter(snp_id %in% snp_info$snp_id, !is.na(zygosity))
 }
 
-#' Read a MatrixMarket coordinate file into a sparse Matrix
+#' Read a MatrixMarket file into a sparse Matrix
 #'
 #' A faster drop-in for \code{Matrix::readMM()} on the plain-text
-#' \code{.mtx} files cellSNP-lite produces: parses the coordinate triples
-#' with \code{readr::read_delim()} (a vectorised C++ parser) rather than the
+#' \code{.mtx} files cellSNP-lite produces: parses the coordinate entries
+#' with \code{readr::read_table()} (a vectorised C++ parser) rather than the
 #' \code{scan()}-based reader that \code{Matrix::readMM()} uses, which
-#' measurably speeds up import on cellSNP-lite's multi-hundred-megabyte
-#' matrices. Restricted to the coordinate, integer-or-real MatrixMarket format
-#' cellSNP-lite writes (a banner line, an arbitrary number of comment lines
-#' starting with a percent sign, then \code{nrow ncol nnz}); a general
-#' MatrixMarket file (symmetric, complex, pattern, or array format) should
-#' still use \code{Matrix::readMM()}.
+#' measurably speeds up import on multi-hundred-megabyte matrices.
 #'
-#' @param mtx_file Path to a \code{.mtx} file
+#' Accepts the variations the MatrixMarket format permits: fields separated
+#' by any run of spaces or tabs, leading and trailing whitespace, CRLF line
+#' endings, blank lines, any number of comment lines, gzip compression, and
+#' values in scientific notation. Both the sparse \code{coordinate} and dense
+#' \code{array} formats are read, with the \code{real}, \code{integer}, or
+#' (coordinate only) \code{pattern} field and the \code{general},
+#' \code{symmetric}, or \code{skew-symmetric} symmetry; the stored triangle
+#' of a symmetric matrix is mirrored into a full general matrix. A file
+#' without a banner line is read as \code{coordinate real general}. Complex
+#' and Hermitian matrices are rejected.
+#'
+#' @param mtx_file Path to a \code{.mtx} or \code{.mtx.gz} file
 #'
 #' @return A sparse \code{dgCMatrix}
 #' @keywords internal
 read_mtx <- function(mtx_file) {
-    # The banner plus however many "%"-prefixed comment lines precede the
-    # "nrow ncol nnz" line -- MatrixMarket allows any number, and cellSNP-lite's
-    # own files are inconsistent about how many they write.
-    header_lines <- readr::read_lines(mtx_file, n_max = 64)
-    is_comment <- stringr::str_starts(header_lines, "%")
-    n_header <- match(FALSE, is_comment) - 1L
+    header <- read_mtx_header(mtx_file)
 
-    dims <- scan(mtx_file, what = "character", skip = n_header, nlines = 1, quiet = TRUE)
-    dims <- as.integer(dims)
+    if (header$format == "array") {
+        entries <- read_mtx_array_entries(mtx_file, header)
+    } else {
+        entries <- read_mtx_coordinate_entries(mtx_file, header)
+    }
 
-    triples <- readr::read_delim(
-        mtx_file,
-        delim = " ",
-        skip = n_header + 1,
-        col_names = c("i", "j", "x"),
-        col_types = readr::cols(
-            i = readr::col_integer(),
-            j = readr::col_integer(),
-            x = readr::col_double()
-        ),
-        progress = FALSE
-    )
+    row_index <- entries$i
+    col_index <- entries$j
+    values <- entries$x
+
+    # Symmetric files store only one triangle, so mirror the off-diagonal
+    # entries (negated for skew-symmetric) to recover the full matrix.
+    if (header$symmetry != "general") {
+        is_off_diagonal <- row_index != col_index
+        mirror_sign <- 1
+        if (header$symmetry == "skew-symmetric") {
+            mirror_sign <- -1
+        }
+        mirrored_rows <- col_index[is_off_diagonal]
+        col_index <- c(col_index, row_index[is_off_diagonal])
+        row_index <- c(row_index, mirrored_rows)
+        values <- c(values, mirror_sign * values[is_off_diagonal])
+    }
 
     Matrix::sparseMatrix(
-        i = triples$i,
-        j = triples$j,
-        x = triples$x,
-        dims = dims[1:2],
+        i = row_index,
+        j = col_index,
+        x = values,
+        dims = header$dims,
         index1 = TRUE
     )
+}
+
+#' Read the entries of a coordinate-format MatrixMarket file
+#'
+#' @param mtx_file Path to a \code{.mtx} or \code{.mtx.gz} file
+#' @param header The list returned by \code{read_mtx_header()}
+#'
+#' @return A list of 1-based row indices \code{i}, column indices \code{j},
+#'   and values \code{x} (all ones for a pattern file), as stored in the file.
+#' @keywords internal
+read_mtx_coordinate_entries <- function(mtx_file, header) {
+    value_cols <- c("i", "j", "x")
+    if (header$field == "pattern") {
+        value_cols <- c("i", "j")
+    }
+
+    # A line with a missing or surplus field parses to NA in some column (the
+    # read_table() fallback puts surplus fields in its extra column), so
+    # readr's parsing warnings are silenced and malformed lines found here.
+    find_malformed <- function(entries) {
+        # read_delim() sizes the table from the first line, so a malformed
+        # first line can leave whole columns missing.
+        if (!all(value_cols %in% names(entries))) {
+            return(rep(TRUE, nrow(entries)))
+        }
+        is_malformed <- Reduce(`|`, lapply(entries[value_cols], is.na))
+        if ("extra" %in% names(entries)) {
+            is_malformed <- is_malformed | !is.na(entries$extra)
+        }
+        is_malformed
+    }
+
+    # Fast path: read_delim() is multithreaded but needs exactly one
+    # separator character between fields, so guess it from the first entry.
+    # Indices are parsed as integers to save memory, so an index written in
+    # scientific notation also falls through to the slow path.
+    delim <- " "
+    if (stringr::str_detect(header$first_entry, "\t")) {
+        delim <- "\t"
+    }
+    entries <- suppressWarnings(readr::read_delim(
+        mtx_file,
+        delim = delim,
+        skip = header$n_lines,
+        col_names = value_cols,
+        col_types = substr("iid", 1, length(value_cols)),
+        progress = FALSE
+    ))
+
+    # Slow path: read_table() splits on any run of whitespace, which handles
+    # mixed separators, repeated separators, and padded lines.
+    is_malformed <- find_malformed(entries)
+    if (any(is_malformed)) {
+        entries <- suppressWarnings(readr::read_table(
+            mtx_file,
+            skip = header$n_lines,
+            col_names = c(value_cols, "extra"),
+            col_types = paste0(strrep("d", length(value_cols)), "c"),
+            progress = FALSE
+        ))
+        is_malformed <- find_malformed(entries)
+    }
+
+    if (nrow(entries) != header$nnz) {
+        stop(
+            "MatrixMarket file ",
+            mtx_file,
+            " declares ",
+            header$nnz,
+            " entries but contains ",
+            nrow(entries),
+            "; the file may be truncated."
+        )
+    }
+
+    if (any(is_malformed)) {
+        stop(
+            "MatrixMarket file ",
+            mtx_file,
+            " has a malformed entry at entry ",
+            which(is_malformed)[1],
+            "; expected ",
+            length(value_cols),
+            " whitespace-separated numbers per line."
+        )
+    }
+
+    # Check the index range cheaply first; only locate the offending entry
+    # when there is one to report.
+    has_invalid_index <- function(index, n) {
+        index_range <- range(index, 1)
+        index_range[1] < 1 || index_range[2] > n || (!is.integer(index) && any(index != round(index)))
+    }
+    if (has_invalid_index(entries$i, header$dims[1]) || has_invalid_index(entries$j, header$dims[2])) {
+        is_valid_index <- function(index, n) {
+            index == round(index) & index >= 1 & index <= n
+        }
+        is_out_of_range <- !is_valid_index(entries$i, header$dims[1]) | !is_valid_index(entries$j, header$dims[2])
+        stop(
+            "MatrixMarket file ",
+            mtx_file,
+            " has an invalid index at entry ",
+            which(is_out_of_range)[1],
+            "; indices must be whole numbers within the declared ",
+            header$dims[1],
+            " x ",
+            header$dims[2],
+            " dimensions."
+        )
+    }
+
+    values <- rep(1, nrow(entries))
+    if (header$field != "pattern") {
+        values <- entries$x
+    }
+    list(i = entries$i, j = entries$j, x = values)
+}
+
+#' Read the entries of an array-format MatrixMarket file
+#'
+#' Array files list values in column-major order with no indices: every
+#' element of a general matrix, the lower triangle including the diagonal of
+#' a symmetric matrix, or the strict lower triangle of a skew-symmetric one.
+#'
+#' @inheritParams read_mtx_coordinate_entries
+#'
+#' @return A list of 1-based row indices \code{i}, column indices \code{j},
+#'   and values \code{x} for the non-zero stored elements.
+#' @keywords internal
+read_mtx_array_entries <- function(mtx_file, header) {
+    if (header$field == "pattern") {
+        stop("MatrixMarket file ", mtx_file, " uses the pattern field, which the array format does not allow.")
+    }
+
+    values <- suppressWarnings(as.numeric(scan(
+        mtx_file,
+        what = "character",
+        skip = header$n_lines,
+        quiet = TRUE
+    )))
+
+    stored_positions <- matrix(TRUE, nrow = header$dims[1], ncol = header$dims[2])
+    if (header$symmetry != "general") {
+        stored_positions <- lower.tri(stored_positions, diag = header$symmetry == "symmetric")
+    }
+    positions <- which(stored_positions, arr.ind = TRUE)
+
+    if (length(values) != nrow(positions) || anyNA(values)) {
+        stop(
+            "MatrixMarket file ",
+            mtx_file,
+            " should hold ",
+            nrow(positions),
+            " numeric array values but has ",
+            length(values),
+            " fields, ",
+            sum(is.na(values)),
+            " of them non-numeric."
+        )
+    }
+
+    is_non_zero <- values != 0
+    list(i = positions[is_non_zero, 1], j = positions[is_non_zero, 2], x = values[is_non_zero])
+}
+
+#' Parse the banner and size line of a MatrixMarket file
+#'
+#' @param mtx_file Path to a \code{.mtx} or \code{.mtx.gz} file
+#'
+#' @return A list with the banner's \code{format}, \code{field}, and
+#'   \code{symmetry} (lower-cased), the matrix \code{dims}, the declared
+#'   \code{nnz} (\code{NA} for array files), \code{n_lines}, the number of
+#'   lines up to and including the size line, and \code{first_entry}, the
+#'   first non-blank line after it (\code{""} if there is none).
+#' @keywords internal
+read_mtx_header <- function(mtx_file) {
+    # The banner, comment lines, and blank lines precede the size line, and
+    # the format allows any number of them, so read further until it is found.
+    n_max <- 64L
+    repeat {
+        lines <- readr::read_lines(mtx_file, n_max = n_max, skip_empty_rows = FALSE)
+        is_preamble <- stringr::str_detect(lines, "^\\s*(%|$)")
+        size_line <- match(FALSE, is_preamble)
+        if (!is.na(size_line) || length(lines) < n_max) {
+            break
+        }
+        n_max <- n_max * 4L
+    }
+    if (is.na(size_line)) {
+        stop("MatrixMarket file ", mtx_file, " has no size line.")
+    }
+
+    header <- list(format = "coordinate", field = "real", symmetry = "general")
+    if (stringr::str_detect(lines[1], stringr::regex("^%%MatrixMarket", ignore_case = TRUE))) {
+        banner <- tolower(stringr::str_split(stringr::str_trim(lines[1]), "\\s+")[[1]])
+        if (length(banner) != 5 || banner[2] != "matrix") {
+            stop("MatrixMarket file ", mtx_file, " has a malformed banner: ", lines[1])
+        }
+        header <- list(format = banner[3], field = banner[4], symmetry = banner[5])
+    }
+
+    if (!header$format %in% c("coordinate", "array")) {
+        stop("MatrixMarket file ", mtx_file, " has unsupported format '", header$format, "'.")
+    }
+    if (!header$field %in% c("real", "integer", "pattern", "double")) {
+        stop("MatrixMarket file ", mtx_file, " has unsupported field '", header$field, "'.")
+    }
+    if (!header$symmetry %in% c("general", "symmetric", "skew-symmetric")) {
+        stop("MatrixMarket file ", mtx_file, " has unsupported symmetry '", header$symmetry, "'.")
+    }
+
+    n_size_fields <- 3L
+    if (header$format == "array") {
+        n_size_fields <- 2L
+    }
+    size <- suppressWarnings(as.numeric(stringr::str_split(stringr::str_trim(lines[size_line]), "\\s+")[[1]]))
+    if (length(size) != n_size_fields || anyNA(size)) {
+        stop(
+            "MatrixMarket file ",
+            mtx_file,
+            " has a malformed size line: '",
+            lines[size_line],
+            "'; expected ",
+            n_size_fields,
+            " numbers."
+        )
+    }
+
+    header$dims <- as.integer(size[1:2])
+    header$nnz <- size[3]
+    header$n_lines <- size_line
+
+    following_lines <- readr::read_lines(mtx_file, skip = size_line, n_max = 16L)
+    header$first_entry <- c(following_lines[following_lines != ""], "")[1]
+    header
 }
 
 #' Read the base VCF file from cellSNP output
