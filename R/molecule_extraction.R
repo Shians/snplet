@@ -124,7 +124,7 @@ extract_snp_calls <- function(
     }
 
     # findOverlaps() requires the position seqlevels to match the BAM's exactly.
-    Seqinfo::seqlevels(snp_gr) <- Seqinfo::seqlevels(galn)
+    GenomeInfoDb::seqlevels(snp_gr) <- GenomeInfoDb::seqlevels(galn)
 
     chunks <- split(seq_along(galn), ceiling(seq_along(galn) / chunk_size))
     logger::log_info("processing {length(galn)} alignments in {length(chunks)} chunk(s)")
@@ -203,8 +203,8 @@ extract_snp_calls <- function(
     query_shift <- BiocGenerics::start(unlisted_ref) - BiocGenerics::start(unlisted_query)
 
     # Overlaps are computed per chromosome to keep the shift vectors aligned.
-    galn_chrom <- as.character(Seqinfo::seqnames(galn))
-    snp_chrom <- as.character(Seqinfo::seqnames(snp_gr))
+    galn_chrom <- as.character(GenomicRanges::seqnames(galn))
+    snp_chrom <- as.character(GenomicRanges::seqnames(snp_gr))
     snp_pos <- BiocGenerics::start(snp_gr)
 
     per_chrom_calls <- purrr::map(unique(snp_chrom), function(chrom) {
@@ -272,7 +272,7 @@ extract_snp_calls <- function(
     bed_file <- tempfile(fileext = ".bed")
     utils::write.table(
         data.frame(
-            as.character(Seqinfo::seqnames(windows)),
+            as.character(GenomicRanges::seqnames(windows)),
             BiocGenerics::start(windows) - 1L,
             BiocGenerics::end(windows)
         ),
