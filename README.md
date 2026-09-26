@@ -40,8 +40,8 @@ aggregation, MAF testing, and expression-matrix export.
 ### Import and export
 - `import_cellsnp()` builds a `SNPData` object from a cellSNP-lite directory, taking optional
   `vdj_file`, `vireo_folder`, and `bam_files` arguments.
-- `merge_snpdata()` combines runs, using each object's `library_id` to keep cells that share a
-  10x barcode by chance apart.
+- `import_cellsnp_libraries()` imports several runs from a sample sheet into one object,
+  using each run's `library_id` to keep cells that share a 10x barcode by chance apart.
 - `export_cellsnp()` writes an object back out in cellSNP-lite format; `to_expr_matrix()`
   converts allele counts into an expression-like matrix.
 
@@ -131,8 +131,14 @@ snp_data <- import_cellsnp(
   bam_files = "path/to/possorted_genome_bam.bam"
 )
 
-# Multiple libraries merge on distinct library_id labels
-combined <- merge_snpdata(run1, run2)
+# Several runs or libraries from a sample sheet, one row per cellSNP-lite run
+sheet <- tibble::tibble(
+  cellsnp_dir = c("lib1_output/", "lib2_output/"),
+  library_id = c("lib1", "lib2"),
+  vireo_folder = c("lib1_vireo/", "lib2_vireo/"),
+  donor_map = list(c(PatientA = "donor0"), c(PatientB = "donor0"))
+)
+combined <- import_cellsnp_libraries(sheet, gene_anno_df)
 ```
 
 ## XCI and escape workflow

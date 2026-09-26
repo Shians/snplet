@@ -67,7 +67,7 @@
 #' @slot chr_style Character string indicating the chromosome naming style. One of: "numeric", "ucsc", "refseq_mouse", "genbank_mouse", "refseq_human", "genbank_human", or "unknown"
 #' @slot donor_info A tibble with one row per donor and an automatically computed
 #'   \code{n_cells} column. Rows are dropped when a donor loses all of its cells, via
-#'   subsetting or \code{merge_snpdata()}.
+#'   subsetting or merging runs at import.
 #' @slot donor_snp_info A tibble with one row per SNP measured in a donor by
 #'   a particular zygosity-calling source (keyed on \code{snp_id},
 #'   \code{donor}, \code{zygosity_source}), carrying zygosity calls
@@ -560,7 +560,8 @@ setReplaceMethod("snp_gene_map", signature(x = "SNPData", value = "data.frame"),
 #'   library. Names must match `library_info(x)$library_id`.
 #' @param overwrite Logical (default `FALSE`). If `TRUE`, a named library's
 #'   stored paths are replaced; otherwise the new paths are unioned with any
-#'   already recorded, matching how `merge_snpdata()` combines them.
+#'   already recorded, matching how `import_cellsnp_libraries()` combines runs
+#'   that share a library.
 #'
 #' @return The SNPData object with `library_info(x)$bam_files` updated.
 #'

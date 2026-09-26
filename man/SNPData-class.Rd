@@ -277,7 +277,7 @@ merged object may carry the same \code{barcode} on more than one cell; only
 
 \item{\code{donor_info}}{A tibble with one row per donor and an automatically computed
 \code{n_cells} column. Rows are dropped when a donor loses all of its cells, via
-subsetting or \code{merge_snpdata()}.}
+subsetting or merging runs at import.}
 
 \item{\code{donor_snp_info}}{A tibble with one row per SNP measured in a donor by
 a particular zygosity-calling source (keyed on \code{snp_id},

@@ -1393,3 +1393,226 @@ test_that("read_mtx() errors on a malformed size line", {
     # Ensure a coordinate size line missing nnz is reported
     expect_error(snplet:::read_mtx(mtx_file), "malformed size line")
 })
+
+# ==============================================================================
+# import_cellsnp_libraries()
+# ==============================================================================
+
+example_cellsnp_dir <- function() {
+    system.file("extdata/example_snpdata", package = "snplet")
+}
+
+example_gene_annotation <- function() {
+    readr::read_tsv(system.file("extdata/example_gene_anno.tsv", package = "snplet"), show_col_types = FALSE)
+}
+
+# A second directory holding the same cellSNP-lite output, standing in for a
+# repeat run of one library (a sheet may list each directory only once).
+copy_example_cellsnp_dir <- function(env = parent.frame()) {
+    copy_dir <- withr::local_tempdir(.local_envir = env)
+    file.copy(list.files(example_cellsnp_dir(), full.names = TRUE), copy_dir)
+    copy_dir
+}
+
+# Two cellSNP-lite directories splitting the example SNPs in half, standing in
+# for runs over one BAM that pile up disjoint SNPs (e.g. split by chromosome).
+export_example_snp_halves <- function(env = parent.frame()) {
+    single <- import_cellsnp(example_cellsnp_dir(), example_gene_annotation(), library_id = "lib1")
+    first_half <- seq_len(nrow(single)) <= nrow(single) / 2
+    split_dirs <- c(withr::local_tempdir(.local_envir = env), withr::local_tempdir(.local_envir = env))
+    export_cellsnp(single[first_half, ], split_dirs[1])
+    export_cellsnp(single[!first_half, ], split_dirs[2])
+    split_dirs
+}
+
+# Empty files standing in for BAMs: import only checks that the paths exist.
+local_empty_bams <- function(file_names, env = parent.frame()) {
+    bam_dir <- withr::local_tempdir(.local_envir = env)
+    bam_paths <- file.path(bam_dir, file_names)
+    file.create(bam_paths)
+    bam_paths
+}
+
+test_that("import_cellsnp_libraries() with one row matches import_cellsnp()", {
+    sheet <- tibble::tibble(cellsnp_dir = example_cellsnp_dir(), library_id = "lib1")
+
+    from_sheet <- import_cellsnp_libraries(sheet, example_gene_annotation())
+    direct <- import_cellsnp(example_cellsnp_dir(), example_gene_annotation(), library_id = "lib1")
+
+    # Verify a one-run sheet yields the same counts as a direct import
+    expect_equal(ref_count(from_sheet), ref_count(direct))
+    # Verify the same cells, with the same metadata, are imported
+    expect_equal(barcode_info(from_sheet), barcode_info(direct))
+})
+
+test_that("import_cellsnp_libraries() keeps cells from different libraries separate", {
+    sheet <- tibble::tibble(
+        cellsnp_dir = c(example_cellsnp_dir(), copy_example_cellsnp_dir()),
+        library_id = c("lib1", "lib2"),
+        donor_map = list(c(donor_lib1 = "donor0"), c(donor_lib2 = "donor0"))
+    )
+    single <- import_cellsnp(example_cellsnp_dir(), example_gene_annotation(), library_id = "lib1")
+
+    combined <- import_cellsnp_libraries(sheet, example_gene_annotation())
+
+    # Verify barcodes shared by chance across libraries stay as two cells each
+    expect_equal(ncol(combined), 2 * ncol(single))
+    # Confirm every cell carries the library label of its own row
+    expect_equal(as.vector(table(barcode_info(combined)$library_id)), c(ncol(single), ncol(single)))
+    # Verify each row's donor_map was applied before combining
+    expect_setequal(donor_info(combined)$donor, c("donor_lib1", "donor_lib2"))
+})
+
+test_that("import_cellsnp_libraries() sums same-BAM runs that cover disjoint SNPs", {
+    split_dirs <- export_example_snp_halves()
+    bam_file <- local_empty_bams("lib1.bam")
+    sheet <- tibble::tibble(cellsnp_dir = split_dirs, library_id = "lib1", bam_files = bam_file)
+    single <- import_cellsnp(example_cellsnp_dir(), example_gene_annotation(), library_id = "lib1")
+
+    combined <- expect_no_warning(import_cellsnp_libraries(sheet, example_gene_annotation()))
+
+    # Verify the split runs rejoin into the original cells
+    expect_equal(ncol(combined), ncol(single))
+    # Confirm each read is counted once when the runs cover different SNPs
+    expect_equal(sum(alt_count(combined)), sum(alt_count(single)))
+})
+
+test_that("import_cellsnp_libraries() errors when same-BAM runs share SNPs", {
+    bam_file <- local_empty_bams("lib1.bam")
+    sheet <- tibble::tibble(
+        cellsnp_dir = c(example_cellsnp_dir(), copy_example_cellsnp_dir()),
+        library_id = "lib1",
+        bam_files = bam_file
+    )
+
+    # Ensure reads from one BAM cannot be counted twice at shared SNPs
+    expect_error(
+        import_cellsnp_libraries(sheet, example_gene_annotation()),
+        "share a BAM file and SNPs"
+    )
+})
+
+test_that("import_cellsnp_libraries() sums shared SNPs of runs over different BAMs", {
+    bam_files <- local_empty_bams(c("lib1_seq1.bam", "lib1_seq2.bam"))
+    sheet <- tibble::tibble(
+        cellsnp_dir = c(example_cellsnp_dir(), copy_example_cellsnp_dir()),
+        library_id = "lib1",
+        bam_files = bam_files
+    )
+    single <- import_cellsnp(example_cellsnp_dir(), example_gene_annotation(), library_id = "lib1")
+
+    combined <- expect_no_warning(import_cellsnp_libraries(sheet, example_gene_annotation()))
+
+    # Verify a library sequenced twice contributes no new cells
+    expect_equal(ncol(combined), ncol(single))
+    # Confirm the second sequencing's reads are added to the shared cells
+    expect_equal(sum(alt_count(combined)), 2 * sum(alt_count(single)))
+})
+
+test_that("import_cellsnp_libraries() warns when same-library runs share SNPs without BAM paths", {
+    sheet <- tibble::tibble(
+        cellsnp_dir = c(example_cellsnp_dir(), copy_example_cellsnp_dir()),
+        library_id = "lib1"
+    )
+
+    # Ensure an unverifiable risk of double counting is reported
+    expect_warning(
+        import_cellsnp_libraries(sheet, example_gene_annotation()),
+        "Runs of the same library share SNPs"
+    )
+})
+
+test_that("import_cellsnp_libraries() errors when runs of a library disagree on a cell's donor", {
+    bam_files <- local_empty_bams(c("lib1_seq1.bam", "lib1_seq2.bam"))
+    sheet <- tibble::tibble(
+        cellsnp_dir = c(example_cellsnp_dir(), copy_example_cellsnp_dir()),
+        library_id = "lib1",
+        bam_files = bam_files,
+        donor_map = list(NULL, c(other_donor = "donor0"))
+    )
+
+    # Ensure a cell is not silently kept under the first run's donor label
+    expect_error(
+        import_cellsnp_libraries(sheet, example_gene_annotation()),
+        "assigned different donors by different runs of the same library"
+    )
+})
+
+test_that("import_cellsnp_libraries() records each row's BAM path against its library", {
+    bam_dir <- withr::local_tempdir()
+    bam_paths <- file.path(bam_dir, c("lib1.bam", "lib2.bam"))
+    file.create(bam_paths)
+    sheet <- tibble::tibble(
+        cellsnp_dir = c(example_cellsnp_dir(), copy_example_cellsnp_dir()),
+        library_id = c("lib1", "lib2"),
+        bam_files = bam_paths,
+        donor_map = list(c(donor_lib1 = "donor0"), c(donor_lib2 = "donor0"))
+    )
+
+    combined <- import_cellsnp_libraries(sheet, example_gene_annotation())
+
+    # Verify a plain character bam_files column is keyed by library
+    expect_equal(
+        library_info(combined)$bam_files[match(c("lib1", "lib2"), library_info(combined)$library_id)],
+        as.list(bam_paths)
+    )
+})
+
+test_that("import_cellsnp_libraries() treats NA optional entries as absent", {
+    sheet <- tibble::tibble(
+        cellsnp_dir = example_cellsnp_dir(),
+        library_id = "lib1",
+        vdj_file = NA_character_,
+        vireo_folder = NA_character_
+    )
+
+    combined <- import_cellsnp_libraries(sheet, example_gene_annotation())
+
+    # Confirm an NA vdj_file imports no clonotypes rather than erroring
+    expect_true(all(is.na(barcode_info(combined)$clonotype)))
+})
+
+test_that("import_cellsnp_libraries() errors when a donor label spans libraries", {
+    sheet <- tibble::tibble(
+        cellsnp_dir = c(example_cellsnp_dir(), copy_example_cellsnp_dir()),
+        library_id = c("lib1", "lib2")
+    )
+
+    # Ensure the default donor0 label in two libraries is refused, not merged
+    expect_error(import_cellsnp_libraries(sheet, example_gene_annotation()), "more than one library: donor0")
+})
+
+test_that("import_cellsnp_libraries() rejects a sheet without library_id", {
+    sheet <- tibble::tibble(cellsnp_dir = example_cellsnp_dir())
+
+    # Ensure the library label, which cell matching depends on, is required
+    expect_error(import_cellsnp_libraries(sheet, example_gene_annotation()), "missing required column\\(s\\): library_id")
+})
+
+test_that("import_cellsnp_libraries() rejects an NA library_id", {
+    sheet <- tibble::tibble(cellsnp_dir = example_cellsnp_dir(), library_id = NA_character_)
+
+    # Ensure an unlabelled row cannot be combined
+    expect_error(import_cellsnp_libraries(sheet, example_gene_annotation()), "Every row of sheet needs a library_id")
+})
+
+test_that("import_cellsnp_libraries() rejects an unrecognised column", {
+    sheet <- tibble::tibble(cellsnp_dir = example_cellsnp_dir(), library_id = "lib1", vireo_dir = "vireo/")
+
+    # Ensure a misspelt optional column is reported rather than silently ignored
+    expect_error(import_cellsnp_libraries(sheet, example_gene_annotation()), "unrecognised column\\(s\\): vireo_dir")
+})
+
+test_that("import_cellsnp_libraries() rejects a directory listed twice", {
+    sheet <- tibble::tibble(cellsnp_dir = rep(example_cellsnp_dir(), 2), library_id = "lib1")
+
+    # Ensure one run cannot be imported twice and have its counts doubled
+    expect_error(import_cellsnp_libraries(sheet, example_gene_annotation()), "same cellsnp_dir more than once")
+})
+
+test_that("import_cellsnp_libraries() rejects an empty sheet", {
+    sheet <- tibble::tibble(cellsnp_dir = character(0), library_id = character(0))
+
+    # Ensure a sheet with no runs is refused
+    expect_error(import_cellsnp_libraries(sheet, example_gene_annotation()), "one row per cellSNP-lite run")
+})

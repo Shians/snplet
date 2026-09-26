@@ -70,12 +70,11 @@ and donor information from Vireo to create a SNPData object.
 }
 \section{Merging libraries}{
 
-A 10x barcode is unique only within its library, so
-\code{\link{merge_snpdata}} uses \code{library_id} to tell a repeated cell
-from two different cells that happened to draw the same barcode, and
-refuses to merge any object carrying a \code{NA} \code{library_id}. A
-single-library workflow that never calls \code{merge_snpdata} can safely
-leave \code{library_id} unset.
+To import several runs or libraries into one object, use
+\code{\link{import_cellsnp_libraries}}. A 10x barcode is unique only within
+its library, so that function matches cells on (\code{library_id},
+\code{barcode}) and requires a \code{library_id} for every run. A
+single-library import can safely leave \code{library_id} unset.
 }
 
 \examples{
@@ -113,18 +112,13 @@ snp_data <- import_cellsnp(
   donor_map = c(PatientA = "donor0", PatientB = "donor1"),
   library_id = "run1"
 )
-
-# Two libraries labelled distinctly, so merge_snpdata() keeps cells that
-# share a barcode by chance apart instead of fusing them
-run1 <- import_cellsnp("run1/", gene_anno_df, library_id = "run1")
-run2 <- import_cellsnp("run2/", gene_anno_df, library_id = "run2")
-combined <- merge_snpdata(run1, run2)
 }
 }
 \seealso{
 Other import and export functions:
 \code{\link[=as_singlecellexperiment]{as_singlecellexperiment()}},
 \code{\link[=export_cellsnp]{export_cellsnp()}},
-\code{\link[=get_example_snpdata]{get_example_snpdata()}}
+\code{\link[=get_example_snpdata]{get_example_snpdata()}},
+\code{\link[=import_cellsnp_libraries]{import_cellsnp_libraries()}}
 }
 \concept{import and export functions}

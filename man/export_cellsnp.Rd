@@ -69,6 +69,7 @@ export_cellsnp(filter_barcodes(merged, library_id == "run1"), "run1_cellsnp")
 Other import and export functions:
 \code{\link[=as_singlecellexperiment]{as_singlecellexperiment()}},
 \code{\link[=get_example_snpdata]{get_example_snpdata()}},
-\code{\link[=import_cellsnp]{import_cellsnp()}}
+\code{\link[=import_cellsnp]{import_cellsnp()}},
+\code{\link[=import_cellsnp_libraries]{import_cellsnp_libraries()}}
 }
 \concept{import and export functions}

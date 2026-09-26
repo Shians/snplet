@@ -21,6 +21,7 @@ snp_data <- get_example_snpdata()
 Other import and export functions:
 \code{\link[=as_singlecellexperiment]{as_singlecellexperiment()}},
 \code{\link[=export_cellsnp]{export_cellsnp()}},
-\code{\link[=import_cellsnp]{import_cellsnp()}}
+\code{\link[=import_cellsnp]{import_cellsnp()}},
+\code{\link[=import_cellsnp_libraries]{import_cellsnp_libraries()}}
 }
 \concept{import and export functions}

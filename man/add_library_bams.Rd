@@ -15,7 +15,8 @@ library. Names must match `library_info(x)$library_id`.}
 
 \item{overwrite}{Logical (default `FALSE`). If `TRUE`, a named library's
 stored paths are replaced; otherwise the new paths are unioned with any
-already recorded, matching how `merge_snpdata()` combines them.}
+already recorded, matching how `import_cellsnp_libraries()` combines runs
+that share a library.}
 }
 \value{
 The SNPData object with `library_info(x)$bam_files` updated.

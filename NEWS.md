@@ -1,3 +1,12 @@
+# snplet 0.8.0
+
+* Added `import_cellsnp_libraries()`, importing several cellSNP-lite runs listed in a sample
+  sheet into one SNPData object. It errors when repeat runs of a library would count the same
+  reads twice or disagree on a cell's donor, and when a donor label appears in more than one
+  library
+* Changed `merge_snpdata()` to be internal; combine runs at import with
+  `import_cellsnp_libraries()` instead
+
 # snplet 0.7.0
 
 * Added `xci_skew` to `donor_info` via a new fitted X1-active prior in the XCI EM.
