@@ -382,6 +382,51 @@ test_that("[() subsetting by name returns SNPData object with correct dimensions
     expect_equal(dim(subset_data), c(1, 1))
 })
 
+test_that("[() subsetting SNPs by name keeps snp_info aligned with the matrices", {
+    snp_data <- create_test_snpdata()
+
+    subset_data <- snp_data[c("snp_2", "snp_1"), ]
+
+    # Verify snp_info rows follow the requested names, not NA rows
+    expect_equal(snp_info(subset_data)$snp_id, c("snp_2", "snp_1"))
+    # Confirm the matrix rows carry the counts of the named SNPs
+    expect_equal(as.numeric(alt_count(subset_data)["snp_2", ]), c(2, 4))
+})
+
+test_that("[() subsetting cells by name keeps barcode_info aligned with the matrices", {
+    snp_data <- create_test_snpdata()
+
+    subset_data <- snp_data[, "cell_2"]
+
+    # Verify barcode_info metadata is carried over rather than set to NA
+    expect_equal(barcode_info(subset_data)$clonotype, "clonotype_2")
+    # Confirm the matrix column matches the named cell
+    expect_equal(colnames(subset_data), "cell_2")
+})
+
+test_that("[() errors on SNP names that are not in the object", {
+    snp_data <- create_test_snpdata()
+
+    # Ensure an unknown name errors instead of producing an NA row
+    expect_error(snp_data["snp_missing", ], "SNP index not found: snp_missing")
+})
+
+test_that("[() errors on out-of-range cell positions", {
+    snp_data <- create_test_snpdata()
+
+    # Ensure an out-of-range position errors instead of producing an NA row
+    expect_error(snp_data[, 3], "cell index not found: 3")
+})
+
+test_that("[() subsetting with negative indices drops the named positions", {
+    snp_data <- create_test_snpdata()
+
+    subset_data <- snp_data[-1, ]
+
+    # Confirm negative indexing still excludes rows as in base R
+    expect_equal(snp_info(subset_data)$snp_id, "snp_2")
+})
+
 test_that("[() ignores drop parameter and always returns SNPData object", {
     snp_data <- create_test_snpdata()
 

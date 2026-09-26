@@ -415,6 +415,22 @@
     )
 }
 
+# Converts a `[` index (numeric, negative, logical, or character) into
+# positions along one dimension, erroring on any index that does not name or
+# point at an existing SNP/cell rather than letting it become an NA row.
+.as_index_positions <- function(index, dim_names, what) {
+    positions <- stats::setNames(seq_along(dim_names), dim_names)[index]
+    if (anyNA(positions)) {
+        bad <- if (is.logical(index)) which(is.na(positions)) else index[is.na(positions)]
+        stop(sprintf(
+            "Cannot subset SNPData: %s index not found: %s",
+            what,
+            paste(utils::head(bad, 5), collapse = ", ")
+        ))
+    }
+    unname(positions)
+}
+
 .recompute_snp_stats <- function(snp_info, total_count) {
     snp_info$coverage <- Matrix::rowSums(total_count)
     snp_info$non_zero_samples <- Matrix::rowSums(total_count > 0)

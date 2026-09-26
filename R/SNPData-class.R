@@ -306,6 +306,11 @@ setMethod(
         if (missing(j)) {
             j <- seq_len(ncol(x@alt_count))
         }
+        # The metadata tibbles have no row names, so a name-based index would
+        # select NA rows from them while the matrices subset correctly.
+        # Resolving every index to positions first keeps the two in step.
+        i <- .as_index_positions(i, rownames(x@alt_count), "SNP")
+        j <- .as_index_positions(j, colnames(x@alt_count), "cell")
 
         ref_count <- x@ref_count[i, j, drop = FALSE]
         alt_count <- x@alt_count[i, j, drop = FALSE]
