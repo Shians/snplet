@@ -4,7 +4,14 @@
 \alias{.prefilter_bam}
 \title{Cut a BAM down to the reads that matter, using threaded samtools}
 \usage{
-.prefilter_bam(bam_file, windows, barcodes, min_mapq, threads)
+.prefilter_bam(
+  bam_file,
+  windows,
+  barcodes,
+  min_mapq,
+  threads,
+  keep_supplementary = FALSE
+)
 }
 \arguments{
 \item{bam_file}{Path to an indexed BAM.}
@@ -16,6 +23,9 @@
 \item{min_mapq}{Minimum mapping quality.}
 
 \item{threads}{Threads passed to `samtools view -@`.}
+
+\item{keep_supplementary}{Logical. Whether supplementary alignments pass,
+for `.filter_supplementary_by_gene()` to screen afterwards.}
 }
 \value{
 Path of an uncompressed temporary BAM, or `NULL` if `samtools` is

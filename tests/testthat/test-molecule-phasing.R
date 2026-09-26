@@ -959,6 +959,108 @@ test_that("extract_snp_calls() errors on empty snp_info", {
     expect_error(extract_snp_calls("nonexistent.bam", snp_info), "no rows")
 })
 
+test_that("extract_snp_calls() errors on missing required gene_anno columns", {
+    snp_info <- tibble::tibble(chrom = "chrX", pos = 1L, ref = "A", alt = "C", snp_id = "s1")
+    gene_anno <- tibble::tibble(chrom = "chrX", start = 1L)
+
+    # Verify a malformed gene_anno is rejected before any BAM is read
+    expect_error(extract_snp_calls("nonexistent.bam", snp_info, gene_anno = gene_anno), "gene_anno is missing")
+})
+
+test_that("extract_snp_calls() adds same-gene supplementary calls given gene_anno", {
+    skip_if_not(file.exists(test_bam), "TASL.bam fixture not found")
+
+    # Spans every SNP below and the primaries of their local supplementary alignments
+    tasl_gene <- tibble::tibble(chrom = "chrX", start = 30050000L, end = 30200000L)
+    snp_info <- tibble::tibble(
+        chrom = "chrX",
+        pos = c(30116800L, 30150500L, 30169685L),
+        ref = "A",
+        alt = "C",
+        snp_id = c("s1", "s2", "s3")
+    )
+    primary_only <- extract_snp_calls(test_bam, snp_info, min_mapq = 20, min_baseq = 10)
+    with_supplementary <- extract_snp_calls(test_bam, snp_info, gene_anno = tasl_gene, min_mapq = 20, min_baseq = 10)
+
+    # Verify keeping same-gene supplementary alignments adds base calls
+    expect_gt(sum(with_supplementary$tallies$n_calls), sum(primary_only$tallies$n_calls))
+    # Ensure no read gains a second strand, so the strand vote is unaffected
+    expect_equal(nrow(with_supplementary$reads), dplyr::n_distinct(with_supplementary$reads$qname))
+})
+
+# ==============================================================================
+# Test: .filter_supplementary_by_gene()
+# ==============================================================================
+
+# One primary at chrX:1001-1100 (+) inside gene A, then one supplementary
+# alignment per rule, each naming that primary as the first SA entry.
+make_split_alignments <- function(pos, strand, flag, sa) {
+    GenomicAlignments::GAlignments(
+        seqnames = rep("chrX", length(pos)),
+        pos = as.integer(pos),
+        cigar = rep("100M", length(pos)),
+        strand = strand,
+        flag = as.integer(flag),
+        SA = sa
+    )
+}
+primary_sa <- "chrX,1001,+,100M100H,60,0;"
+split_gene_anno <- tibble::tibble(chrom = "chrX", start = c(1L, 40001L), end = c(10000L, 60000L))
+
+test_that(".filter_supplementary_by_gene() keeps a same-gene, same-strand, disjoint supplementary", {
+    galn <- make_split_alignments(c(1001, 5001), c("+", "+"), c(0, 2048), c(NA, primary_sa))
+
+    result <- .filter_supplementary_by_gene(galn, split_gene_anno)
+
+    # Verify the primary and its long-intron continuation both survive
+    expect_equal(BiocGenerics::start(result), c(1001L, 5001L))
+})
+
+test_that(".filter_supplementary_by_gene() drops a supplementary in a different gene", {
+    galn <- make_split_alignments(c(1001, 50001), c("+", "+"), c(0, 2048), c(NA, primary_sa))
+
+    result <- .filter_supplementary_by_gene(galn, split_gene_anno)
+
+    # Confirm a chimeric segment in gene B is removed, leaving only the primary
+    expect_equal(BiocGenerics::start(result), 1001L)
+})
+
+test_that(".filter_supplementary_by_gene() drops an opposite-strand supplementary", {
+    galn <- make_split_alignments(c(1001, 5001), c("+", "-"), c(0, 2064), c(NA, primary_sa))
+
+    result <- .filter_supplementary_by_gene(galn, split_gene_anno)
+
+    # Confirm a fold-back segment on the other strand is removed
+    expect_equal(BiocGenerics::start(result), 1001L)
+})
+
+test_that(".filter_supplementary_by_gene() drops a supplementary overlapping its primary", {
+    galn <- make_split_alignments(c(1001, 1051), c("+", "+"), c(0, 2048), c(NA, primary_sa))
+
+    result <- .filter_supplementary_by_gene(galn, split_gene_anno)
+
+    # Confirm a duplicated segment re-covering the primary's bases is removed
+    expect_equal(BiocGenerics::start(result), 1001L)
+})
+
+test_that(".filter_supplementary_by_gene() drops a supplementary whose primary is on another chromosome", {
+    galn <- make_split_alignments(c(1001, 5001), c("+", "+"), c(0, 2048), c(NA, "chr8,1001,+,100M100H,60,0;"))
+
+    result <- .filter_supplementary_by_gene(galn, split_gene_anno)
+
+    # Confirm an inter-chromosomal chimera is removed even though its own segment lies in a gene
+    expect_equal(BiocGenerics::start(result), 1001L)
+})
+
+test_that(".filter_supplementary_by_gene() drops a supplementary with no SA tag", {
+    galn <- make_split_alignments(c(1001, 5001), c("+", "+"), c(0, 2048), c(NA, NA))
+
+    result <- .filter_supplementary_by_gene(galn, split_gene_anno)
+
+    # Ensure a supplementary whose primary cannot be located is not kept on trust
+    expect_equal(BiocGenerics::start(result), 1001L)
+})
+
 # ==============================================================================
 # Test: .orient_phase_blocks()
 # ==============================================================================
