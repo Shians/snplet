@@ -39,8 +39,7 @@
 #' to inspect them, or to compare the two cell populations against each other.
 #'
 #' \code{same_allele_dominant} summarises both groups rather than describing
-#' one, so it survives pooling and is reported under \code{by_snp = TRUE}
-#' whichever way \code{by_active_x} is set. It is \code{TRUE} when the same
+#' one, so it survives pooling and is reported at every grain. It is \code{TRUE} when the same
 #' physical allele dominates in both groups, flagging escape or
 #' XCI-independent imbalance
 #' rather than hiding it. Under canonical XCI the dominant allele should flip
@@ -107,6 +106,11 @@
 #'   you have independent evidence for; this is curated prior biology, not a
 #'   measurement, and the default is deliberately minimal because \code{XIST}
 #'   is the only such gene well established in human somatic cells.
+#' @param discordance_threshold Numeric, in \code{[0, 0.5]} (default 0.2).
+#'   Minimum absolute difference between a donor's \code{escape_fraction} and
+#'   the median of the gene's other donors for \code{donor_discordant} to be
+#'   set (see \sQuote{Cross-donor consistency}). Ignored when
+#'   \code{by_snp = TRUE}.
 #'
 #' @section Gene-level representative selection:
 #' The default selects a single representative SNP per (\code{donor},
@@ -117,28 +121,38 @@
 #' groups are reported, keeping the returned counts a genuine read count.
 #'
 #' The representative is the highest-coverage SNP (summed over both active-X
-#' groups) whose dominant physical allele differs between the two groups,
-#' since that flip is what canonical XCI requires: the expressed allele must
-#' change when the active X does. This selects a SNP consistent with the
-#' stored phase, rather than simply the best-covered SNP regardless of
-#' whether it contradicts that phase.
+#' groups) among those covered in both groups; ties go to the lower
+#' \code{snp_id}. Coverage in both groups is required because the two groups
+#' are pooled, and a SNP seen in only one of them would report a single cell
+#' population's escape as the gene's. A (donor, gene) pair with no such SNP is
+#' dropped, with the number dropped reported via \code{logger}.
 #'
-#' This is stricter than \code{!same_allele_dominant} (also \code{FALSE} for
-#' zero coverage in one group, which demonstrates no flip either way) and is
-#' not a test on escape \emph{magnitude}: a SNP whose two groups both exceed
-#' 0.5 still flips and remains a valid representative, failing only when the
-#' groups fall on opposite sides of 0.5 (one flagged
-#' \code{phase_contradiction}, the other not). The criterion is mutual
-#' consistency between the two cell populations, not low escape.
+#' The representative is \emph{not} required to flip its dominant physical
+#' allele between the groups. For a gene escaping near 0.5, which side of 0.5
+#' each group lands on is sampling noise, so requiring a flip would drop about
+#' half of the most strongly escaping donor x gene pairs at random, whatever the
+#' coverage, and bias the reported escape downward. The flip is reported
+#' instead: \code{same_allele_dominant} is carried into the gene-level output,
+#' and \code{phase_contradiction} into it under \code{by_active_x = TRUE}.
 #'
-#' A (donor, gene) pair with no qualifying SNP is dropped entirely, with the
-#' number dropped reported via \code{logger}, rather than falling back to the
-#' best-covered SNP.
+#' @section Cross-donor consistency:
+#' Without the flip requirement, a donor whose near-0.5 escape is an artefact
+#' (reference-mapping bias, ambient RNA) is reported alongside genuine
+#' escapees. The gene-level output therefore compares each donor with the same
+#' gene's other donors. \code{other_donor_escape} is the median pooled
+#' \code{escape_fraction} of the gene's other donors, and
+#' \code{donor_discordant} is \code{TRUE} when this donor's own escape differs
+#' from it by at least \code{discordance_threshold} and a two-sided
+#' beta-binomial test against it rejects at 0.05. The test uses the donor's
+#' \code{xci_rho}, or 0.05 when none has been fitted.
 #'
-#' \code{same_allele_dominant} and \code{phase_contradiction} are dropped
-#' from the selected output, since both are uniformly \code{FALSE} for every
-#' retained row and would read as evidence rather than as the selection
-#' criterion they are.
+#' Both columns are \code{NA} when the gene has fewer than two other donors to
+#' compare against, which includes every gene in a single-donor object.
+#' Nothing is dropped: a discordant donor may be an artefact or a genuine
+#' biological difference, and telling them apart is the point of comparing
+#' donors or experimental groups. Inspect flagged pairs under
+#' \code{by_snp = TRUE}, or with read-backed phase via
+#' \code{\link{haplotype_expression_by_molecule}}.
 #'
 #' @section Genes masked by phase inversion:
 #' A gene transcribed mainly from the inactive X is stored with its phase
@@ -164,44 +178,24 @@
 #' \code{inactive_count} as reversed and the true escape as roughly
 #' \code{1 - escape_fraction}.
 #'
-#' @section What the default output omits:
-#' Partial escape is \emph{not} excluded: a gene escaping at 0.2, 0.35 or 0.45
-#' flips normally, is selected as a representative, and has its
-#' \code{escape_fraction} reported intact. The selection step removes only a
-#' SNP whose two groups disagree about which side of 0.5 they sit on.
-#'
-#' The exposure lands specifically on \emph{complete} escapees, since
-#' \code{escape_fraction} saturates at 0.5 (see Details): a fully escaping
-#' gene sits exactly on that line, so each SNP's two groups land on a random
-#' side of it and the SNP is excluded with probability approaching one half
-#' \emph{however deep the coverage}. Away from the line the risk falls off
-#' with sampling noise, as \code{1/sqrt(coverage)}, and is negligible by 0.4
-#' at typical depths.
-#'
-#' The practical failure mode is a maximally escaping gene reported for some
-#' donors and missing for others without any flag, purely by sampling, which
-#' is exactly the pattern that would be misread as a biological difference
-#' between donors or experimental groups. When escape is the quantity of
-#' interest, always check the \code{logger} count of dropped pairs, inspect
-#' them under \code{by_snp = TRUE}, and prefer an independent measurement,
-#' read-backed phase via \code{\link{haplotype_expression_by_molecule}}, to
-#' settle whether such a SNP is an escapee or an artefact.
-#'
 #' @return A tibble with one row per donor and gene, with columns \code{donor}
 #'   (when the object carries donor assignments), \code{snp_id} (the selected
 #'   representative), \code{gene_name}, \code{n_cells} (cells contributing),
 #'   \code{active_count}, \code{inactive_count}, \code{coverage},
 #'   \code{escape_fraction} (\code{inactive_count / coverage}), \code{escapes}
-#'   (\code{escape_fraction >= escape_threshold}) and
-#'   \code{phase_likely_inverted} (\code{TRUE} when \code{gene_name} is in
-#'   \code{inverted_phase_genes}). SNPs with no gene annotation (\code{NA}
-#'   \code{gene_name}) are excluded, as are genes with no qualifying SNP. This
-#'   is the grain \code{\link{test_escape}} expects, so the result can be
-#'   passed to it directly.
+#'   (\code{escape_fraction >= escape_threshold}), \code{phase_likely_inverted}
+#'   (\code{TRUE} when \code{gene_name} is in \code{inverted_phase_genes}),
+#'   \code{same_allele_dominant} (\code{TRUE} when both groups favour the same
+#'   physical allele), \code{other_donor_escape} and \code{donor_discordant}
+#'   (see \sQuote{Cross-donor consistency}). SNPs with no gene annotation
+#'   (\code{NA} \code{gene_name}) are excluded, as are genes with no SNP
+#'   covered in both active-X groups. This is the grain
+#'   \code{\link{test_escape}} expects, so the result can be passed to it
+#'   directly.
 #'
 #'   With \code{by_snp = TRUE} each row instead represents one donor and phased
-#'   SNP, with \code{same_allele_dominant} added (per SNP; \code{TRUE} when
-#'   both covered groups favour the same physical allele).
+#'   SNP, and \code{other_donor_escape} and \code{donor_discordant} are
+#'   omitted, since they compare genes across donors.
 #'
 #'   With \code{by_active_x = TRUE} each row is split in two, one per active-X
 #'   group, and three further columns are reported: \code{active_x} (the
@@ -228,12 +222,14 @@
 #' # One representative SNP per gene, safe to carry into test_escape()
 #' hap <- haplotype_expression(snp_data)
 #'
-#' # Every SNP, including those no gene could select as its representative,
-#' # where escape candidates and phase artefacts both live
+#' # Every SNP, not only each gene's representative
 #' hap_by_snp <- haplotype_expression(snp_data, by_snp = TRUE)
 #'
 #' # SNPs whose dominant allele failed to flip between the active-X groups
 #' dplyr::filter(hap_by_snp, same_allele_dominant)
+#'
+#' # Donors whose escape disagrees with the same gene's other donors
+#' dplyr::filter(hap, donor_discordant)
 #'
 #' # The X1-active and X2-active cell populations kept apart, for comparing
 #' # them against each other rather than testing the gene
@@ -250,7 +246,8 @@ setGeneric(
         xci_informative_only = FALSE,
         by_snp = FALSE,
         by_active_x = FALSE,
-        inverted_phase_genes = "XIST"
+        inverted_phase_genes = "XIST",
+        discordance_threshold = 0.2
     ) {
         standardGeneric("haplotype_expression")
     }
@@ -267,7 +264,8 @@ setMethod(
         xci_informative_only = FALSE,
         by_snp = FALSE,
         by_active_x = FALSE,
-        inverted_phase_genes = "XIST"
+        inverted_phase_genes = "XIST",
+        discordance_threshold = 0.2
     ) {
         barcode_info <- barcode_info(x)
         snp_info <- snp_info(x)
@@ -423,6 +421,18 @@ setMethod(
         # below: the election is per (donor, gene) and needs both.
         if (!by_snp) {
             result <- .elect_gene_representative_snps(result)
+            # With the flip no longer a selection criterion, a donor whose
+            # near-0.5 escape is an artefact (reference bias, ambient RNA) is
+            # now elected too. Comparing it against the gene's other donors
+            # catches that without relying on the side-of-0.5 test, which
+            # cannot tell an artefact from a genuine complete escapee.
+            # xci_rho is absent while assign_xci() is still fitting it, and the
+            # helper falls back to a fixed value then.
+            rho_by_donor <- dplyr::select(donor_info(x), dplyr::any_of(c("donor", "xci_rho")))
+            if (!all(c("donor", "xci_rho") %in% colnames(rho_by_donor))) {
+                rho_by_donor <- tibble::tibble(donor = character(0), xci_rho = double(0))
+            }
+            result <- .flag_donor_discordance(result, rho_by_donor, discordance_threshold)
         }
 
         # Both the election above and the flip diagnostics need the two groups
@@ -449,43 +459,36 @@ setMethod(
 #' Select one representative SNP per donor and gene
 #'
 #' Collapses \code{\link{haplotype_expression}}'s per-SNP rows to the
-#' highest-coverage SNP whose dominant physical allele flips between the two
-#' active-X groups. Summing a gene's SNPs instead would count a read spanning
-#' several of them once per SNP; selecting one keeps the output a genuine read
-#' count. See the \sQuote{Gene-level representative selection} section of
-#' \code{\link{haplotype_expression}} for why the flip is required.
+#' highest-coverage SNP covered in both active-X groups. Summing a gene's SNPs
+#' instead would count a read spanning several of them once per SNP; selecting
+#' one keeps the output a genuine read count. See the \sQuote{Gene-level
+#' representative selection} section of \code{\link{haplotype_expression}} for
+#' why the dominant-allele flip is reported rather than required.
 #'
 #' @param result The per-SNP tibble assembled by \code{\link{haplotype_expression}},
-#'   still carrying its \code{donor}, \code{gene_name} and
-#'   \code{same_allele_dominant} columns.
+#'   still carrying its \code{donor} and \code{gene_name} columns.
 #'
-#' @return \code{result} restricted to the selected SNPs' rows, without
-#'   \code{same_allele_dominant}, ordered by donor, gene and active X.
+#' @return \code{result} restricted to the selected SNPs' rows, ordered by
+#'   donor, gene and active X.
 #'
 #' @keywords internal
 .elect_gene_representative_snps <- function(result) {
     annotated <- dplyr::filter(result, !is.na(gene_name))
 
-    # Both groups covered AND favouring different physical alleles. Deliberately
-    # not !same_allele_dominant: that is also FALSE for a SNP covered in only one
-    # group, which demonstrates no flip and so cannot represent the gene. Total
-    # coverage is summed over both groups, so the ranking is not decided by
-    # whichever group happens to hold more cells.
+    # Coverage alone decides, among SNPs covered in both groups. Total coverage
+    # is summed over both groups, so the ranking is not decided by whichever
+    # group happens to hold more cells.
     #
-    # This is deliberately not a test on the magnitude of escape. If both groups
-    # exceed 0.5, each is dominated by the other X's allele -- two different
-    # physical alleles -- so the pair still flips and stays electable. Only groups
-    # on opposite sides of 0.5 fail, which is mutual inconsistency between the two
-    # cell populations rather than high escape. Symmetric escape at any level
-    # therefore survives; see the "What the default output omits" section.
+    # An earlier rule also required the dominant physical allele to flip between
+    # the groups. That drops a near-complete escapee whenever its two groups land
+    # on opposite sides of 0.5, which for a gene truly near 0.5 is sampling
+    # noise: roughly half of such donor x gene pairs were lost, biasing the
+    # reported escape downward and making it look donor-specific. Whether the
+    # flip happened is still reported, as same_allele_dominant and
+    # phase_contradiction, rather than used to select.
     candidates <- annotated %>%
-        dplyr::group_by(donor, snp_id) %>%
-        dplyr::filter(
-            sum(coverage > 0) == 2L,
-            dplyr::n_distinct(dominant_allele[coverage > 0]) == 2L
-        ) %>%
-        dplyr::mutate(snp_coverage = sum(coverage)) %>%
-        dplyr::ungroup()
+        dplyr::filter(sum(coverage > 0) == 2L, .by = c(donor, snp_id)) %>%
+        dplyr::mutate(snp_coverage = sum(coverage), .by = c(donor, snp_id))
 
     # Ties on coverage are broken by snp_id so repeat runs elect the same SNP;
     # slice_max(with_ties = FALSE) alone would depend on incoming row order.
@@ -499,17 +502,100 @@ setMethod(
     if (n_dropped > 0) {
         logger::log_warn(
             "Dropped {n_dropped}/{n_before} donor x gene pair(s) from gene-level output: ",
-            "no SNP had its dominant allele flip between the active-X groups"
+            "no SNP was covered in both active-X groups"
         )
     }
 
-    # same_allele_dominant and phase_contradiction are both uniformly FALSE for
-    # every elected SNP, by the argument above; keeping them would read as
-    # evidence rather than as the selection criteria they are.
     candidates %>%
         dplyr::semi_join(elected, by = c("donor", "gene_name", "snp_id")) %>%
-        dplyr::select(-snp_coverage, -same_allele_dominant, -phase_contradiction) %>%
+        dplyr::select(-snp_coverage) %>%
         dplyr::arrange(donor, gene_name, active_x)
+}
+
+#' Flag donors whose escape disagrees with the gene's other donors
+#'
+#' Compares each (\code{donor}, \code{gene_name}) pair's pooled escape against
+#' the median pooled escape of the same gene's other donors. A pair is flagged
+#' \code{donor_discordant} when it differs from that median by at least
+#' \code{discordance_threshold} and a two-sided beta-binomial test of its
+#' inactive count against the median rejects at 0.05. The test stops a
+#' low-coverage pair being flagged on noise alone; the threshold stops a
+#' high-coverage pair being flagged for a difference too small to matter.
+#'
+#' @param result The per-group tibble from
+#'   \code{.elect_gene_representative_snps}, one representative SNP per
+#'   (\code{donor}, \code{gene_name}).
+#' @param rho_by_donor A tibble with columns \code{donor} and \code{xci_rho};
+#'   donors absent from it, or with \code{NA}, fall back to 0.05, the default
+#'   \code{\link{test_escape}} uses without a fit.
+#' @param discordance_threshold Numeric, in \code{[0, 0.5]}, required. Minimum
+#'   absolute difference in escape fraction to flag.
+#'
+#' @return \code{result} with \code{other_donor_escape} and
+#'   \code{donor_discordant} added, both \code{NA} for a gene with fewer than
+#'   two other covered donors to compare against.
+#'
+#' @keywords internal
+.flag_donor_discordance <- function(result, rho_by_donor, discordance_threshold) {
+    pooled <- result %>%
+        dplyr::summarise(
+            inactive_count = sum(inactive_count),
+            coverage = sum(coverage),
+            .by = c(donor, gene_name)
+        ) %>%
+        dplyr::mutate(escape_fraction = inactive_count / coverage)
+
+    # Leave-one-out median, so a donor is never compared against itself. The
+    # median rather than a coverage-weighted pool keeps one deep donor from
+    # setting the reference for everyone, and two other donors is the fewest
+    # that make "the rest of the gene" more than a single opinion.
+    other_escape <- pooled %>%
+        dplyr::select(donor, gene_name, escape_fraction) %>%
+        dplyr::inner_join(
+            dplyr::select(pooled, donor_other = donor, gene_name, escape_fraction_other = escape_fraction),
+            by = "gene_name",
+            relationship = "many-to-many"
+        ) %>%
+        dplyr::filter(donor != donor_other) %>%
+        dplyr::summarise(
+            other_donor_escape = if (dplyr::n() >= 2L) stats::median(escape_fraction_other) else NA_real_,
+            .by = c(donor, gene_name)
+        )
+
+    flags <- pooled %>%
+        dplyr::left_join(other_escape, by = c("donor", "gene_name")) %>%
+        dplyr::left_join(rho_by_donor, by = "donor") %>%
+        dplyr::mutate(xci_rho = dplyr::coalesce(xci_rho, 0.05))
+
+    testable <- !is.na(flags$other_donor_escape)
+    p_val <- rep(NA_real_, nrow(flags))
+    if (any(testable)) {
+        test_args <- list(
+            flags$inactive_count[testable],
+            flags$coverage[testable],
+            flags$other_donor_escape[testable],
+            flags$xci_rho[testable]
+        )
+        p_greater <- do.call(betabinom_test, c(test_args, alternative = "greater"))
+        p_less <- do.call(betabinom_test, c(test_args, alternative = "less"))
+        p_val[testable] <- pmin(1, 2 * pmin(p_greater, p_less))
+    }
+
+    flags <- flags %>%
+        dplyr::mutate(
+            donor_discordant = abs(escape_fraction - other_donor_escape) >= discordance_threshold & p_val < 0.05
+        ) %>%
+        dplyr::select(donor, gene_name, other_donor_escape, donor_discordant)
+
+    n_flagged <- sum(flags$donor_discordant, na.rm = TRUE)
+    if (n_flagged > 0) {
+        logger::log_warn(
+            "Flagged {n_flagged}/{nrow(flags)} donor x gene pair(s) as donor_discordant: ",
+            "escape differs from the gene's other donors by at least {discordance_threshold}"
+        )
+    }
+
+    dplyr::left_join(result, flags, by = c("donor", "gene_name"))
 }
 
 #' Pool the two active-X groups into one row
@@ -524,8 +610,9 @@ setMethod(
 #' \code{active_x} itself, \code{dominant_allele} (which flips between the
 #' groups by construction, so a pooled value would be an artefact of whichever
 #' group had more reads) and \code{phase_contradiction} (defined per group).
-#' \code{same_allele_dominant} is already a per-SNP summary of both groups and
-#' survives.
+#' \code{same_allele_dominant} is already a per-SNP summary of both groups, and
+#' \code{other_donor_escape}/\code{donor_discordant} a per-gene one, so they
+#' survive.
 #'
 #' @param result A per-group tibble assembled by
 #'   \code{\link{haplotype_expression}}, after any representative election.
@@ -539,7 +626,15 @@ setMethod(
 #' @keywords internal
 .pool_active_x_groups <- function(result, escape_threshold) {
     id_cols <- intersect(
-        c("donor", "snp_id", "gene_name", "phase_likely_inverted", "same_allele_dominant"),
+        c(
+            "donor",
+            "snp_id",
+            "gene_name",
+            "phase_likely_inverted",
+            "same_allele_dominant",
+            "other_donor_escape",
+            "donor_discordant"
+        ),
         colnames(result)
     )
 
@@ -555,9 +650,12 @@ setMethod(
             escape_fraction = dplyr::if_else(coverage > 0, inactive_count / coverage, NA_real_),
             escapes = escape_fraction >= escape_threshold
         ) %>%
-        # The two flags are per-SNP metadata rather than measurements, so they
-        # trail the counts as they do in the per-group output.
-        dplyr::relocate(dplyr::any_of(c("phase_likely_inverted", "same_allele_dominant")), .after = dplyr::last_col())
+        # The flags are metadata rather than measurements, so they trail the
+        # counts as they do in the per-group output.
+        dplyr::relocate(
+            dplyr::any_of(c("phase_likely_inverted", "same_allele_dominant", "other_donor_escape", "donor_discordant")),
+            .after = dplyr::last_col()
+        )
 
     sort_cols <- intersect(c("donor", "gene_name", "snp_id"), colnames(pooled))
     dplyr::arrange(pooled, dplyr::pick(dplyr::all_of(sort_cols)))

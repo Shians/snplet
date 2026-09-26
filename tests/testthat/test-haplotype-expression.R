@@ -235,10 +235,11 @@ test_that("same_allele_dominant tracks the groups straddling 0.5, not high escap
     expect_false(any(symmetric$same_allele_dominant))
     expect_setequal(symmetric$dominant_allele, c("ALT", "REF"))
 
-    # Confirm the election follows same_allele_dominant, so the symmetric escapee
-    # is still elected at gene level while the one-sided SNP is dropped
+    # Confirm the election ignores the flip: the one-sided SNP, whose groups
+    # straddle 0.5, is elected alongside the symmetric one and keeps its flag
     elected <- haplotype_expression(obj)
-    expect_setequal(elected$gene_name, "symmetric")
+    expect_setequal(elected$gene_name, c("one_sided", "symmetric"))
+    expect_true(elected$same_allele_dominant[elected$gene_name == "one_sided"])
 })
 
 
@@ -350,37 +351,40 @@ test_that("haplotype_expression() omits SNPs a donor's model never retained", {
 # 4 cells, one donor: cells 1-2 X1-active, cells 3-4 X2-active. X1 carries REF
 # at every SNP.
 #   geneA/snpA_hi  - REF dominant in BOTH groups (tied 5:5 in the X2 group, so
-#                    its escape fraction is exactly 0.5 and it survives the
-#                    phase-contradiction filter). Coverage 40: the best-covered
-#                    SNP of the gene, and the one a naive coverage-only rule
-#                    would elect.
-#   geneA/snpA_lo  - clean flip, coverage 12. Must win despite lower coverage.
+#                    its escape fraction is exactly 0.5). Coverage 40: the
+#                    best-covered SNP of the gene, and it must win even though
+#                    its dominant allele fails to flip.
+#   geneA/snpA_lo  - clean flip, coverage 12.
 #   geneB/snpB_low - clean flip, coverage 12.
 #   geneB/snpB_hi  - clean flip, coverage 20. Must win on coverage.
-#   geneC/snpC     - REF dominant in both groups, the gene's only SNP, so geneC
-#                    has no valid representative and must be dropped.
+#   geneC/snpC     - REF dominant in both groups, the gene's only SNP. It must
+#                    still be kept: a failed flip is flagged, not dropped.
+#   geneD/snpD     - covered in the X1-active group only, the gene's only SNP,
+#                    so geneD has no representative and must be dropped.
 make_gene_collapse_fixture <- function() {
     ref <- rbind(
         c(8L, 8L, 5L, 5L),
         c(3L, 3L, 0L, 0L),
         c(3L, 3L, 0L, 0L),
         c(5L, 5L, 0L, 0L),
-        c(8L, 8L, 5L, 5L)
+        c(8L, 8L, 5L, 5L),
+        c(5L, 5L, 0L, 0L)
     )
     alt <- rbind(
         c(2L, 2L, 5L, 5L),
         c(0L, 0L, 3L, 3L),
         c(0L, 0L, 3L, 3L),
         c(0L, 0L, 5L, 5L),
-        c(2L, 2L, 5L, 5L)
+        c(2L, 2L, 5L, 5L),
+        c(0L, 0L, 0L, 0L)
     )
 
     snp_info <- data.frame(
         chrom = "X",
-        pos = c(1000L, 2000L, 3000L, 4000L, 5000L),
+        pos = c(1000L, 2000L, 3000L, 4000L, 5000L, 6000L),
         ref = "A",
         alt = "G",
-        gene_name = c("geneA", "geneA", "geneB", "geneB", "geneC"),
+        gene_name = c("geneA", "geneA", "geneB", "geneB", "geneC", "geneD"),
         stringsAsFactors = FALSE
     )
     barcode_info <- data.frame(
@@ -416,20 +420,22 @@ make_gene_collapse_fixture <- function() {
     list(obj = obj, snp_ids = snp_ids)
 }
 
-test_that("haplotype_expression() elects the flipping SNP over a better-covered non-flipping one", {
+test_that("haplotype_expression() elects the best-covered SNP even when its allele does not flip", {
     fixture <- make_gene_collapse_fixture()
 
     res <- haplotype_expression(fixture$obj)
     gene_a <- dplyr::filter(res, gene_name == "geneA")
 
-    # Verify geneA is represented by the flipping SNP, not the higher-coverage
-    # SNP whose dominant allele fails to flip between the groups
-    expect_setequal(gene_a$snp_id, fixture$snp_ids[2])
+    # Verify geneA is represented by its best-covered SNP, although that SNP's
+    # dominant allele fails to flip between the groups
+    expect_setequal(gene_a$snp_id, fixture$snp_ids[1])
     # Confirm the gene collapses to a single row, its two active-X groups pooled
     expect_equal(nrow(gene_a), 1L)
-    # Check the counts are the elected SNP's own two groups summed (6 + 6), not a
-    # sum over the gene's SNPs
-    expect_equal(gene_a$coverage, 12)
+    # Check the counts are the elected SNP's own two groups summed (20 + 20), not
+    # a sum over the gene's SNPs
+    expect_equal(gene_a$coverage, 40)
+    # Ensure the failed flip is reported rather than hidden
+    expect_true(gene_a$same_allele_dominant)
 })
 
 test_that("haplotype_expression() breaks ties between electable SNPs on total coverage", {
@@ -445,29 +451,45 @@ test_that("haplotype_expression() breaks ties between electable SNPs on total co
     expect_equal(gene_b$coverage, 20)
 })
 
-test_that("haplotype_expression() drops a gene with no flipping SNP", {
+test_that("haplotype_expression() keeps a gene whose only SNP fails to flip", {
     fixture <- make_gene_collapse_fixture()
 
     res <- haplotype_expression(fixture$obj)
+    gene_c <- dplyr::filter(res, gene_name == "geneC")
 
-    # Confirm geneC, whose only SNP fails the flip test, is absent
-    expect_false("geneC" %in% res$gene_name)
-    # Ensure only the two representable genes survive, one row each
-    expect_setequal(res$gene_name, c("geneA", "geneB"))
+    # Verify geneC is reported, since a failed flip is flagged rather than
+    # used to select
+    expect_equal(nrow(gene_c), 1L)
+    # Confirm the flag carries the failed flip into the gene-level output
+    expect_true(gene_c$same_allele_dominant)
 })
 
-test_that("haplotype_expression() drops the selection-criterion columns from gene output", {
+test_that("haplotype_expression() drops a gene with no SNP covered in both groups", {
     fixture <- make_gene_collapse_fixture()
 
     res <- haplotype_expression(fixture$obj)
 
-    # every surviving SNP flips by construction, so a uniformly FALSE column
-    # would read as evidence rather than as the selection criterion it is
-    expect_false("same_allele_dominant" %in% colnames(res))
+    # Confirm geneD, whose only SNP is uncovered in the X2-active group, is absent
+    expect_false("geneD" %in% res$gene_name)
+    # Ensure every other gene survives, one row each
+    expect_setequal(res$gene_name, c("geneA", "geneB", "geneC"))
+})
+
+test_that("haplotype_expression() keeps the flip flags in gene output but drops per-group columns", {
+    fixture <- make_gene_collapse_fixture()
+
+    res <- haplotype_expression(fixture$obj)
+    res_by_group <- haplotype_expression(fixture$obj, by_active_x = TRUE)
+
+    # Verify same_allele_dominant is reported, now that it is a flag rather than
+    # a selection criterion
+    expect_true("same_allele_dominant" %in% colnames(res))
     # Confirm the default grain is one row per (donor, gene)
     expect_equal(nrow(dplyr::distinct(res, donor, gene_name)), nrow(res))
     # Check the per-group columns are gone with the groups they described
     expect_false(any(c("active_x", "dominant_allele", "phase_contradiction") %in% colnames(res)))
+    # Ensure phase_contradiction is reported at gene level when groups are kept apart
+    expect_true("phase_contradiction" %in% colnames(res_by_group))
 })
 
 test_that("haplotype_expression() requires gene annotation unless by_snp", {
@@ -484,9 +506,78 @@ test_that("haplotype_expression() reports every phased SNP under by_snp", {
 
     per_snp <- haplotype_expression(fixture$obj, by_snp = TRUE, by_active_x = TRUE)
 
-    # Verify by_snp reports every phased SNP, including the non-flipping ones no
-    # gene could elect -- this is the surface for inspecting what the default omits
+    # Verify by_snp reports every phased SNP, including those not elected as a
+    # gene's representative
     expect_true(all(fixture$snp_ids %in% per_snp$snp_id))
-    # Confirm the per-SNP grain carries both selection-criterion columns
+    # Confirm the per-SNP grain carries both flip flags
     expect_true(all(c("same_allele_dominant", "phase_contradiction") %in% colnames(per_snp)))
+    # Ensure the cross-donor columns, which compare genes, are absent per SNP
+    expect_false(any(c("other_donor_escape", "donor_discordant") %in% colnames(per_snp)))
+})
+
+# ------------------------------------------------------------------------------
+# Cross-donor consistency
+# ------------------------------------------------------------------------------
+
+# One gene, one SNP, X1 carries REF in every donor; 2 cells per active-X group
+# per donor, depth 50 per cell. donor0-donor2 inactivate cleanly (escape 0.1);
+# donor3 reads 0.5, the signature of an artefact the flip test used to catch.
+make_discordance_fixture <- function(n_donors = 4L) {
+    clean_cells <- list(ref = c(45L, 45L, 5L, 5L), alt = c(5L, 5L, 45L, 45L))
+    even_cells <- list(ref = c(25L, 25L, 25L, 25L), alt = c(25L, 25L, 25L, 25L))
+    donor_cells <- c(rep(list(clean_cells), n_donors - 1L), list(even_cells))
+    donors <- paste0("donor", seq_len(n_donors) - 1L)
+
+    snp_info <- data.frame(chrom = "X", pos = 1000L, ref = "A", alt = "G", gene_name = "geneE")
+    barcode_info <- data.frame(barcode = paste0("cell", seq_len(4L * n_donors)), donor = rep(donors, each = 4L))
+    obj <- SNPData(
+        ref_count = Matrix(matrix(unlist(lapply(donor_cells, `[[`, "ref")), nrow = 1), sparse = TRUE),
+        alt_count = Matrix(matrix(unlist(lapply(donor_cells, `[[`, "alt")), nrow = 1), sparse = TRUE),
+        snp_info = snp_info,
+        barcode_info = barcode_info
+    )
+    obj <- add_donor_snp_metadata(
+        obj,
+        data.frame(snp_id = snp_info(obj)$snp_id, donor = donors, xci_informative = TRUE, allele_on_x1 = "REF"),
+        join_by = c("snp_id", "donor"),
+        overwrite = TRUE
+    )
+    add_barcode_metadata(
+        obj,
+        data.frame(cell_id = barcode_info(obj)$cell_id, active_x = rep(c("X1", "X1", "X2", "X2"), n_donors)),
+        join_by = "cell_id",
+        overwrite = TRUE
+    )
+}
+
+test_that("haplotype_expression() flags a donor whose escape departs from the gene's other donors", {
+    obj <- make_discordance_fixture()
+
+    res <- haplotype_expression(obj)
+
+    # Verify only the 0.5 donor is flagged
+    expect_equal(res$donor[res$donor_discordant], "donor3")
+    # Confirm its reference is the other donors' median escape, not its own
+    expect_equal(res$other_donor_escape[res$donor == "donor3"], 0.1)
+    # Ensure the flagged donor is reported rather than dropped
+    expect_equal(nrow(res), 4L)
+})
+
+test_that("haplotype_expression() does not flag a difference below discordance_threshold", {
+    obj <- make_discordance_fixture()
+
+    res <- haplotype_expression(obj, discordance_threshold = 0.45)
+
+    # Check that a 0.4 difference falls short of a 0.45 threshold
+    expect_false(any(res$donor_discordant))
+})
+
+test_that("haplotype_expression() leaves the cross-donor flag NA with fewer than two other donors", {
+    obj <- make_discordance_fixture(n_donors = 2L)
+
+    res <- haplotype_expression(obj)
+
+    # Verify a single other donor is not enough to define the gene's reference
+    expect_true(all(is.na(res$other_donor_escape)))
+    expect_true(all(is.na(res$donor_discordant)))
 })

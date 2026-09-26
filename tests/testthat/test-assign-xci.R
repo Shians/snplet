@@ -772,12 +772,11 @@ test_that("haplotype_expression() surfaces an escapee gene that assign_xci exclu
     expect_equal(nrow(escapee_rows), 2L)
     expect_true(any(escapee_rows$phase_contradiction))
     # This escapee's two groups fall on OPPOSITE sides of 0.5 (one reversed, one
-    # not), which is what breaks the flip and sets same_allele_dominant -- not the
-    # magnitude of its escape. A gene escaping heavily but symmetrically would
-    # still flip and still be elected. The consequence here is that this
-    # particular escapee is absent from the default gene-level grain entirely.
+    # not), which breaks the flip and sets same_allele_dominant. The flip is a
+    # flag, not a selection criterion, so the escapee is still reported at the
+    # default gene-level grain rather than lost to which side of 0.5 it landed.
     expect_true(all(escapee_rows$same_allele_dominant))
-    expect_false(paste0("gene", 20) %in% haplotype_expression(stored)$gene_name)
+    expect_true(paste0("gene", 20) %in% haplotype_expression(stored)$gene_name)
 
     # Verify xci_informative_only = TRUE restricts back to the calling-informative set
     hap_informative_only <- haplotype_expression(stored, xci_informative_only = TRUE, by_snp = TRUE)

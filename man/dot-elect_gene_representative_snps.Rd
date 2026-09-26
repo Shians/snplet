@@ -8,19 +8,18 @@
 }
 \arguments{
 \item{result}{The per-SNP tibble assembled by \code{\link{haplotype_expression}},
-still carrying its \code{donor}, \code{gene_name} and
-\code{same_allele_dominant} columns.}
+still carrying its \code{donor} and \code{gene_name} columns.}
 }
 \value{
-\code{result} restricted to the selected SNPs' rows, without
-  \code{same_allele_dominant}, ordered by donor, gene and active X.
+\code{result} restricted to the selected SNPs' rows, ordered by
+  donor, gene and active X.
 }
 \description{
 Collapses \code{\link{haplotype_expression}}'s per-SNP rows to the
-highest-coverage SNP whose dominant physical allele flips between the two
-active-X groups. Summing a gene's SNPs instead would count a read spanning
-several of them once per SNP; selecting one keeps the output a genuine read
-count. See the \sQuote{Gene-level representative selection} section of
-\code{\link{haplotype_expression}} for why the flip is required.
+highest-coverage SNP covered in both active-X groups. Summing a gene's SNPs
+instead would count a read spanning several of them once per SNP; selecting
+one keeps the output a genuine read count. See the \sQuote{Gene-level
+representative selection} section of \code{\link{haplotype_expression}} for
+why the dominant-allele flip is reported rather than required.
 }
 \keyword{internal}

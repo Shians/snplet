@@ -8,6 +8,7 @@ extract_snp_calls(
   bam_file,
   snp_info,
   barcodes = NULL,
+  gene_anno = NULL,
   min_mapq = 20L,
   min_baseq = 10L,
   chunk_size = 20000L,
@@ -29,6 +30,12 @@ multi-allelic site or an indel.}
 barcode carrying a `CB` and `UB` tag). Cell barcodes to retain; typically
 the barcodes of one donor, since a pooled sample dilutes the allele
 fraction of any site heterozygous in only some donors.}
+
+\item{gene_anno}{A data.frame/tibble, optional (default `NULL`, dropping
+every supplementary alignment), with columns `chrom`, `start`, `end`,
+one row per gene body, in the BAM's chromosome naming style. Gene bodies
+within which a supplementary alignment and its primary must both fall
+for the supplementary to be kept; see \sQuote{Supplementary alignments}.}
 
 \item{min_mapq}{Integer (default 20). Minimum mapping quality.}
 
@@ -71,6 +78,16 @@ A SNP falling in a deletion or an intron of a given read simply yields no
 row for that read: a genuine no-call rather than a coerced base. Only
 `M`/`=`/`X` CIGAR operations are treated as aligned to the reference.
 }
+\section{Supplementary alignments}{
+
+Given `gene_anno`, a supplementary alignment is kept when it and its
+primary overlap one gene body, on the same strand, without overlapping each
+other; anything else is treated as a chimera and dropped. The primary's
+position comes from the `SA` tag, since the primary need not overlap a
+target SNP. Kept supplementaries do not inflate counts: calls are keyed by
+molecule (`CB`, `UB`), so they add SNPs to an existing molecule.
+}
+
 \seealso{
 Other molecule-level allele counting functions:
 \code{\link[=assign_snp_genes]{assign_snp_genes()}},

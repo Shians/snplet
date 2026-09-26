@@ -30,7 +30,8 @@ Columns that only mean something within a single group are dropped:
 \code{active_x} itself, \code{dominant_allele} (which flips between the
 groups by construction, so a pooled value would be an artefact of whichever
 group had more reads) and \code{phase_contradiction} (defined per group).
-\code{same_allele_dominant} is already a per-SNP summary of both groups and
-survives.
+\code{same_allele_dominant} is already a per-SNP summary of both groups, and
+\code{other_donor_escape}/\code{donor_discordant} a per-gene one, so they
+survive.
 }
 \keyword{internal}
