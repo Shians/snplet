@@ -39,7 +39,7 @@ aggregation, MAF testing, and expression-matrix export.
 
 ### Import and export
 - `import_cellsnp()` builds a `SNPData` object from a cellSNP-lite directory, taking optional
-  `vdj_file`, `vireo_folder`, and `bam_files` arguments.
+  `vdj_file` and `vireo_folder` arguments.
 - `import_cellsnp_libraries()` imports several runs from a sample sheet into one object,
   using each run's `library_id` to keep cells that share a 10x barcode by chance apart.
 - `export_cellsnp()` writes an object back out in cellSNP-lite format; `to_expr_matrix()`
@@ -53,7 +53,7 @@ aggregation, MAF testing, and expression-matrix export.
   `aggregate_count_df()` for any `barcode_info` column, each with an optional exact binomial
   test of allele usage against a null minor allele frequency.
 - **Metadata**: `add_barcode_metadata()`, `add_snp_metadata()`, `add_donor_metadata()`,
-  `add_snp_gene_names()`, `assign_snp_genes()`, `add_library_bams()`, `rename_donor()`.
+  `add_snp_gene_names()`, `assign_snp_genes()`, `rename_donor()`.
 
 ### Zygosity
 - Vireo genotypes populate per-(SNP, donor) zygosity at import when `GT_donors.vireo.vcf.gz` is
@@ -121,14 +121,13 @@ snp_data <- import_cellsnp(
   library_id = "run1"
 )
 
-# Add donor assignments, TCR/BCR clonotypes and BAM paths, all optional
+# Add donor assignments and TCR/BCR clonotypes, both optional
 snp_data <- import_cellsnp(
   cellsnp_dir = "path/to/cellsnp_output",
   gene_annotation = gene_anno_df,
   library_id = "run1",
   vireo_folder = "path/to/vireo_output",
-  vdj_file = "path/to/filtered_contig_annotations.csv",
-  bam_files = "path/to/possorted_genome_bam.bam"
+  vdj_file = "path/to/filtered_contig_annotations.csv"
 )
 
 # Several runs or libraries from a sample sheet, one row per cellSNP-lite run
@@ -156,15 +155,21 @@ hap <- haplotype_expression(snp_data)
 escape <- test_escape(snp_data)
 ```
 
-If BAM files were recorded at import (or added later with `add_library_bams()`), read-backed
-phase and molecule-level counts can be added before testing:
+With the libraries' BAM files and a stranded gene annotation, read-backed phase and
+molecule-level counts can be added before testing. The molecule calls are stored in
+`molecules(snp_data)` and survive later filtering:
 
 ```r
-snp_data <- phase_from_molecules(snp_data)
+snp_data <- phase_from_molecules(
+  snp_data,
+  bam_files = c(run1 = "path/to/possorted_genome_bam.bam"),
+  gene_annotation = gene_anno_df
+)
 hap_mol <- haplotype_expression_by_molecule(snp_data)
 
-# test_escape() uses the molecule counts automatically when they are present
+# test_escape() uses the molecule counts when they are present; count_source names it explicitly
 escape <- test_escape(snp_data)
+escape_snp <- test_escape(snp_data, count_source = "snp")
 ```
 
 See the function documentation (`?import_cellsnp`, `?assign_xci`, `?haplotype_expression`,

@@ -179,9 +179,7 @@
 # One row per library present in barcode_info. Derived rather than accepted
 # from the caller: which libraries an object holds is a property of its cells,
 # so there is nothing for a constructor argument to say that barcode_info does
-# not already. `bam_files` starts empty and is filled in later, by
-# import_cellsnp() or add_library_bams(), since a BAM path is knowledge about
-# where the reads came from rather than about the counts themselves.
+# not already.
 .default_library_info <- function(barcode_info) {
     if (!"library_id" %in% colnames(barcode_info)) {
         return(.empty_library_info())
@@ -192,93 +190,81 @@
     }
     tibble::tibble(
         library_id = libraries,
-        n_cells = as.integer(tabulate(match(barcode_info$library_id, libraries), nbins = length(libraries))),
-        bam_files = replicate(length(libraries), character(0), simplify = FALSE)
+        n_cells = as.integer(tabulate(match(barcode_info$library_id, libraries), nbins = length(libraries)))
     )
 }
 
 .empty_library_info <- function() {
     tibble::tibble(
         library_id = character(0),
-        n_cells = integer(0),
-        bam_files = list()
+        n_cells = integer(0)
     )
 }
 
-# Carries stored BAM paths from one object onto another that was rebuilt from
-# its cells. Every route that makes a new SNPData out of an old one -- `[`,
-# and so filter_barcodes() and friends -- goes through the constructor, which
-# derives library_info afresh and would otherwise silently drop the paths.
-# Libraries with no surviving cells have no row to carry onto, so their paths
-# go with them: the object no longer contains that library.
-.propagate_library_info <- function(object, from) {
-    if (!methods::.hasSlot(from, "library_info") || nrow(object@library_info) == 0) {
-        return(object)
-    }
-    object@library_info$bam_files <- .lookup_bam_files(object@library_info$library_id, from@library_info)
-    object
-}
-
-# Re-derives library_info after barcode_info has been written to directly,
-# keeping the recorded paths of every library that is still present. Editing
-# barcode_info$library_id is the one way to change which libraries an object
-# holds without going through the constructor, so without this the two tables
-# drift apart and a path is filed against a library that no longer exists.
+# Re-derives library_info after barcode_info has been written to directly.
+# Editing barcode_info$library_id is the one way to change which libraries an
+# object holds without going through the constructor, so without this the two
+# tables drift apart.
 .resync_library_info <- function(x, barcode_info) {
     if (!methods::.hasSlot(x, "library_info")) {
         return(x)
     }
-    rederived <- .default_library_info(barcode_info)
-    rederived$bam_files <- .lookup_bam_files(rederived$library_id, x@library_info)
-    x@library_info <- rederived
+    x@library_info <- .default_library_info(barcode_info)
     x
 }
 
-.empty_snp_gene_map <- function() {
-    tibble::tibble(
-        snp_id = character(0),
-        gene_name = character(0),
-        gene_strand = character(0),
-        ambiguous = logical(0)
-    )
-}
-
-# The map is keyed on snp_id alone, so it is carried over whole and then cut
-# down to the SNPs that survived, the same way donor_snp_info is. A row for a
-# dropped SNP is not merely redundant: it would let
-# haplotype_expression_by_molecule() count molecules at a SNP the object no
-# longer holds.
-.propagate_snp_gene_map <- function(object, from) {
-    if (!methods::.hasSlot(from, "snp_gene_map")) {
-        return(object)
-    }
-    kept <- from@snp_gene_map[from@snp_gene_map$snp_id %in% object@snp_info$snp_id, , drop = FALSE]
-    object@snp_gene_map <- tibble::as_tibble(kept)
+# Carries the molecule calls from one object onto another rebuilt from it.
+# Passed through whole rather than cut down to the surviving cells and SNPs:
+# every function that counts them joins them to the object's own cells and
+# phased SNPs first, so calls outside the object are never counted, and
+# SNPData need not know how the calls are structured.
+.propagate_molecules <- function(object, from) {
+    object@molecules <- molecules(from)
     object
 }
 
-.validate_snp_gene_map <- function(snp_gene_map) {
-    required <- c("snp_id", "gene_name", "gene_strand", "ambiguous")
-    missing_cols <- setdiff(required, colnames(snp_gene_map))
-    if (length(missing_cols) > 0) {
-        stop("snp_gene_map is missing required column(s): ", paste(missing_cols, collapse = ", "))
-    }
-    tibble::as_tibble(snp_gene_map)
-}
-
-.lookup_bam_files <- function(library_ids, library_info) {
-    matched <- match(library_ids, library_info$library_id)
-    purrr::map(matched, function(i) {
-        if (is.na(i)) {
-            return(character(0))
+# Moves the molecule data older versions kept elsewhere into the molecules
+# slot: the "molecule_calls" and "bam_calibration" attributes
+# phase_from_molecules() used to attach, the retired snp_gene_map slot, and the
+# BAM paths library_info used to record. Old calls were keyed on donor, so each
+# is given the library of the cell it names.
+.migrate_molecule_attributes <- function(object) {
+    old_calls <- attr(object, "molecule_calls")
+    calls <- NULL
+    if (!is.null(old_calls)) {
+        barcode_info <- object@barcode_info
+        if (!"library_id" %in% colnames(barcode_info)) {
+            barcode_info$library_id <- NA_character_
         }
-        library_info$bam_files[[i]]
-    })
+        cell_library <- dplyr::distinct(barcode_info, donor, barcode, library_id)
+        calls <- old_calls %>%
+            dplyr::left_join(cell_library, by = c("donor", "barcode")) %>%
+            dplyr::select(dplyr::all_of(.MOLECULE_CALL_COLUMNS))
+    }
+
+    bam_files <- list()
+    if (methods::.hasSlot(object, "library_info") && "bam_files" %in% colnames(object@library_info)) {
+        stored <- object@library_info[lengths(object@library_info$bam_files) > 0, , drop = FALSE]
+        bam_files <- stats::setNames(stored$bam_files, stored$library_id)
+        object@library_info$bam_files <- NULL
+    }
+
+    molecules <- MoleculeCalls(
+        calls = calls,
+        snp_gene_map = attr(object, "snp_gene_map"),
+        bam_calibration = attr(object, "bam_calibration"),
+        bam_files = bam_files
+    )
+    attr(object, "molecule_calls") <- NULL
+    attr(object, "bam_calibration") <- NULL
+    attr(object, "snp_gene_map") <- NULL
+    object@molecules <- molecules
+    object
 }
 
-# Normalises the `bam_files` argument shared by import_cellsnp(),
-# add_library_bams(), and phase_from_molecules() into a named list of character
-# vectors, one element per library.
+# Normalises the `bam_files` argument shared by phase_from_molecules() and
+# molecule_haplotype_counts() into a named list of character vectors, one
+# element per library.
 .as_library_bam_list <- function(bam_files, arg_name = "bam_files") {
     if (length(bam_files) == 0) {
         stop(arg_name, " is empty; supply at least one library's BAM file(s).")

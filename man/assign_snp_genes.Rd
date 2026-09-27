@@ -48,6 +48,7 @@ here, since phasing does not depend on gene assignment.
 }
 \seealso{
 Other molecule-level allele counting functions:
+\code{\link{MoleculeCalls-class}},
 \code{\link[=extract_snp_calls]{extract_snp_calls()}},
 \code{\link[=molecule_haplotype_counts]{molecule_haplotype_counts()}},
 \code{\link[=molecule_read_strand]{molecule_read_strand()}},

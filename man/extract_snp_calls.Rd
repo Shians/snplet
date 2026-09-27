@@ -90,6 +90,7 @@ molecule (`CB`, `UB`), so they add SNPs to an existing molecule.
 
 \seealso{
 Other molecule-level allele counting functions:
+\code{\link{MoleculeCalls-class}},
 \code{\link[=assign_snp_genes]{assign_snp_genes()}},
 \code{\link[=molecule_haplotype_counts]{molecule_haplotype_counts()}},
 \code{\link[=molecule_read_strand]{molecule_read_strand()}},

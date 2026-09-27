@@ -110,11 +110,14 @@ assign_snp_genes <- function(snp_info, gene_anno) {
 #'   `assign_xci_by_clonotype()` (see `.has_xci_diagnostics()`), with a
 #'   `donor` column in `barcode_info`. See Details for per-donor library
 #'   constraints.
-#' @param bam_files A named character vector or list, optional (default
-#'   `NULL`, taking the paths recorded in `library_info(x)$bam_files` by
-#'   `import_cellsnp()` or `add_library_bams()`, and erroring if none were),
+#' @param bam_files A named character vector or list, required,
 #'   `library_id = path(s)`, giving the indexed BAM file or files holding that
 #'   library's reads. See Details for naming and pooling rules.
+#' @param gene_annotation A data.frame, required, with columns `chrom`,
+#'   `start`, `end`, `gene_name`, `strand` (`"+"`/`"-"`), one row per gene
+#'   body. Used by `assign_snp_genes()` to build the SNP-to-gene map stored
+#'   with the molecule calls, which `haplotype_expression_by_molecule()` counts
+#'   by.
 #' @param target_chrom Character scalar (default `"chrX"`, matching
 #'   `assign_xci()`'s own restriction). Canonical chromosome to restrict
 #'   het-SNP selection to.
@@ -156,32 +159,21 @@ assign_snp_genes <- function(snp_info, gene_anno) {
 #'       behaviour), else the molecule value, else `NA` where
 #'       `phase_conflict` is `TRUE`.
 #'   }
-#'   The object also carries two attributes:
-#'   \itemize{
-#'     \item `"molecule_calls"`: a tibble with columns `donor`, `barcode`,
-#'       `umi`, `snp_id`, `allele`, and `transcript_strand`
-#'       (`"+"`/`"-"`/`NA`, the molecule's inferred transcript strand; see
-#'       `.infer_bam_strand_orientation()` and `molecule_read_strand()`).
-#'       It is the per-donor `molecule_snp_alleles()` output already
-#'       computed here, and lets `haplotype_expression_by_molecule()`
-#'       resolve SNPs `assign_snp_genes()` flagged `ambiguous` by reading it
-#'       straight off the object it is given, rather than re-extracting
-#'       from the BAM. Being an attribute, it does not survive operations
-#'       that rebuild the object, so subset before this call rather than
-#'       after.
-#'     \item `"bam_calibration"`: one row per BAM file scanned, with columns
-#'       `bam_file`, `orientation` (`"sense"`/`"antisense"`/`NA` where it
-#'       could not be inferred), `n_ts_reads`, `concordance`, and
-#'       `n_scanned`, so the strand call applied to each file's molecules
-#'       can be inspected afterwards.
-#'   }
-#'
+#'   The object's `molecules` slot is also set to a
+#'   \code{\link[=MoleculeCalls-class]{MoleculeCalls}} object holding the
+#'   per-molecule allele calls extracted here (keyed on `library_id` and
+#'   `barcode`), the SNP-to-gene map built from `gene_annotation`, the per-BAM
+#'   strand calibration (`bam_calibration()`), and the BAM paths and settings
+#'   used. `haplotype_expression_by_molecule()` and `test_escape()` count
+#'   escape from it without re-reading the BAMs, and it survives subsetting,
+#'   so the object can be filtered after this call as freely as before it.
 #' @family molecule-level allele counting functions
 #' @family X-chromosome inactivation functions
 #' @export
 phase_from_molecules <- function(
     x,
-    bam_files = NULL,
+    bam_files,
+    gene_annotation,
     target_chrom = "chrX",
     min_mapq = 20L,
     min_baseq = 10L,
@@ -194,10 +186,8 @@ phase_from_molecules <- function(
     if (!.has_xci_diagnostics(x)) {
         stop("No stored XCI diagnostics found. Run assign_xci(x) first.")
     }
-    if (is.null(bam_files)) {
-        bam_files <- .stored_bam_files(x)
-    }
     bam_files <- .as_library_bam_list(bam_files)
+    snp_gene_map <- assign_snp_genes(snp_info(x), gene_annotation)
 
     snp_info <- snp_info(x)
     if (!"chrom_canonical" %in% colnames(snp_info)) {
@@ -284,10 +274,24 @@ phase_from_molecules <- function(
 
     x <- add_donor_snp_metadata(x, resolved, join_by = c("snp_id", "donor", "zygosity_source"), overwrite = TRUE)
 
-    # Lets haplotype_expression_by_molecule() reuse this instead of re-extracting.
-    attr(x, "molecule_calls") <- molecule_calls
-    # Recorded, not just logged, so a bad orientation call is inspectable later.
-    attr(x, "bam_calibration") <- calibration
+    # Stored so haplotype_expression_by_molecule() and test_escape() count from
+    # these calls instead of re-extracting; the calibration is recorded, not
+    # just logged, so a bad orientation call is inspectable later.
+    x@molecules <- MoleculeCalls(
+        calls = dplyr::select(molecule_calls, dplyr::all_of(.MOLECULE_CALL_COLUMNS), dplyr::any_of("n_calls")),
+        snp_gene_map = snp_gene_map,
+        bam_calibration = calibration,
+        bam_files = extracted$bam_files,
+        params = list(
+            target_chrom = target_chrom,
+            min_mapq = min_mapq,
+            min_baseq = min_baseq,
+            min_molecules = min_molecules,
+            min_cells = min_cells,
+            error_rate = error_rate,
+            min_llr = min_llr
+        )
+    )
     x
 }
 
@@ -316,9 +320,6 @@ phase_from_molecules <- function(
     barcode_info <- barcode_info(x)
     if (!"donor" %in% colnames(barcode_info)) {
         stop("SNPData object has no donor assignments; phasing is done separately for each donor.")
-    }
-    if (is.null(bam_files)) {
-        bam_files <- .stored_bam_files(x)
     }
     bam_files <- .as_library_bam_list(bam_files)
 
@@ -359,7 +360,7 @@ phase_from_molecules <- function(
         dplyr::filter(!donor %in% c("doublet", "unassigned"), library_id %in% names(bam_files))
     if (nrow(donor_library) == 0) {
         logger::log_warn("No real donors have BAM files supplied for their library; nothing to phase.")
-        return(list(per_donor = list(), calibration = NULL))
+        return(list(per_donor = list(), calibration = NULL, bam_files = list()))
     }
 
     bam_files <- .check_bam_paths(bam_files[unique(donor_library$library_id)])
@@ -419,25 +420,13 @@ phase_from_molecules <- function(
             return(NULL)
         }
         per_snp$donor <- donor_id
+        # The library as barcode_info records it (NA for an unlabelled object),
+        # so stored calls can be matched back to their cells.
+        per_snp$library_id <- unique(barcode_info$library_id[barcode_info$donor %in% donor_id])
         list(phase = phase, per_snp = per_snp)
     })
     names(per_donor) <- names(donor_bams)
-    list(per_donor = purrr::compact(per_donor), calibration = calibration)
-}
-
-# Paths recorded against each library at import, in the shape a `bam_files`
-# argument would take. Libraries with no stored path are left out, so a
-# half-populated object fails rather than silently phasing only some donors.
-.stored_bam_files <- function(x) {
-    stored <- library_info(x)
-    stored <- stored[lengths(stored$bam_files) > 0, , drop = FALSE]
-    if (nrow(stored) == 0) {
-        stop(
-            "No bam_files given and none recorded on the object. Supply them here, or record them with ",
-            "import_cellsnp(..., bam_files = ) or add_library_bams()."
-        )
-    }
-    stats::setNames(stored$bam_files, stored$library_id)
+    list(per_donor = purrr::compact(per_donor), calibration = calibration, bam_files = bam_files)
 }
 
 # A duplicate path would double-count every read via .pool_donor_calls(); a
@@ -689,11 +678,13 @@ phase_from_molecules <- function(
 #' @param x A SNPData object, required, with a `donor` column in
 #'   `barcode_info` and a zygosity source established (Vireo genotypes read
 #'   at import, or \code{\link{infer_zygosity}}).
-#' @param bam_files A named character vector or list, optional (default
-#'   `NULL`, taking the paths recorded in `library_info(x)$bam_files`),
+#' @param bam_files A named character vector or list, required,
 #'   `library_id = path(s)`. See \code{\link{phase_from_molecules}}'s
 #'   `bam_files` argument for the full matching rules; the same rules apply
 #'   here.
+#' @param gene_annotation A data.frame, required, with columns `chrom`,
+#'   `start`, `end`, `gene_name`, `strand`. See
+#'   \code{\link{phase_from_molecules}}.
 #' @param target_chrom Character vector, optional (default `NULL`, every
 #'   chromosome). Canonical chromosome(s) to restrict het-SNP selection to.
 #' @param min_mapq,min_baseq,threads Integer (defaults 20, 10, 4). Passed to
@@ -752,7 +743,8 @@ phase_from_molecules <- function(
 #' }
 molecule_haplotype_counts <- function(
     x,
-    bam_files = NULL,
+    bam_files,
+    gene_annotation,
     target_chrom = NULL,
     min_mapq = 20L,
     min_baseq = 10L,
@@ -762,17 +754,7 @@ molecule_haplotype_counts <- function(
     min_llr = 3,
     threads = 4L
 ) {
-    snp_gene_map <- snp_gene_map(x)
-    if (nrow(snp_gene_map) == 0) {
-        stop(
-            "This object carries no SNP-to-gene map. It is built by import_cellsnp() from a gene ",
-            "annotation with a strand column; set it on an existing object with ",
-            "snp_gene_map(x) <- assign_snp_genes(snp_info(x), gene_anno)."
-        )
-    }
-    if (is.null(bam_files)) {
-        bam_files <- .stored_bam_files(x)
-    }
+    snp_gene_map <- assign_snp_genes(snp_info(x), gene_annotation)
     bam_files <- .as_library_bam_list(bam_files)
 
     x_scope <- x

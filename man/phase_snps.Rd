@@ -148,6 +148,7 @@ conflicts at all, so any non-zero count is worth investigating.
 
 \seealso{
 Other molecule-level allele counting functions:
+\code{\link{MoleculeCalls-class}},
 \code{\link[=assign_snp_genes]{assign_snp_genes()}},
 \code{\link[=extract_snp_calls]{extract_snp_calls()}},
 \code{\link[=molecule_haplotype_counts]{molecule_haplotype_counts()}},

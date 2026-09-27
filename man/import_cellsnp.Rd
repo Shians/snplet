@@ -12,8 +12,7 @@ import_cellsnp(
   vireo_folder = NULL,
   donor_map = NULL,
   barcode_column = "barcode",
-  clonotype_column = "raw_clonotype_id",
-  bam_files = NULL
+  clonotype_column = "raw_clonotype_id"
 )
 }
 \arguments{
@@ -51,15 +50,6 @@ of the column in \code{vdj_file} containing cell barcodes (only used if
 \item{clonotype_column}{Character scalar (default \code{"raw_clonotype_id"}).
 Name of the column in \code{vdj_file} containing clonotype information
 (only used if \code{vdj_file} is provided).}
-
-\item{bam_files}{An unnamed character vector, optional (default \code{NULL},
-recording no paths). The BAM file or files this cellSNP run was made from.
-Requires \code{library_id} (this whole vector is stored against it as one
-library's paths in \code{library_info}, via \code{\link{add_library_bams}}),
-so that \code{\link{phase_from_molecules}} can find them without being told
-again. Must not be named: this call covers a single library, so any names
-on \code{bam_files} itself would be silently discarded rather than used as
-per-library keys; each path is checked to exist.}
 }
 \value{
 A SNPData object

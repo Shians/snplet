@@ -19,6 +19,17 @@ if (!nzchar(test_bam) || !file.exists(test_bam)) {
     test_bam <- "../../example_data/snp_counting/TASL.bam"
 }
 
+# One gene body spanning every fixture SNP on chr1 and chrX, so the SNP-to-gene
+# map phase_from_molecules() and molecule_haplotype_counts() build from it
+# attributes all of them to GENE1.
+test_gene_annotation <- tibble::tibble(
+    chrom = c("chr1", "chrX"),
+    start = 1L,
+    end = 1000000L,
+    gene_name = "GENE1",
+    strand = "+"
+)
+
 # ==============================================================================
 # Test: molecule_snp_alleles()
 # ==============================================================================
@@ -1750,35 +1761,7 @@ test_that("phase_from_molecules() errors when no XCI diagnostics are stored", {
     obj <- SNPData(ref_count = ref, alt_count = alt, snp_info = snp_info, barcode_info = barcode_info)
 
     # Verify the function refuses to run before assign_xci() has stored a fit
-    expect_error(phase_from_molecules(obj, bam_files = c(donor0 = "x.bam")), "Run assign_xci")
-})
-
-test_that("phase_from_molecules() falls back to the BAM paths recorded on the object", {
-    fixture <- make_phase_fixture()
-    obj <- add_barcode_metadata(
-        fixture$obj,
-        data.frame(cell_id = barcode_info(fixture$obj)$cell_id, library_id = "lib_A"),
-        join_by = "cell_id",
-        overwrite = TRUE
-    )
-    bam <- local_fake_bam()
-    obj <- add_library_bams(obj, c(lib_A = bam))
-    call_log <- new_call_log()
-    local_mocked_extraction(call_log)
-
-    phase_from_molecules(obj)
-
-    # Verify a path recorded at import is used without being passed again,
-    # which is the point of storing it on the object
-    expect_identical(call_log$calls, bam)
-})
-
-test_that("phase_from_molecules() errors when no BAM paths are given or recorded", {
-    fixture <- make_phase_fixture()
-
-    # Verify the object says where the paths should come from rather than
-    # failing on a missing argument
-    expect_error(phase_from_molecules(fixture$obj), "none recorded on the object")
+    expect_error(phase_from_molecules(obj, gene_annotation = test_gene_annotation, bam_files = c(donor0 = "x.bam")), "Run assign_xci")
 })
 
 test_that("phase_from_molecules() errors on unrecognised library names in bam_files", {
@@ -1793,7 +1776,7 @@ test_that("phase_from_molecules() errors on unrecognised library names in bam_fi
     # Verify a BAM keyed to a library absent from barcode_info is rejected up
     # front, rather than silently leaving that library's donors unphased
     expect_error(
-        phase_from_molecules(obj, bam_files = c(lib_B = "x.bam")),
+        phase_from_molecules(obj, gene_annotation = test_gene_annotation, bam_files = c(lib_B = "x.bam")),
         "not found in barcode_info\\$library_id"
     )
 })
@@ -1813,7 +1796,7 @@ test_that("phase_from_molecules() errors when one donor's cells span two librari
     # Verify a donor split across libraries is rejected: its BAM files are
     # looked up by library, so there is no single correct set to read
     expect_error(
-        phase_from_molecules(obj, bam_files = c(lib_A = "x.bam", lib_B = "y.bam")),
+        phase_from_molecules(obj, gene_annotation = test_gene_annotation, bam_files = c(lib_A = "x.bam", lib_B = "y.bam")),
         "more than one library"
     )
 })
@@ -1833,7 +1816,7 @@ test_that("phase_from_molecules() errors when only some cells carry a library_id
     # Verify a partly-labelled object is rejected rather than guessed at: the
     # unlabelled cells could belong to lib_A or to a library with no BAM at all
     expect_error(
-        phase_from_molecules(obj, bam_files = c(lib_A = "x.bam")),
+        phase_from_molecules(obj, gene_annotation = test_gene_annotation, bam_files = c(lib_A = "x.bam")),
         "set for some cells but not others"
     )
 })
@@ -1844,7 +1827,7 @@ test_that("phase_from_molecules() errors when an unlabelled object is given seve
     # Check that an object with no library labels cannot be handed more than
     # one library's BAMs, since nothing records which donor belongs to which
     expect_error(
-        phase_from_molecules(fixture$obj, bam_files = c(lib_A = "x.bam", lib_B = "y.bam")),
+        phase_from_molecules(fixture$obj, gene_annotation = test_gene_annotation, bam_files = c(lib_A = "x.bam", lib_B = "y.bam")),
         "must have exactly one entry"
     )
 })
@@ -1856,7 +1839,7 @@ test_that("phase_from_molecules() errors when a library lists the same BAM twice
     # Verify a repeated file is rejected: it would be extracted twice and its
     # tallies summed, doubling every read behind that library's molecules
     expect_error(
-        phase_from_molecules(fixture$obj, bam_files = list(lib_A = c(bam, bam))),
+        phase_from_molecules(fixture$obj, gene_annotation = test_gene_annotation, bam_files = list(lib_A = c(bam, bam))),
         "listed more than once"
     )
 })
@@ -1870,7 +1853,7 @@ test_that("phase_from_molecules() errors when a BAM has no index", {
     # Verify a missing index is a hard error: extraction seeks by index, and
     # without one the region-restricted scan degrades to reading the whole file
     expect_error(
-        phase_from_molecules(fixture$obj, bam_files = c(lib_A = unindexed)),
+        phase_from_molecules(fixture$obj, gene_annotation = test_gene_annotation, bam_files = c(lib_A = unindexed)),
         "no index"
     )
 })
@@ -1883,7 +1866,7 @@ test_that("phase_from_molecules() accepts an object whose cells are all unlabell
 
     # Confirm an all-NA library_id is treated as one implicit library, so
     # objects imported without a library label still phase as before
-    expect_no_error(phase_from_molecules(fixture$obj, bam_files = c(any_name = bam)))
+    expect_no_error(phase_from_molecules(fixture$obj, gene_annotation = test_gene_annotation, bam_files = c(any_name = bam)))
     # Verify the single supplied BAM was the one opened for the only donor
     expect_identical(call_log$calls, bam)
 })
@@ -1903,7 +1886,7 @@ test_that("phase_from_molecules() opens every BAM listed for a donor's library",
     call_log <- new_call_log()
     local_mocked_extraction(call_log)
 
-    phase_from_molecules(obj, bam_files = list(lib_A = bams))
+    phase_from_molecules(obj, gene_annotation = test_gene_annotation, bam_files = list(lib_A = bams))
 
     # Verify both of the library's files were extracted for its donor, so a
     # molecule split across them can be pooled rather than half-counted
@@ -1989,7 +1972,7 @@ test_that("phase_from_molecules() excludes the 'doublet' and 'unassigned' donor 
     withr::defer(logger::log_appender(original_appender))
     withr::defer(logger::log_threshold(original_threshold))
 
-    phase_from_molecules(obj, bam_files = c(lib_A = bam))
+    phase_from_molecules(obj, gene_annotation = test_gene_annotation, bam_files = c(lib_A = bam))
 
     # Verify the log names the excluded non-donor labels
     log_lines <- readLines(log_file, warn = FALSE)
@@ -2031,7 +2014,7 @@ test_that("phase_from_molecules() returns x unchanged when every donor is double
     )
 
     # Verify no error, and the object is returned unchanged when nothing real is left to process
-    result <- phase_from_molecules(obj, bam_files = c(lib_A = "fake.bam"))
+    result <- phase_from_molecules(obj, gene_annotation = test_gene_annotation, bam_files = c(lib_A = "fake.bam"))
     expect_identical(donor_snp_info(result), donor_snp_info(obj))
 })
 
@@ -2079,8 +2062,8 @@ test_that("phase_from_molecules() phases a donor's split BAMs as if they were on
         .package = "snplet"
     )
 
-    single <- phase_from_molecules(fixture$obj, bam_files = c(lib_A = bams[1]))
-    split <- phase_from_molecules(fixture$obj, bam_files = list(lib_A = bams[2:3]))
+    single <- phase_from_molecules(fixture$obj, gene_annotation = test_gene_annotation, bam_files = c(lib_A = bams[1]))
+    split <- phase_from_molecules(fixture$obj, gene_annotation = test_gene_annotation, bam_files = list(lib_A = bams[2:3]))
 
     # Verify splitting a donor's reads across two of its library's BAM files
     # changes nothing about the phase it ends up with
@@ -2088,8 +2071,8 @@ test_that("phase_from_molecules() phases a donor's split BAMs as if they were on
     # Confirm the pooled molecule calls match too, so each split molecule was
     # reassembled with all of its reads rather than counted once per file
     expect_equal(
-        dplyr::arrange(attr(split, "molecule_calls"), barcode, umi, snp_id),
-        dplyr::arrange(attr(single, "molecule_calls"), barcode, umi, snp_id)
+        dplyr::arrange(molecule_calls(molecules(split)), barcode, umi, snp_id),
+        dplyr::arrange(molecule_calls(molecules(single)), barcode, umi, snp_id)
     )
 })
 
@@ -2118,13 +2101,53 @@ test_that("phase_from_molecules() records the strand calibration of every BAM it
         .package = "snplet"
     )
 
-    calibration <- attr(phase_from_molecules(fixture$obj, bam_files = c(lib_A = bam)), "bam_calibration")
+    result <- phase_from_molecules(fixture$obj, gene_annotation = test_gene_annotation, bam_files = c(lib_A = bam))
+    calibration <- bam_calibration(molecules(result))
 
     # Verify the orientation applied to this file's molecules is recorded on
     # the object, so a misread strand can be diagnosed after the fact
     expect_equal(calibration$bam_file, bam)
     expect_equal(calibration$orientation, "antisense")
     expect_equal(calibration$concordance, 0.99)
+})
+
+test_that("phase_from_molecules() stores its calls, gene map and BAM paths in the molecules slot", {
+    fixture <- make_phase_fixture()
+    snp_ids <- fixture$snp_ids
+    tallies <- tibble::tibble(
+        barcode = rep(paste0("c", 1:5), each = 2),
+        umi = rep(paste0("u", 1:5), each = 2),
+        snp_id = rep(snp_ids, times = 5),
+        allele = rep(c("REF", "ALT"), times = 5),
+        n_calls = 5L
+    )
+    reads <- tibble::tibble(
+        barcode = paste0("c", 1:5),
+        umi = paste0("u", 1:5),
+        qname = paste0("read", 1:5),
+        strand = "+"
+    )
+    bam <- local_fake_bam()
+    testthat::local_mocked_bindings(
+        extract_snp_calls = function(...) list(tallies = tallies, reads = reads),
+        .infer_bam_strand_orientation = function(bam_file, ...) {
+            list(orientation = "sense", n_ts_reads = 500L, concordance = 1, n_scanned = 5000L)
+        },
+        .package = "snplet"
+    )
+
+    stored <- molecules(phase_from_molecules(fixture$obj, gene_annotation = test_gene_annotation, bam_files = c(lib_A = bam)))
+
+    # Verify calls are keyed on the cell's library as barcode_info records it
+    # (NA for this unlabelled fixture), with no donor column to go stale
+    expect_true(all(is.na(molecule_calls(stored)$library_id)))
+    expect_false("donor" %in% colnames(molecule_calls(stored)))
+    # Check every extracted (molecule, SNP) call is stored
+    expect_equal(nrow(molecule_calls(stored)), nrow(tallies))
+    # Confirm the gene map is built from the annotation passed in
+    expect_setequal(snp_gene_map(stored)$snp_id, snp_ids)
+    # Ensure the BAM paths are recorded as provenance
+    expect_equal(names(stored@bam_files), "lib_A")
 })
 
 test_that("phase_from_molecules() never overwrites an existing EM-derived allele_on_x1", {
@@ -2205,7 +2228,7 @@ test_that("phase_from_molecules() never overwrites an existing EM-derived allele
         .package = "snplet"
     )
 
-    result <- phase_from_molecules(fixture$obj, bam_files = c(lib_A = local_fake_bam()))
+    result <- phase_from_molecules(fixture$obj, gene_annotation = test_gene_annotation, bam_files = c(lib_A = local_fake_bam()))
     donor_snp_info <- donor_snp_info(result)
 
     # Verify the pre-existing EM-derived phase for the anchor SNP is unchanged
@@ -2239,7 +2262,7 @@ test_that("phase_from_molecules() never overwrites an existing EM-derived allele
 # ==============================================================================
 
 # One donor, no XCI diagnostics at all: het SNPs (2 by default, or 4 for a
-# multi-block test) all assigned to GENE1 via snp_gene_map, and a zygosity
+# multi-block test) all inside GENE1 in test_gene_annotation, and a zygosity
 # source (Vireo GT) so donor_het_status_df() can resolve het status without
 # assign_xci() ever having run. 3 cells (not 2), to avoid a square
 # ref_count/alt_count matrix: Matrix::Matrix()'s rownames<- is a no-op on a
@@ -2282,25 +2305,18 @@ make_molecule_haplotype_fixture <- function(n_snps = 2) {
         join_by = c("snp_id", "donor"),
         overwrite = TRUE
     )
-    snp_gene_map(obj) <- data.frame(
-        snp_id = snp_ids,
-        gene_name = "GENE1",
-        gene_strand = "+",
-        ambiguous = FALSE,
-        stringsAsFactors = FALSE
-    )
     list(obj = obj, snp_ids = snp_ids)
 }
 
-test_that("molecule_haplotype_counts() errors when the object carries no SNP-to-gene map", {
-    ref <- Matrix::Matrix(matrix(5L, 2, 2), sparse = TRUE)
-    alt <- Matrix::Matrix(matrix(5L, 2, 2), sparse = TRUE)
-    snp_info <- data.frame(chrom = "chr1", pos = c(1L, 2L), ref = "A", alt = "G")
-    barcode_info <- data.frame(barcode = c("c1", "c2"), donor = "donor0")
-    obj <- SNPData(ref_count = ref, alt_count = alt, snp_info = snp_info, barcode_info = barcode_info)
+test_that("molecule_haplotype_counts() errors on a gene annotation without strand", {
+    fixture <- make_molecule_haplotype_fixture()
+    unstranded <- dplyr::select(test_gene_annotation, -strand)
 
-    # Verify the error names the step that builds the map rather than returning an empty result
-    expect_error(molecule_haplotype_counts(obj, bam_files = c(lib_A = "fake.bam")), "no SNP-to-gene map")
+    # Verify the missing column is named, since the gene map cannot be built without it
+    expect_error(
+        molecule_haplotype_counts(fixture$obj, gene_annotation = unstranded, bam_files = c(lib_A = "fake.bam")),
+        "missing required column\\(s\\): strand"
+    )
 })
 
 test_that("molecule_haplotype_counts() runs without assign_xci() ever having been called", {
@@ -2326,7 +2342,7 @@ test_that("molecule_haplotype_counts() runs without assign_xci() ever having bee
 
     # Verify no error and no XCI diagnostics required anywhere in the call path
     result <- molecule_haplotype_counts(
-        fixture$obj,
+        fixture$obj, gene_annotation = test_gene_annotation,
         bam_files = c(lib_A = local_fake_bam()),
         # These fixtures exercise molecule *counting*, not edge evidence: a
         # lone molecule from one cell clears neither the default LLR nor
@@ -2361,7 +2377,7 @@ test_that("molecule_haplotype_counts() counts a multi-SNP molecule once, not onc
     )
 
     result <- molecule_haplotype_counts(
-        fixture$obj,
+        fixture$obj, gene_annotation = test_gene_annotation,
         bam_files = c(lib_A = local_fake_bam()),
         # These fixtures exercise molecule *counting*, not edge evidence: a
         # lone molecule from one cell clears neither the default LLR nor
@@ -2426,7 +2442,7 @@ test_that("molecule_haplotype_counts() reports disconnected phase blocks as sepa
     )
 
     result <- molecule_haplotype_counts(
-        fixture$obj,
+        fixture$obj, gene_annotation = test_gene_annotation,
         bam_files = c(lib_A = local_fake_bam()),
         # These fixtures exercise molecule *counting*, not edge evidence: a
         # lone molecule from one cell clears neither the default LLR nor
@@ -2486,7 +2502,7 @@ test_that("molecule_haplotype_counts() drops a molecule with a tied haplotype vo
         .package = "snplet"
     )
 
-    result <- molecule_haplotype_counts(fixture$obj, bam_files = c(lib_A = local_fake_bam()))
+    result <- molecule_haplotype_counts(fixture$obj, gene_annotation = test_gene_annotation, bam_files = c(lib_A = local_fake_bam()))
     gene_row <- dplyr::filter(result, gene_name == "GENE1")
 
     # Verify the block forms from all 21 molecules (the dissenting one is a

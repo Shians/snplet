@@ -744,26 +744,21 @@ setMethod(
 #'
 #' @section Where the inputs come from:
 #' Beyond \code{x}, there is nothing to supply. Both inputs this function needs
-#' are already on the object:
+#' are in \code{molecules(x)}, the
+#' \code{\link[=MoleculeCalls-class]{MoleculeCalls}} object
+#' \code{\link{phase_from_molecules}} stored when it read the BAM files:
 #'
 #' \describe{
-#'   \item{The per-molecule allele calls}{Read from the
-#'     \code{"molecule_calls"} attribute \code{\link{phase_from_molecules}} left
-#'     there when it extracted them from the BAM files. They are an attribute
-#'     rather than a slot because they are BAM-derived working data keyed by
-#'     molecule, not part of the object's SNP-by-cell counts, and so are lost
-#'     by operations that rebuild the object: pass the object
-#'     \code{phase_from_molecules()} returned, and subset \emph{before} that call
-#'     rather than after.}
-#'   \item{The SNP-to-gene map}{Read from \code{\link{snp_gene_map}}, built by
-#'     \code{\link{import_cellsnp}} from the gene annotation it was given, and
-#'     carried through subsetting and merging with its SNPs. It is distinct
-#'     from \code{snp_info$gene_name}, which comma-joins overlapping genes into
-#'     one label: attributing a molecule at a SNP overlapping two genes needs
-#'     each candidate as its own row with its strand. An annotation without a
-#'     \code{strand} column cannot supply that, so an object imported with one
-#'     has an empty map; \code{snp_gene_map(x) <- assign_snp_genes(snp_info(x),
-#'     gene_anno)} fills it in without re-importing.}
+#'   \item{The per-molecule allele calls}{Keyed on (\code{library_id},
+#'     \code{barcode}); each call's donor is looked up from
+#'     \code{barcode_info(x)}. The calls survive subsetting unchanged, and only
+#'     those for cells and SNPs still in \code{x} are counted, so \code{x} can
+#'     be filtered after \code{phase_from_molecules()} as freely as before it.}
+#'   \item{The SNP-to-gene map}{Built from the \code{gene_annotation} given to
+#'     \code{phase_from_molecules()}. It is distinct from
+#'     \code{snp_info$gene_name}, which comma-joins overlapping genes into one
+#'     label: attributing a molecule at a SNP overlapping two genes needs each
+#'     candidate as its own row with its strand.}
 #' }
 #'
 #' A missing input is an error naming the step that produces it, rather than a
@@ -808,13 +803,9 @@ setMethod(
 #' \dontrun{
 #' snp_data <- assign_xci(snp_data)
 #' # the molecule calls ride along on snp_data from here on
-#' snp_data <- phase_from_molecules(snp_data, bam_files = c(lib1 = "lib1.bam"))
+#' snp_data <- phase_from_molecules(snp_data, bam_files = c(lib1 = "lib1.bam"), gene_annotation = gene_anno)
 #'
 #' hap <- haplotype_expression_by_molecule(snp_data)
-#'
-#' # Only needed if the annotation given to import_cellsnp() had no strand
-#' # column, leaving snp_gene_map(snp_data) empty
-#' snp_gene_map(snp_data) <- assign_snp_genes(snp_info(snp_data), gene_anno)
 #' }
 setGeneric(
     "haplotype_expression_by_molecule",
@@ -841,31 +832,31 @@ setMethod(
         # The molecule calls are BAM-derived working data that phase_from_molecules()
         # already extracted, so they are taken from the object rather than asked
         # for: there is no other way to derive them that would agree with the
-        # phase blocks stored alongside. Being an attribute, they do not survive
-        # operations that rebuild the object, hence a named error rather than an
-        # empty result.
-        molecule_calls <- attr(x, "molecule_calls")
-        if (is.null(molecule_calls)) {
+        # phase blocks stored alongside.
+        molecules <- molecules(x)
+        if (!.has_molecule_calls(molecules)) {
             stop(
-                "This object carries no molecule calls; they are attached by phase_from_molecules(x). ",
-                "Attributes are lost by operations that rebuild the object, so re-run it, ",
-                "or subset before it rather than after."
+                "This object carries no molecule calls; they are stored by phase_from_molecules(x). ",
+                "Re-run it on this object."
             )
         }
-        required_call_cols <- c("donor", "barcode", "umi", "snp_id", "allele", "transcript_strand")
-        missing_call_cols <- setdiff(required_call_cols, colnames(molecule_calls))
-        if (length(missing_call_cols) > 0) {
-            stop("molecule_calls is missing required column(s): ", paste(missing_call_cols, collapse = ", "))
-        }
-        # Built at import from the gene annotation, where strand is available;
-        # snp_info$gene_name cannot stand in for it, being a comma-joined label
-        # with no strand and no per-candidate rows.
-        snp_gene_map <- snp_gene_map(x)
+        # Calls are keyed on (library_id, barcode) so relabelling donors cannot
+        # orphan them; each call takes its donor from the cell it names, and
+        # calls for cells no longer in x drop out here.
+        molecule_calls <- molecule_calls(molecules) %>%
+            dplyr::inner_join(
+                dplyr::distinct(barcode_info, library_id, barcode, donor),
+                by = c("library_id", "barcode")
+            )
+        # snp_info$gene_name cannot stand in for this map, being a comma-joined
+        # label with no strand and no per-candidate rows.
+        snp_gene_map <- snp_gene_map(molecules)
+        # Only reachable for an object migrated from before the map moved here,
+        # whose annotation had no strand column.
         if (nrow(snp_gene_map) == 0) {
             stop(
-                "This object carries no SNP-to-gene map. It is built by import_cellsnp() from a gene ",
-                "annotation with a strand column; set it on an existing object with ",
-                "snp_gene_map(x) <- assign_snp_genes(snp_info(x), gene_anno)."
+                "This object's molecule calls carry no SNP-to-gene map. Re-run ",
+                "phase_from_molecules(x, bam_files, gene_annotation) with a stranded annotation."
             )
         }
 

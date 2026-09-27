@@ -76,16 +76,22 @@ make_molecule_hap_fixture <- function() {
         stringsAsFactors = FALSE
     )
 
-    snp_gene_map(obj) <- snp_gene_map
+    obj@molecules <- MoleculeCalls(snp_gene_map = snp_gene_map)
 
     list(obj = obj, snp_ids = snp_ids, snp_gene_map = snp_gene_map)
 }
 
 # haplotype_expression_by_molecule() reads its molecule calls off the object,
 # where phase_from_molecules() would have left them; these fixtures skip the BAM
-# extraction and attach the calls directly.
+# extraction and store the calls directly, keeping the fixture's gene map. Calls
+# are written per donor here, which reads most naturally; stored calls are keyed
+# on (library_id, barcode), so each donor is swapped for its cell's library.
 with_molecule_calls <- function(obj, molecule_calls) {
-    attr(obj, "molecule_calls") <- molecule_calls
+    cell_library <- dplyr::distinct(barcode_info(obj), donor, barcode, library_id)
+    molecule_calls <- molecule_calls %>%
+        dplyr::left_join(cell_library, by = c("donor", "barcode")) %>%
+        dplyr::select(-donor)
+    obj@molecules <- MoleculeCalls(calls = molecule_calls, snp_gene_map = snp_gene_map(molecules(obj)))
     obj
 }
 
@@ -121,9 +127,9 @@ test_that("haplotype_expression_by_molecule() errors when molecule phase has not
 test_that("haplotype_expression_by_molecule() errors when the object carries no molecule calls", {
     fixture <- make_molecule_hap_fixture()
 
-    # The fixture has stored phase but no "molecule_calls" attribute, as an
-    # object subset or rebuilt after phase_from_molecules() would be.
-    # Verify the error names the step that attaches them rather than returning
+    # The fixture has stored phase but no molecule calls, as an object carrying
+    # phase from hand-editing or an older version would.
+    # Verify the error names the step that stores them rather than returning
     # an empty result
     expect_error(
         haplotype_expression_by_molecule(fixture$obj),
@@ -346,59 +352,68 @@ test_that("haplotype_expression_by_molecule() reports both active_x groups under
     expect_equal(pooled$coverage, sum(result$coverage))
 })
 
-test_that("haplotype_expression_by_molecule() errors on missing molecule_calls columns", {
+test_that("haplotype_expression_by_molecule() errors when the molecule calls carry no SNP-to-gene map", {
     fixture <- make_molecule_hap_fixture()
-    bad_calls <- tibble::tibble(donor = "donor0", barcode = "cell1", snp_id = "x")
-
-    # Verify a clear error names the missing columns
-    expect_error(
-        haplotype_expression_by_molecule(with_molecule_calls(fixture$obj, bad_calls)),
-        "missing required column"
+    molecule_calls <- tibble::tibble(
+        donor = "donor0",
+        barcode = "cell1",
+        umi = "u1",
+        snp_id = fixture$snp_ids[["snpA"]],
+        allele = "REF",
+        transcript_strand = "+"
     )
-})
-
-test_that("haplotype_expression_by_molecule() errors when the object carries no SNP-to-gene map", {
-    fixture <- make_molecule_hap_fixture()
-    empty_calls <- tibble::tibble(
-        donor = character(),
-        barcode = character(),
-        umi = character(),
-        snp_id = character(),
-        allele = character(),
-        transcript_strand = character()
-    )
-    obj <- fixture$obj
-    # As an object imported with an annotation lacking a strand column would be
-    obj@snp_gene_map <- .empty_snp_gene_map()
+    obj <- with_molecule_calls(fixture$obj, molecule_calls)
+    # As an object migrated from a version whose annotation lacked a strand column
+    obj@molecules@snp_gene_map <- .empty_snp_gene_map()
 
     # Verify the error names how to supply the map rather than reporting no genes
-    expect_error(
-        haplotype_expression_by_molecule(with_molecule_calls(obj, empty_calls)),
-        "no SNP-to-gene map"
-    )
+    expect_error(haplotype_expression_by_molecule(obj), "carry no SNP-to-gene map")
 })
 
-test_that("snp_gene_map<- rejects a map that does not match the object", {
+test_that("haplotype_expression_by_molecule() counts only the cells still in a subset object", {
     fixture <- make_molecule_hap_fixture()
-    obj <- fixture$obj
-
-    # Check a map missing the strand/ambiguous columns is refused
-    expect_error(
-        snp_gene_map(obj) <- tibble::tibble(snp_id = "x", gene_name = "GENE1"),
-        "missing required column"
+    snpA <- fixture$snp_ids[["snpA"]]
+    # One X1 molecule in each X1-active cell
+    molecule_calls <- tibble::tibble(
+        donor = "donor0",
+        barcode = c("cell1", "cell2"),
+        umi = c("u1", "u2"),
+        snp_id = snpA,
+        allele = "REF",
+        transcript_strand = "+"
     )
+    obj <- with_molecule_calls(fixture$obj, molecule_calls)
 
-    # Verify a map built against a different SNP set is refused rather than
-    # silently contributing rows for SNPs the object does not hold
-    expect_error(
-        snp_gene_map(obj) <- tibble::tibble(
-            snp_id = "chrX:999:A:G",
-            gene_name = "GENE1",
-            gene_strand = "+",
-            ambiguous = FALSE
-        ),
-        "not present in snp_info"
+    subset_obj <- filter_barcodes(obj, barcode != "cell2")
+    result <- haplotype_expression_by_molecule(subset_obj, by_active_x = TRUE)
+    x1_row <- dplyr::filter(result, gene_name == "GENE1", active_x == "X1")
+
+    # Confirm the molecule calls survive subsetting unchanged
+    expect_identical(molecules(subset_obj), molecules(obj))
+    # Verify the dropped cell's molecule is not counted
+    expect_equal(x1_row$coverage, 1)
+})
+
+test_that("haplotype_expression_by_molecule() still counts after donors are renamed", {
+    fixture <- make_molecule_hap_fixture()
+    molecule_calls <- tibble::tibble(
+        donor = "donor0",
+        barcode = "cell1",
+        umi = "u1",
+        snp_id = fixture$snp_ids[["snpA"]],
+        allele = "REF",
+        transcript_strand = "+"
     )
+    obj <- with_molecule_calls(fixture$obj, molecule_calls)
+
+    renamed <- rename_donor(obj, c(PatientA = "donor0"))
+    result <- haplotype_expression_by_molecule(renamed, by_active_x = TRUE)
+    x1_row <- dplyr::filter(result, gene_name == "GENE1", active_x == "X1")
+
+    # Verify the calls, keyed on library and barcode, follow the new donor label
+    expect_equal(x1_row$donor, "PatientA")
+    # Confirm the molecule is still counted
+    expect_equal(x1_row$coverage, 1)
 })
 
 # ==============================================================================
@@ -449,7 +464,7 @@ make_ambiguous_gene_fixture <- function() {
         stringsAsFactors = FALSE
     )
 
-    snp_gene_map(obj) <- snp_gene_map
+    obj@molecules <- MoleculeCalls(snp_gene_map = snp_gene_map)
 
     list(obj = obj, snp_id = snp_id, snp_gene_map = snp_gene_map)
 }

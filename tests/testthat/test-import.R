@@ -284,31 +284,6 @@ test_that("import_cellsnp() rejects a library_id that is not a single string", {
     )
 })
 
-test_that("import_cellsnp() with bam_files but no library_id errors clearly", {
-    cellsnp_dir <- system.file("extdata/example_snpdata", package = "snplet")
-    gene_annotation <- data.frame(chrom = "chr1", start = 1, end = 1e9, gene_name = "dummy")
-
-    # Verify bam_files cannot be recorded without a library_id to key them against
-    expect_error(
-        import_cellsnp(cellsnp_dir, gene_annotation, bam_files = "dummy.bam"),
-        "bam_files was supplied but library_id was not"
-    )
-})
-
-test_that("import_cellsnp() rejects a named bam_files vector", {
-    cellsnp_dir <- system.file("extdata/example_snpdata", package = "snplet")
-    gene_annotation <- data.frame(chrom = "chr1", start = 1, end = 1e9, gene_name = "dummy")
-
-    # Verify names on bam_files are rejected rather than silently discarded --
-    # one import call covers a single library, so per-element names (which might
-    # look like a way to key paths by library, mirroring add_library_bams())
-    # would otherwise be dropped without warning by the internal library_id wrap
-    expect_error(
-        import_cellsnp(cellsnp_dir, gene_annotation, library_id = "lib_A", bam_files = c(run1 = "dummy.bam")),
-        "bam_files must be an unnamed character vector"
-    )
-})
-
 test_that("import_cellsnp completes without error and returns a populated SNPData object", {
     # Verify import completes without error
     snp_data <- expect_no_error(import_example_snpdata())
@@ -1174,37 +1149,13 @@ test_that("import_cellsnp(vireo_folder=) populates donor_snp_info from real Vire
     expect_equal(zygosity_source(snp_data), "vireo_gt")
 })
 
-test_that("import_cellsnp() builds the SNP-to-gene map when the annotation carries strand", {
+test_that("import_cellsnp() leaves the molecules slot empty", {
     snp_data <- get_example_snpdata()
-    map <- snp_gene_map(snp_data)
 
-    # Verify the map is populated at import, so haplotype_expression_by_molecule()
-    # need not be handed one
-    expect_gt(nrow(map), 0)
-    # Check it carries the per-candidate columns snp_info$gene_name cannot
-    expect_true(all(c("snp_id", "gene_name", "gene_strand", "ambiguous") %in% colnames(map)))
-    # Ensure every mapped SNP is one the object actually holds
-    expect_true(all(map$snp_id %in% snp_info(snp_data)$snp_id))
-
-    # Confirm the map follows its SNPs through subsetting rather than being
-    # dropped when the object is rebuilt
-    subset_data <- snp_data[seq_len(50), ]
-    expect_true(all(snp_gene_map(subset_data)$snp_id %in% snp_info(subset_data)$snp_id))
-    expect_gt(nrow(snp_gene_map(subset_data)), 0)
-})
-
-test_that("import_cellsnp() leaves the SNP-to-gene map empty for an unstranded annotation", {
-    cellsnp_dir <- system.file("extdata/example_snpdata", package = "snplet")
-    gene_annotation <- data.frame(chrom = "chr1", start = 1, end = 1e9, gene_name = "dummy")
-
-    snp_data <- import_cellsnp(
-        cellsnp_dir = cellsnp_dir,
-        gene_annotation = gene_annotation,
-        library_id = "lib1"
-    )
-
-    # Verify no map is guessed at without strand, which molecule attribution needs
-    expect_equal(nrow(snp_gene_map(snp_data)), 0)
+    # Verify import stores no molecule data: the SNP-to-gene map and BAM paths
+    # now belong to phase_from_molecules(), which is given them directly
+    expect_equal(nrow(molecule_calls(molecules(snp_data))), 0L)
+    expect_equal(nrow(snp_gene_map(molecules(snp_data))), 0L)
 })
 
 # ------------------------------------------------------------------------------
@@ -1538,7 +1489,7 @@ test_that("import_cellsnp_libraries() errors when runs of a library disagree on 
     )
 })
 
-test_that("import_cellsnp_libraries() records each row's BAM path against its library", {
+test_that("import_cellsnp_libraries() does not store the sheet's BAM paths on the object", {
     bam_dir <- withr::local_tempdir()
     bam_paths <- file.path(bam_dir, c("lib1.bam", "lib2.bam"))
     file.create(bam_paths)
@@ -1551,11 +1502,21 @@ test_that("import_cellsnp_libraries() records each row's BAM path against its li
 
     combined <- import_cellsnp_libraries(sheet, example_gene_annotation())
 
-    # Verify a plain character bam_files column is keyed by library
-    expect_equal(
-        library_info(combined)$bam_files[match(c("lib1", "lib2"), library_info(combined)$library_id)],
-        as.list(bam_paths)
+    # Verify the paths serve only the repeat-run check: library_info records
+    # libraries, not files
+    expect_named(library_info(combined), c("library_id", "n_cells"))
+})
+
+test_that("import_cellsnp_libraries() errors on a BAM path that does not exist", {
+    sheet <- tibble::tibble(
+        cellsnp_dir = example_cellsnp_dir(),
+        library_id = "lib1",
+        bam_files = file.path(withr::local_tempdir(), "missing.bam")
     )
+
+    # Ensure a mistyped path is caught before import rather than weakening the
+    # repeat-run check
+    expect_error(import_cellsnp_libraries(sheet, example_gene_annotation()), "Required file not found")
 })
 
 test_that("import_cellsnp_libraries() treats NA optional entries as absent", {

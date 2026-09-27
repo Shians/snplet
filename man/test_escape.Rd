@@ -6,11 +6,29 @@
 \alias{test_escape,SNPData-method}
 \title{Test for XCI escape significance}
 \usage{
-test_escape(x, p = NULL, rho = NULL, by_donor = TRUE)
+test_escape(
+  x,
+  p = NULL,
+  rho = NULL,
+  by_donor = TRUE,
+  count_source = c("auto", "molecule", "snp")
+)
 
-\S4method{test_escape}{data.frame}(x, p = NULL, rho = NULL, by_donor = TRUE)
+\S4method{test_escape}{data.frame}(
+  x,
+  p = NULL,
+  rho = NULL,
+  by_donor = TRUE,
+  count_source = c("auto", "molecule", "snp")
+)
 
-\S4method{test_escape}{SNPData}(x, p = NULL, rho = NULL, by_donor = TRUE)
+\S4method{test_escape}{SNPData}(
+  x,
+  p = NULL,
+  rho = NULL,
+  by_donor = TRUE,
+  count_source = c("auto", "molecule", "snp")
+)
 }
 \arguments{
 \item{x}{A SNPData object that \code{\link{assign_xci}} has annotated, or a
@@ -34,6 +52,16 @@ separately, treating donors as independent experiments, which matches the
 per-donor \code{p} and \code{rho}. \code{FALSE} corrects across the whole
 table at once, appropriate when donors are replicates of one experiment.
 Ignored when \code{x} carries no \code{donor} column.}
+
+\item{count_source}{Character scalar, one of \code{"auto"},
+\code{"molecule"}, or \code{"snp"} (default \code{"auto"}). Where a
+SNPData's gene-level counts come from: \code{"molecule"} counts the
+read-backed molecules \code{\link{phase_from_molecules}} stored
+(\code{\link{haplotype_expression_by_molecule}}), \code{"snp"} the
+per-SNP reads (\code{\link{haplotype_expression}}), and \code{"auto"}
+molecules when they are stored and per-SNP reads otherwise. Naming it
+makes a result reproducible from the call alone. Ignored for a
+data.frame.}
 }
 \value{
 For a data.frame, the input with three columns appended; for a
@@ -166,8 +194,11 @@ snp_data <- assign_xci(snp_data)
 escape_result <- test_escape(snp_data)
 
 # Uses read-backed molecule counts automatically once they are available
-snp_data <- phase_from_molecules(snp_data, bam_files = c(lib1 = "lib1.bam"))
+snp_data <- phase_from_molecules(snp_data, bam_files = c(lib1 = "lib1.bam"), gene_annotation = gene_anno)
 escape_result <- test_escape(snp_data)
+
+# Or name the counting method, e.g. per-SNP reads despite stored molecules
+escape_result <- test_escape(snp_data, count_source = "snp")
 }
 }
 \seealso{

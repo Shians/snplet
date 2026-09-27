@@ -6,7 +6,8 @@
 \usage{
 phase_from_molecules(
   x,
-  bam_files = NULL,
+  bam_files,
+  gene_annotation,
   target_chrom = "chrX",
   min_mapq = 20L,
   min_baseq = 10L,
@@ -23,11 +24,15 @@ phase_from_molecules(
 `donor` column in `barcode_info`. See Details for per-donor library
 constraints.}
 
-\item{bam_files}{A named character vector or list, optional (default
-`NULL`, taking the paths recorded in `library_info(x)$bam_files` by
-`import_cellsnp()` or `add_library_bams()`, and erroring if none were),
+\item{bam_files}{A named character vector or list, required,
 `library_id = path(s)`, giving the indexed BAM file or files holding that
 library's reads. See Details for naming and pooling rules.}
+
+\item{gene_annotation}{A data.frame, required, with columns `chrom`,
+`start`, `end`, `gene_name`, `strand` (`"+"`/`"-"`), one row per gene
+body. Used by `assign_snp_genes()` to build the SNP-to-gene map stored
+with the molecule calls, which `haplotype_expression_by_molecule()` counts
+by.}
 
 \item{target_chrom}{Character scalar (default `"chrX"`, matching
 `assign_xci()`'s own restriction). Canonical chromosome to restrict
@@ -59,25 +64,14 @@ A SNPData object with `donor_snp_info` gaining these columns:
       behaviour), else the molecule value, else `NA` where
       `phase_conflict` is `TRUE`.
   }
-  The object also carries two attributes:
-  \itemize{
-    \item `"molecule_calls"`: a tibble with columns `donor`, `barcode`,
-      `umi`, `snp_id`, `allele`, and `transcript_strand`
-      (`"+"`/`"-"`/`NA`, the molecule's inferred transcript strand; see
-      `.infer_bam_strand_orientation()` and `molecule_read_strand()`).
-      It is the per-donor `molecule_snp_alleles()` output already
-      computed here, and lets `haplotype_expression_by_molecule()`
-      resolve SNPs `assign_snp_genes()` flagged `ambiguous` by reading it
-      straight off the object it is given, rather than re-extracting
-      from the BAM. Being an attribute, it does not survive operations
-      that rebuild the object, so subset before this call rather than
-      after.
-    \item `"bam_calibration"`: one row per BAM file scanned, with columns
-      `bam_file`, `orientation` (`"sense"`/`"antisense"`/`NA` where it
-      could not be inferred), `n_ts_reads`, `concordance`, and
-      `n_scanned`, so the strand call applied to each file's molecules
-      can be inspected afterwards.
-  }
+  The object's `molecules` slot is also set to a
+  \code{\link[=MoleculeCalls-class]{MoleculeCalls}} object holding the
+  per-molecule allele calls extracted here (keyed on `library_id` and
+  `barcode`), the SNP-to-gene map built from `gene_annotation`, the per-BAM
+  strand calibration (`bam_calibration()`), and the BAM paths and settings
+  used. `haplotype_expression_by_molecule()` and `test_escape()` count
+  escape from it without re-reading the BAMs, and it survives subsetting,
+  so the object can be filtered after this call as freely as before it.
 }
 \description{
 Sharpens `assign_xci()`'s expression-derived X1/X2 phase with direct
@@ -147,6 +141,7 @@ within a gene without escaping this constraint.
 
 \seealso{
 Other molecule-level allele counting functions:
+\code{\link{MoleculeCalls-class}},
 \code{\link[=assign_snp_genes]{assign_snp_genes()}},
 \code{\link[=extract_snp_calls]{extract_snp_calls()}},
 \code{\link[=molecule_haplotype_counts]{molecule_haplotype_counts()}},

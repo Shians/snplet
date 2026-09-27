@@ -33,12 +33,6 @@
 #'   object is built, useful since Vireo assigns arbitrary labels
 #'   (\code{donor0}, \code{donor1}, ...) that this can relabel at import time
 #'   rather than after the fact via \code{\link{rename_donor}}.
-#' @param snp_gene_map A data.frame, optional (default: an empty table).
-#'   One row per (\code{snp_id}, candidate \code{gene_name}) with columns
-#'   \code{snp_id}, \code{gene_name}, \code{gene_strand}, \code{ambiguous}, as
-#'   returned by \code{\link{assign_snp_genes}}. Built at import from the gene
-#'   annotation, when that annotation carries a \code{strand} column; rows for
-#'   SNPs not in \code{snp_info} are dropped.
 #' @param total_count A sparse Matrix (SNPs x cells), optional (default \code{NULL},
 #'   meaning derive it as \code{alt_count + ref_count}). Precomputed total coverage,
 #'   for a caller that already has it (e.g. \code{\link{import_cellsnp}}'s DP matrix)
@@ -77,23 +71,14 @@
 #'   dropped along with their donor, same as \code{donor_info}.
 #' @slot library_info A tibble with one row per sequencing library present in
 #'   \code{barcode_info$library_id}, with an automatically computed
-#'   \code{n_cells} column and a \code{bam_files} list-column holding the BAM
-#'   path(s) that library's reads came from (empty unless recorded with
-#'   \code{import_cellsnp(..., bam_files = )} or \code{\link{add_library_bams}}).
-#'   Never supplied at construction: which libraries an object holds is derived
-#'   from its cells. A library that loses all of its cells loses its row, and
-#'   its recorded paths with it.
-#' @slot snp_gene_map A tibble with one row per (\code{snp_id}, candidate
-#'   \code{gene_name}) pair, with columns \code{snp_id}, \code{gene_name},
-#'   \code{gene_strand}, \code{ambiguous}, as \code{\link{assign_snp_genes}}
-#'   returns them. Distinct from \code{snp_info$gene_name}, which comma-joins
-#'   overlapping genes into one display label: this keeps each candidate as its
-#'   own row with its strand, which is what
-#'   \code{\link{haplotype_expression_by_molecule}} needs to attribute a
-#'   molecule at a multi-gene SNP. Populated by \code{\link{import_cellsnp}}
-#'   when the gene annotation carries a \code{strand} column, or afterwards via
-#'   \code{snp_gene_map<-()}; empty otherwise. Rows follow their SNP, and are
-#'   dropped when it is.
+#'   \code{n_cells} column. Never supplied at construction: which libraries an
+#'   object holds is derived from its cells. A library that loses all of its
+#'   cells loses its row.
+#' @slot molecules A \code{\link[=MoleculeCalls-class]{MoleculeCalls}} object
+#'   holding the read-backed molecule calls \code{\link{phase_from_molecules}}
+#'   extracted, empty until it runs. Carried through subsetting and
+#'   \code{\link{rename_donor}} unchanged, since the functions that count it only
+#'   use calls for cells and SNPs the object still holds.
 #' @slot zygosity_source Character string naming the \emph{active} zygosity-call source
 #'   (a value of \code{donor_snp_info$zygosity_source}), or \code{NA_character_} if none
 #'   is established yet. \code{\link{donor_snp_info}}, \code{\link{assign_xci}}, and other
@@ -113,9 +98,8 @@
 #'   \item{\code{donor_info(x)}}{Get per-donor metadata tibble (alias: \code{get_donor_info()})}
 #'   \item{\code{donor_snp_info(x, source = NULL)}}{Get per-(SNP, donor) metadata tibble,
 #'     filtered to the active zygosity source by default (alias: \code{get_donor_snp_info()})}
-#'   \item{\code{snp_gene_map(x)}}{Get the per-(SNP, candidate gene) map used by
-#'     \code{\link{haplotype_expression_by_molecule}} (alias:
-#'     \code{get_snp_gene_map()}); set with \code{snp_gene_map<-()}}
+#'   \item{\code{molecules(x)}}{Get the \code{MoleculeCalls} object left by
+#'     \code{\link{phase_from_molecules}}}
 #'   \item{\code{chr_style(x)}}{Get chromosome naming style}
 #'   \item{\code{zygosity_source(x)}}{Get the active zygosity-call source; set with
 #'     \code{zygosity_source<-()}}
@@ -160,7 +144,7 @@
 #' }
 #'
 #' @exportClass SNPData
-#' @include SNPData-helpers.R
+#' @include SNPData-helpers.R MoleculeCalls-class.R
 #' @export
 setClass(
     "SNPData",
@@ -174,7 +158,7 @@ setClass(
         donor_info = "tbl_df",
         donor_snp_info = "tbl_df",
         library_info = "tbl_df",
-        snp_gene_map = "tbl_df",
+        molecules = "MoleculeCalls",
         zygosity_source = "character"
     )
 )
@@ -200,7 +184,6 @@ setMethod(
         donor_info = NULL,
         donor_snp_info = NULL,
         donor_map = NULL,
-        snp_gene_map = NULL,
         total_count = NULL
     ) {
         oth_count <- .validate_count_dims(ref_count, alt_count, oth_count)
@@ -272,15 +255,7 @@ setMethod(
         .Object@donor_info <- metrics$donor_info
         .Object@donor_snp_info <- donor_snp_info
         .Object@library_info <- .default_library_info(metrics$barcode_info)
-        # Restricted to the SNPs the object actually holds, so a map built from
-        # a wider annotation cannot attribute molecules to a SNP that was
-        # deduplicated away here.
-        snp_gene_map <- if (is.null(snp_gene_map)) {
-            .empty_snp_gene_map()
-        } else {
-            .validate_snp_gene_map(snp_gene_map)
-        }
-        .Object@snp_gene_map <- snp_gene_map[snp_gene_map$snp_id %in% metrics$snp_info$snp_id, , drop = FALSE]
+        .Object@molecules <- MoleculeCalls()
         .Object@zygosity_source <- .derive_zygosity_source(donor_snp_info)
 
         methods::validObject(.Object)
@@ -353,8 +328,7 @@ setMethod(
             obj@chr_style <- x@chr_style
         }
         obj <- .propagate_zygosity_source(obj, x)
-        obj <- .propagate_library_info(obj, x)
-        obj <- .propagate_snp_gene_map(obj, x)
+        obj <- .propagate_molecules(obj, x)
         obj
     }
 )
@@ -373,7 +347,6 @@ setGeneric(
         donor_info = NULL,
         donor_snp_info = NULL,
         donor_map = NULL,
-        snp_gene_map = NULL,
         total_count = NULL
     ) {
         standardGeneric("SNPData")
@@ -398,7 +371,6 @@ setMethod(
         donor_info = NULL,
         donor_snp_info = NULL,
         donor_map = NULL,
-        snp_gene_map = NULL,
         total_count = NULL
     ) {
         new(
@@ -411,7 +383,6 @@ setMethod(
             donor_info = donor_info,
             donor_snp_info = donor_snp_info,
             donor_map = donor_map,
-            snp_gene_map = snp_gene_map,
             total_count = total_count
         )
     }
@@ -506,88 +477,18 @@ setMethod("library_info", signature(x = "SNPData"), function(x) {
 #' @rdname SNPData-class
 get_library_info <- function(x) library_info(x)
 
-#' @exportMethod snp_gene_map
+#' @exportMethod molecules
 #' @rdname SNPData-class
-setGeneric("snp_gene_map", function(x) standardGeneric("snp_gene_map"))
-#' @exportMethod snp_gene_map
+setGeneric("molecules", function(x) standardGeneric("molecules"))
+#' @exportMethod molecules
 #' @rdname SNPData-class
-setMethod("snp_gene_map", signature(x = "SNPData"), function(x) {
+setMethod("molecules", signature(x = "SNPData"), function(x) {
     # Handle backwards compatibility with older SNPData objects
-    if (!methods::.hasSlot(x, "snp_gene_map")) {
-        return(.empty_snp_gene_map())
+    if (!methods::.hasSlot(x, "molecules")) {
+        return(MoleculeCalls())
     }
-    x@snp_gene_map
+    x@molecules
 })
-
-#' @export
-#' @rdname SNPData-class
-get_snp_gene_map <- function(x) snp_gene_map(x)
-
-#' @exportMethod snp_gene_map<-
-#' @rdname SNPData-class
-setGeneric("snp_gene_map<-", function(x, value) standardGeneric("snp_gene_map<-"))
-#' @exportMethod snp_gene_map<-
-#' @rdname SNPData-class
-setReplaceMethod("snp_gene_map", signature(x = "SNPData", value = "data.frame"), function(x, value) {
-    # The route for an object imported without a stranded gene annotation, or
-    # imported before the slot existed: assign_snp_genes(snp_info(x), gene_anno)
-    # produces exactly this table, and it is cheap to redo, unlike the BAM pass.
-    value <- .validate_snp_gene_map(value)
-    unknown <- setdiff(value$snp_id, x@snp_info$snp_id)
-    if (length(unknown) > 0) {
-        stop(
-            "snp_gene_map has ",
-            length(unknown),
-            " snp_id(s) not present in snp_info, ",
-            "so it was built against a different SNP set: ",
-            paste(utils::head(unknown, 3), collapse = ", ")
-        )
-    }
-    x@snp_gene_map <- value
-    x
-})
-
-#' Record the BAM file(s) each library's reads came from
-#'
-#' Attaches BAM paths to an object's `library_info`, where
-#' `phase_from_molecules()` can find them without being told again. Paths are
-#' recorded per library rather than per donor because that is what they are a
-#' property of: one library's BAM holds all of its donors' cells.
-#'
-#' @param x A SNPData object, required.
-#' @param bam_files A named character vector or list, required,
-#'   `library_id = path(s)`. Each element may name several BAM files for one
-#'   library. Names must match `library_info(x)$library_id`.
-#' @param overwrite Logical (default `FALSE`). If `TRUE`, a named library's
-#'   stored paths are replaced; otherwise the new paths are unioned with any
-#'   already recorded, matching how `import_cellsnp_libraries()` combines runs
-#'   that share a library.
-#'
-#' @return The SNPData object with `library_info(x)$bam_files` updated.
-#'
-#' @family SNPData accessors
-#' @export
-add_library_bams <- function(x, bam_files, overwrite = FALSE) {
-    bam_files <- .as_library_bam_list(bam_files)
-    stored <- library_info(x)
-    unknown <- setdiff(names(bam_files), stored$library_id)
-    if (length(unknown) > 0) {
-        stop(
-            "bam_files names not found in library_info(x)$library_id: ",
-            paste(unknown, collapse = ", ")
-        )
-    }
-    for (lib in names(bam_files)) {
-        at <- match(lib, stored$library_id)
-        stored$bam_files[[at]] <- if (overwrite) {
-            unique(bam_files[[lib]])
-        } else {
-            union(stored$bam_files[[at]], bam_files[[lib]])
-        }
-    }
-    x@library_info <- stored
-    x
-}
 
 #' @exportMethod donor_snp_info
 #' @rdname SNPData-class
@@ -759,6 +660,15 @@ setMethod("updateObject", signature(object = "SNPData"), function(object, ..., v
         object@zygosity_source <- zygosity_source
     }
 
+    if (!methods::.hasSlot(object, "molecules")) {
+        object <- .migrate_molecule_attributes(object)
+        if (verbose) {
+            log_info(
+                "updateObject(SNPData): moved {nrow(object@molecules@calls)} molecule call(s) into the molecules slot"
+            )
+        }
+    }
+
     methods::validObject(object)
     object
 })
@@ -887,7 +797,10 @@ rename_donor <- function(x, donor_map) {
         donor_info = donor_info,
         donor_snp_info = donor_snp_info
     )
-    .propagate_zygosity_source(result, x)
+    result <- .propagate_zygosity_source(result, x)
+    # Molecule calls are keyed on (library_id, barcode), not donor, so they
+    # need no relabelling here.
+    .propagate_molecules(result, x)
 }
 
 # Dimensions
@@ -948,6 +861,9 @@ setMethod(
         print(donor_info(object))
         cat("Donor SNP info (donor_snp_info()):", "\n")
         print(donor_snp_info(object))
+        if (.has_molecule_calls(molecules(object))) {
+            cat("Molecule calls (molecules()):", nrow(molecules(object)@calls), "\n")
+        }
     }
 )
 

@@ -128,6 +128,7 @@ merge_snpdata <- function(
     # what distinguishes the same cell sequenced twice from two different cells
     # that happened to draw the same barcode.
     .check_library_ids(x, y)
+    .check_no_molecule_calls(x, y)
 
     # Barcodes are the real cell identity; cell_id is a positional label the
     # constructor generates, so it is only a fallback for objects built without
@@ -264,8 +265,6 @@ merge_snpdata <- function(
         donor_snp_info = donor_snp_info_merged
     )
     merged_obj@zygosity_source <- zygosity_source_merged
-    merged_obj <- .merge_library_bams(merged_obj, x, y)
-    merged_obj <- .merge_snp_gene_map(merged_obj, x, y)
 
     logger::log_success(
         "Merged SNPData: {nrow(merged_obj)} SNPs x {ncol(merged_obj)} cells"

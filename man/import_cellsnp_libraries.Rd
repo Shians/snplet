@@ -15,9 +15,9 @@ import_cellsnp_libraries(
 \item{sheet}{A data.frame, required, with one row per cellSNP-lite run. Must
 contain the columns \code{cellsnp_dir} and \code{library_id} (character,
 non-\code{NA}), and may contain \code{vdj_file}, \code{vireo_folder},
-\code{bam_files}, and \code{donor_map}. Each column is passed to the
-\code{\link{import_cellsnp}} argument of the same name for that row; see
-\sQuote{Sample sheet} below.}
+\code{bam_files}, and \code{donor_map}. Each column except
+\code{bam_files} is passed to the \code{\link{import_cellsnp}} argument of
+the same name for that row; see \sQuote{Sample sheet} below.}
 
 \item{gene_annotation}{A data.frame, required, with columns \code{chrom},
 \code{start}, \code{end}, \code{gene_name}. Gene annotations, shared by
@@ -56,9 +56,10 @@ counts are summed (see \sQuote{Repeat runs of a library}).
     \code{NA} means none for that row.}
   \item{\code{bam_files}}{Optional. A character column (one BAM per row) or a
     list column of character vectors (several BAMs per row); \code{NA} or
-    \code{NULL} means none. Paths are recorded against the row's library,
-    and rows sharing a library have their paths unioned. Also used to check
-    that repeat runs of a library do not count the same reads twice.}
+    \code{NULL} means none. Used only to check that repeat runs of a
+    library do not count the same reads twice (see \sQuote{Repeat runs of a
+    library}); the paths are not stored on the returned object. Each path is
+    checked to exist.}
   \item{\code{donor_map}}{Optional list column of named character vectors,
     \code{c(new_label = old_label, ...)}, relabelling that row's donors;
     \code{NULL} means no relabelling.}

@@ -30,14 +30,6 @@
 #' @param clonotype_column Character scalar (default \code{"raw_clonotype_id"}).
 #'   Name of the column in \code{vdj_file} containing clonotype information
 #'   (only used if \code{vdj_file} is provided).
-#' @param bam_files An unnamed character vector, optional (default \code{NULL},
-#'   recording no paths). The BAM file or files this cellSNP run was made from.
-#'   Requires \code{library_id} (this whole vector is stored against it as one
-#'   library's paths in \code{library_info}, via \code{\link{add_library_bams}}),
-#'   so that \code{\link{phase_from_molecules}} can find them without being told
-#'   again. Must not be named: this call covers a single library, so any names
-#'   on \code{bam_files} itself would be silently discarded rather than used as
-#'   per-library keys; each path is checked to exist.
 #'
 #' @return A SNPData object
 #'
@@ -95,8 +87,7 @@ import_cellsnp <- function(
     vireo_folder = NULL,
     donor_map = NULL,
     barcode_column = "barcode",
-    clonotype_column = "raw_clonotype_id",
-    bam_files = NULL
+    clonotype_column = "raw_clonotype_id"
 ) {
     # Validate gene_annotation columns
     required_gene_cols <- c("chrom", "start", "end", "gene_name")
@@ -120,30 +111,6 @@ import_cellsnp <- function(
         stop("library_id must be a single string naming the library this cellSNP run came from, or NA.")
     }
 
-    # bam_files is recorded against library_id in library_info, so there is
-    # nothing to key it against when library_id was left NA. Checked ahead of
-    # file existence so this points at the real cause rather than a confusing
-    # add_library_bams() error once import has otherwise succeeded.
-    if (!is.null(bam_files) && is.na(library_id)) {
-        stop(
-            "bam_files was supplied but library_id was not: BAM paths are recorded against ",
-            "library_id in library_info, so set library_id = to use bam_files."
-        )
-    }
-
-    # One import call covers one library, so bam_files is keyed by library_id
-    # automatically below; any names on bam_files itself would be silently
-    # discarded by that wrapping (add_library_bams()'s per-library keys come
-    # from the outer list this constructs, not from bam_files' own names),
-    # so a named vector is rejected here rather than left to fail silently.
-    if (!is.null(bam_files) && !is.null(names(bam_files))) {
-        stop(
-            "bam_files must be an unnamed character vector of path(s) for the ",
-            "single library named by library_id; names on bam_files are ignored ",
-            "and would be silently dropped."
-        )
-    }
-
     # Check if required files exist
     dp_file <- fs::path(cellsnp_dir, "cellSNP.tag.DP.mtx")
     ad_file <- fs::path(cellsnp_dir, "cellSNP.tag.AD.mtx")
@@ -158,13 +125,6 @@ import_cellsnp <- function(
     if (!is.null(vdj_file)) {
         check_file(vdj_file)
     }
-    # Check BAM files if provided
-    if (!is.null(bam_files)) {
-        for (bam_file in bam_files) {
-            check_file(bam_file)
-        }
-    }
-
     # donor_ids.tsv is the point of pointing at a Vireo folder, so it must exist;
     # the genotype VCF is a bonus feature of that same run and is silently skipped
     # if the folder doesn't have one (e.g. an older or genotype-free Vireo run).
@@ -260,21 +220,6 @@ import_cellsnp <- function(
         NULL
     }
 
-    # Import is the one point where the gene annotation is in hand, so the
-    # molecule-level SNP-to-gene map is derived here rather than asked for again
-    # by haplotype_expression_by_molecule(). It needs strand, which the display
-    # labels in snp_info$gene_name do not, so an unstranded annotation leaves the
-    # map empty; assign_snp_genes() can supply it later via snp_gene_map<-().
-    snp_gene_map <- if ("strand" %in% colnames(gene_annotation)) {
-        assign_snp_genes(snp_info, gene_annotation)
-    } else {
-        logger::log_info(
-            "gene_annotation has no strand column, so no SNP-to-gene map was built; ",
-            "haplotype_expression_by_molecule() needs one, set later with snp_gene_map(x) <- ."
-        )
-        NULL
-    }
-
     # Create SNPData object
     logger::log_info("Creating SNPData object with {nrow(barcode_info)} barcodes and {nrow(snp_info)} SNPs")
     snp_data <- SNPData(
@@ -285,16 +230,8 @@ import_cellsnp <- function(
         barcode_info = barcode_info,
         donor_snp_info = donor_snp_info,
         donor_map = donor_map,
-        snp_gene_map = snp_gene_map,
         total_count = coverage
     )
-
-    # Import is when a BAM path is actually known -- this cellSNP run was made
-    # from it -- so recording it here means phase_from_molecules() never has to
-    # be told again, and the path survives every later merge.
-    if (!is.null(bam_files)) {
-        snp_data <- add_library_bams(snp_data, stats::setNames(list(bam_files), library_id))
-    }
 
     return(snp_data)
 }
@@ -310,9 +247,9 @@ import_cellsnp <- function(
 #' @param sheet A data.frame, required, with one row per cellSNP-lite run. Must
 #'   contain the columns \code{cellsnp_dir} and \code{library_id} (character,
 #'   non-\code{NA}), and may contain \code{vdj_file}, \code{vireo_folder},
-#'   \code{bam_files}, and \code{donor_map}. Each column is passed to the
-#'   \code{\link{import_cellsnp}} argument of the same name for that row; see
-#'   \sQuote{Sample sheet} below.
+#'   \code{bam_files}, and \code{donor_map}. Each column except
+#'   \code{bam_files} is passed to the \code{\link{import_cellsnp}} argument of
+#'   the same name for that row; see \sQuote{Sample sheet} below.
 #' @param gene_annotation A data.frame, required, with columns \code{chrom},
 #'   \code{start}, \code{end}, \code{gene_name}. Gene annotations, shared by
 #'   every run.
@@ -339,9 +276,10 @@ import_cellsnp <- function(
 #'     \code{NA} means none for that row.}
 #'   \item{\code{bam_files}}{Optional. A character column (one BAM per row) or a
 #'     list column of character vectors (several BAMs per row); \code{NA} or
-#'     \code{NULL} means none. Paths are recorded against the row's library,
-#'     and rows sharing a library have their paths unioned. Also used to check
-#'     that repeat runs of a library do not count the same reads twice.}
+#'     \code{NULL} means none. Used only to check that repeat runs of a
+#'     library do not count the same reads twice (see \sQuote{Repeat runs of a
+#'     library}); the paths are not stored on the returned object. Each path is
+#'     checked to exist.}
 #'   \item{\code{donor_map}}{Optional list column of named character vectors,
 #'     \code{c(new_label = old_label, ...)}, relabelling that row's donors;
 #'     \code{NULL} means no relabelling.}
@@ -413,8 +351,7 @@ import_cellsnp_libraries <- function(
             vireo_folder = vireo_folder,
             donor_map = donor_map,
             barcode_column = barcode_column,
-            clonotype_column = clonotype_column,
-            bam_files = bam_files
+            clonotype_column = clonotype_column
         )
     })
 
@@ -478,6 +415,9 @@ import_cellsnp_libraries <- function(
 
     for (col in setdiff(.IMPORT_SHEET_COLUMNS, c("cellsnp_dir", "library_id"))) {
         sheet[[col]] <- .as_sheet_list_column(sheet[[col]], nrow(sheet))
+    }
+    for (bam_file in unlist(sheet$bam_files)) {
+        check_file(bam_file)
     }
 
     sheet[.IMPORT_SHEET_COLUMNS]
@@ -565,8 +505,8 @@ import_cellsnp_libraries <- function(
 }
 
 # A BAM path in a form comparable across rows, so the same file written two
-# ways (relative vs absolute, via a symlink) is still recognised. import_cellsnp()
-# has already checked that each path exists.
+# ways (relative vs absolute, via a symlink) is still recognised.
+# .validate_import_sheet() has already checked that each path exists.
 .bam_keys <- function(bam_files) {
     if (is.null(bam_files)) {
         return(character(0))

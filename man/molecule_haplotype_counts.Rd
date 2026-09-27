@@ -6,7 +6,8 @@
 \usage{
 molecule_haplotype_counts(
   x,
-  bam_files = NULL,
+  bam_files,
+  gene_annotation,
   target_chrom = NULL,
   min_mapq = 20L,
   min_baseq = 10L,
@@ -22,11 +23,14 @@ molecule_haplotype_counts(
 `barcode_info` and a zygosity source established (Vireo genotypes read
 at import, or \code{\link{infer_zygosity}}).}
 
-\item{bam_files}{A named character vector or list, optional (default
-`NULL`, taking the paths recorded in `library_info(x)$bam_files`),
+\item{bam_files}{A named character vector or list, required,
 `library_id = path(s)`. See \code{\link{phase_from_molecules}}'s
 `bam_files` argument for the full matching rules; the same rules apply
 here.}
+
+\item{gene_annotation}{A data.frame, required, with columns `chrom`,
+`start`, `end`, `gene_name`, `strand`. See
+\code{\link{phase_from_molecules}}.}
 
 \item{target_chrom}{Character vector, optional (default `NULL`, every
 chromosome). Canonical chromosome(s) to restrict het-SNP selection to.}
@@ -95,6 +99,7 @@ hap_blocks$maf <- pmin(hap_blocks$h1_count, hap_blocks$h2_count) / hap_blocks$co
 }
 \seealso{
 Other molecule-level allele counting functions:
+\code{\link{MoleculeCalls-class}},
 \code{\link[=assign_snp_genes]{assign_snp_genes()}},
 \code{\link[=extract_snp_calls]{extract_snp_calls()}},
 \code{\link[=molecule_read_strand]{molecule_read_strand()}},
