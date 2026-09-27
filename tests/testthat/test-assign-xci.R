@@ -875,7 +875,7 @@ test_that("zygosity_source<- switches which stored zygosity call the het-SNP fil
     expect_equal(informative_vireo, 0)
 })
 
-test_that(".top_snp_per_gene() lets no gene be represented twice through a joined label", {
+test_that(".top_snp_per_gene() gives each gene one vote and skips SNPs shared between genes", {
     snp_info <- tibble::tibble(
         snp_id = c("s_shared", "s_xist", "s_tsix", "s_other", "s_na1", "s_na2"),
         gene_name = c("TSIX, XIST", "XIST", "TSIX", "GENE1", NA, NA),
@@ -884,10 +884,10 @@ test_that(".top_snp_per_gene() lets no gene be represented twice through a joine
 
     selected <- snplet:::.top_snp_per_gene(snp_info)
 
-    # Verify the best-covered shared SNP claims both TSIX and XIST, so neither
-    # gene's own SNPs enter the EM as a second, correlated vote
-    expect_setequal(selected, c("s_shared", "s_other", "s_na1"))
-    # Ensure unannotated SNPs still share a single slot, as before the change
+    # Verify the shared SNP is skipped despite its higher coverage, and each
+    # overlapping gene votes through its own SNP instead
+    expect_setequal(selected, c("s_xist", "s_tsix", "s_other", "s_na1"))
+    # Ensure unannotated SNPs still share a single slot
     expect_false("s_na2" %in% selected)
 })
 
