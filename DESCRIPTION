@@ -1,7 +1,7 @@
 Package: snplet
 Type: Package
 Title: Package for handling SNP based allele-specific expression analysis
-Version: 0.8.0
+Version: 0.8.1
 Authors@R: c(
     person(
       "Shian", "Su",
@@ -65,6 +65,7 @@ biocViews: SingleCell, RNASeq, Genetics, SNP, GeneExpression, Transcriptomics, S
 URL: https://github.com/Shians/snplet
 BugReports: https://github.com/Shians/snplet/issues
 Collate:
+    'MoleculeCalls-class.R'
     'SNPData-helpers.R'
     'SNPData-class.R'
     'SNPData-aggregation.R'
