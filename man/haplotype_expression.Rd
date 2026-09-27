@@ -55,8 +55,9 @@ SNPs or genes.}
 \item{inverted_phase_genes}{Character vector (default \code{"XIST"}).
 Gene names known to be transcribed predominantly from the
 \emph{inactive} X, whose stored phase is therefore expected to be
-inverted (see \sQuote{Genes masked by phase inversion}). Matching rows
-are marked \code{phase_likely_inverted}; nothing is dropped or
+inverted (see \sQuote{Genes masked by phase inversion}). Rows whose SNP
+overlaps any listed gene, including through a comma-joined label such
+as \code{"TSIX, XIST"}, are marked \code{phase_likely_inverted}; nothing is dropped or
 corrected. Pass \code{character(0)} to disable, or extend it with genes
 you have independent evidence for; this is curated prior biology, not a
 measurement, and the default is deliberately minimal because \code{XIST}
@@ -75,7 +76,10 @@ A tibble with one row per donor and gene, with columns \code{donor}
   \code{active_count}, \code{inactive_count}, \code{coverage},
   \code{escape_fraction} (\code{inactive_count / coverage}), \code{escapes}
   (\code{escape_fraction >= escape_threshold}), \code{phase_likely_inverted}
-  (\code{TRUE} when \code{gene_name} is in \code{inverted_phase_genes}),
+  (\code{TRUE} when the representative SNP overlaps a gene in
+  \code{inverted_phase_genes}), \code{gene_overlap} (\code{TRUE} when it
+  overlaps more than one gene body, so its counts are shared; see
+  \sQuote{Gene-level representative selection}),
   \code{same_allele_dominant} (\code{TRUE} when both groups favour the same
   physical allele), \code{other_donor_escape} and \code{donor_discordant}
   (see \sQuote{Cross-donor consistency}). SNPs with no gene annotation
@@ -85,7 +89,8 @@ A tibble with one row per donor and gene, with columns \code{donor}
   directly.
 
   With \code{by_snp = TRUE} each row instead represents one donor and phased
-  SNP, and \code{other_donor_escape} and \code{donor_discordant} are
+  SNP, \code{gene_name} keeps the SNP's comma-joined label, and
+  \code{other_donor_escape} and \code{donor_discordant} are
   omitted, since they compare genes across donors.
 
   With \code{by_active_x = TRUE} each row is split in two, one per active-X
@@ -97,8 +102,8 @@ A tibble with one row per donor and gene, with columns \code{donor}
   "active" one, see Details). No group is dropped for contradicting the
   phase; the flags are reported for you to act on.
 
-  When the object carries no gene annotation, \code{gene_name} and
-  \code{phase_likely_inverted} are both omitted.
+  When the object carries no gene annotation, \code{gene_name},
+  \code{phase_likely_inverted} and \code{gene_overlap} are omitted.
 }
 \description{
 Splits phased het SNPs' ALT/REF counts into active- and inactive-haplotype
@@ -191,6 +196,14 @@ groups) among those covered in both groups; ties go to the lower
 are pooled, and a SNP seen in only one of them would report a single cell
 population's escape as the gene's. A (donor, gene) pair with no such SNP is
 dropped, with the number dropped reported via \code{logger}.
+
+A SNP inside overlapping gene bodies carries a comma-joined
+\code{gene_name} (see \code{\link{add_snp_gene_names}}) and is a candidate
+for each of those genes, so one SNP can represent several genes. Its
+counts are unstranded and cannot be split between them: such rows are
+marked \code{gene_overlap}, and their counts may include reads from the
+other genes. For a strand-resolved gene count, use
+\code{\link{haplotype_expression_by_molecule}}.
 
 The representative is \emph{not} required to flip its dominant physical
 allele between the groups. For a gene escaping near 0.5, which side of 0.5
