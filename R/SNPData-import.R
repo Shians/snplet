@@ -6,7 +6,11 @@
 #' @param cellsnp_dir Character scalar, required. Directory containing
 #'   cellSNP-lite output files.
 #' @param gene_annotation A data.frame, required, with columns \code{chrom},
-#'   \code{start}, \code{end}, \code{gene_name}. Gene annotations.
+#'   \code{start}, \code{end}, \code{gene_name}, \code{strand} (every value
+#'   \code{"+"} or \code{"-"}). Gene annotations, used to fill
+#'   \code{snp_info$gene_name} and stored on the object (see \code{gene_anno()})
+#'   for \code{\link{phase_from_molecules}} and
+#'   \code{\link{molecule_haplotype_counts}}.
 #' @param library_id Character scalar, optional (default \code{NA}). Name of
 #'   the sequencing library this cellSNP-lite run came from, stored on every
 #'   cell. See \sQuote{Merging libraries} below.
@@ -30,24 +34,15 @@
 #' @param clonotype_column Character scalar (default \code{"raw_clonotype_id"}).
 #'   Name of the column in \code{vdj_file} containing clonotype information
 #'   (only used if \code{vdj_file} is provided).
-#' @param bam_files An unnamed character vector, optional (default \code{NULL},
-#'   recording no paths). The BAM file or files this cellSNP run was made from.
-#'   Requires \code{library_id} (this whole vector is stored against it as one
-#'   library's paths in \code{library_info}, via \code{\link{add_library_bams}}),
-#'   so that \code{\link{phase_from_molecules}} can find them without being told
-#'   again. Must not be named: this call covers a single library, so any names
-#'   on \code{bam_files} itself would be silently discarded rather than used as
-#'   per-library keys; each path is checked to exist.
 #'
 #' @return A SNPData object
 #'
 #' @section Merging libraries:
-#' A 10x barcode is unique only within its library, so
-#' \code{\link{merge_snpdata}} uses \code{library_id} to tell a repeated cell
-#' from two different cells that happened to draw the same barcode, and
-#' refuses to merge any object carrying a \code{NA} \code{library_id}. A
-#' single-library workflow that never calls \code{merge_snpdata} can safely
-#' leave \code{library_id} unset.
+#' To import several runs or libraries into one object, use
+#' \code{\link{import_cellsnp_libraries}}. A 10x barcode is unique only within
+#' its library, so that function matches cells on (\code{library_id},
+#' \code{barcode}) and requires a \code{library_id} for every run. A
+#' single-library import can safely leave \code{library_id} unset.
 #'
 #' @family import and export functions
 #' @export
@@ -87,12 +82,6 @@
 #'   donor_map = c(PatientA = "donor0", PatientB = "donor1"),
 #'   library_id = "run1"
 #' )
-#'
-#' # Two libraries labelled distinctly, so merge_snpdata() keeps cells that
-#' # share a barcode by chance apart instead of fusing them
-#' run1 <- import_cellsnp("run1/", gene_anno_df, library_id = "run1")
-#' run2 <- import_cellsnp("run2/", gene_anno_df, library_id = "run2")
-#' combined <- merge_snpdata(run1, run2)
 #' }
 import_cellsnp <- function(
     cellsnp_dir,
@@ -102,11 +91,10 @@ import_cellsnp <- function(
     vireo_folder = NULL,
     donor_map = NULL,
     barcode_column = "barcode",
-    clonotype_column = "raw_clonotype_id",
-    bam_files = NULL
+    clonotype_column = "raw_clonotype_id"
 ) {
     # Validate gene_annotation columns
-    required_gene_cols <- c("chrom", "start", "end", "gene_name")
+    required_gene_cols <- c("chrom", "start", "end", "gene_name", "strand")
     missing_cols <- setdiff(required_gene_cols, colnames(gene_annotation))
     if (length(missing_cols) > 0) {
         stop(
@@ -116,40 +104,16 @@ import_cellsnp <- function(
             )
         )
     }
+    .check_gene_strand(gene_annotation$strand, arg_name = "gene_annotation")
 
     # Left NA rather than defaulted to a guessed label: nothing in the cellSNP
     # output records which library a run came from, and a guessed default
     # (e.g. the directory name) risks two different libraries colliding
-    # silently at merge time. merge_snpdata() already refuses to merge any
-    # object with an NA library_id (see .check_library_ids()), so a
-    # single-library workflow that never merges can safely leave this unset,
-    # and a workflow that does merge is stopped there instead.
+    # silently at merge time. import_cellsnp_libraries() requires a
+    # library_id on every row, so a single-library import can safely leave
+    # this unset, and a multi-library import is stopped there instead.
     if (length(library_id) != 1) {
         stop("library_id must be a single string naming the library this cellSNP run came from, or NA.")
-    }
-
-    # bam_files is recorded against library_id in library_info, so there is
-    # nothing to key it against when library_id was left NA. Checked ahead of
-    # file existence so this points at the real cause rather than a confusing
-    # add_library_bams() error once import has otherwise succeeded.
-    if (!is.null(bam_files) && is.na(library_id)) {
-        stop(
-            "bam_files was supplied but library_id was not: BAM paths are recorded against ",
-            "library_id in library_info, so set library_id = to use bam_files."
-        )
-    }
-
-    # One import call covers one library, so bam_files is keyed by library_id
-    # automatically below; any names on bam_files itself would be silently
-    # discarded by that wrapping (add_library_bams()'s per-library keys come
-    # from the outer list this constructs, not from bam_files' own names),
-    # so a named vector is rejected here rather than left to fail silently.
-    if (!is.null(bam_files) && !is.null(names(bam_files))) {
-        stop(
-            "bam_files must be an unnamed character vector of path(s) for the ",
-            "single library named by library_id; names on bam_files are ignored ",
-            "and would be silently dropped."
-        )
     }
 
     # Check if required files exist
@@ -159,20 +123,13 @@ import_cellsnp <- function(
     base_file <- fs::path(cellsnp_dir, "cellSNP.base.vcf.gz")
     samples_file <- fs::path(cellsnp_dir, "cellSNP.samples.tsv")
 
-    for (file in c(dp_file, ad_file, oth_file, base_file)) {
+    for (file in c(dp_file, ad_file, oth_file, base_file, samples_file)) {
         check_file(file)
     }
     # Check optional files if provided
     if (!is.null(vdj_file)) {
         check_file(vdj_file)
     }
-    # Check BAM files if provided
-    if (!is.null(bam_files)) {
-        for (bam_file in bam_files) {
-            check_file(bam_file)
-        }
-    }
-
     # donor_ids.tsv is the point of pointing at a Vireo folder, so it must exist;
     # the genotype VCF is a bonus feature of that same run and is silently skipped
     # if the folder doesn't have one (e.g. an older or genotype-free Vireo run).
@@ -207,6 +164,7 @@ import_cellsnp <- function(
         col_names = "barcode",
         col_types = readr::cols(barcode = readr::col_character())
     )
+    .check_cell_barcodes(cells$barcode, ncol(coverage), samples_file)
 
     # Merge SNP info with gene annotation
     snp_info_full <- add_snp_gene_names(snp_vcf_data, gene_annotation) %>%
@@ -241,10 +199,7 @@ import_cellsnp <- function(
         vdj_info <- readr::read_csv(
             vdj_file,
             col_types = readr::cols(.default = readr::col_character())
-        ) %>%
-            dplyr::mutate(
-                barcode = stringr::str_remove(barcode, "-[0-9]+$") # Remove suffix if present
-            )
+        )
     } else {
         vdj_info <- NULL
     }
@@ -256,6 +211,7 @@ import_cellsnp <- function(
         barcode_column,
         clonotype_column
     )
+    barcode_info <- .align_barcode_info(barcode_info, cells$barcode, vireo_file)
 
     # One cellSNP-lite run covers one library, so the label is constant across cells.
     barcode_info$library_id <- as.character(library_id)
@@ -265,21 +221,6 @@ import_cellsnp <- function(
     donor_snp_info <- if (!is.null(gt_file)) {
         .read_vireo_gt(gt_file, snp_info)
     } else {
-        NULL
-    }
-
-    # Import is the one point where the gene annotation is in hand, so the
-    # molecule-level SNP-to-gene map is derived here rather than asked for again
-    # by haplotype_expression_by_molecule(). It needs strand, which the display
-    # labels in snp_info$gene_name do not, so an unstranded annotation leaves the
-    # map empty; assign_snp_genes() can supply it later via snp_gene_map<-().
-    snp_gene_map <- if ("strand" %in% colnames(gene_annotation)) {
-        assign_snp_genes(snp_info, gene_annotation)
-    } else {
-        logger::log_info(
-            "gene_annotation has no strand column, so no SNP-to-gene map was built; ",
-            "haplotype_expression_by_molecule() needs one, set later with snp_gene_map(x) <- ."
-        )
         NULL
     }
 
@@ -293,18 +234,353 @@ import_cellsnp <- function(
         barcode_info = barcode_info,
         donor_snp_info = donor_snp_info,
         donor_map = donor_map,
-        snp_gene_map = snp_gene_map,
-        total_count = coverage
+        total_count = coverage,
+        gene_anno = gene_annotation
     )
 
-    # Import is when a BAM path is actually known -- this cellSNP run was made
-    # from it -- so recording it here means phase_from_molecules() never has to
-    # be told again, and the path survives every later merge.
-    if (!is.null(bam_files)) {
-        snp_data <- add_library_bams(snp_data, stats::setNames(list(bam_files), library_id))
+    return(snp_data)
+}
+
+#' Import several cellSNP-lite runs into one SNPData object
+#'
+#' Imports each cellSNP-lite run listed in a sample sheet with
+#' \code{\link{import_cellsnp}} and combines them into a single SNPData object.
+#' Runs from different libraries contribute separate cells; runs that share a
+#' \code{library_id} are treated as repeat runs over the same cells, and their
+#' counts are summed (see \sQuote{Repeat runs of a library}).
+#'
+#' @param sheet A data.frame, required, with one row per cellSNP-lite run. Must
+#'   contain the columns \code{cellsnp_dir} and \code{library_id} (character,
+#'   non-\code{NA}), and may contain \code{vdj_file}, \code{vireo_folder},
+#'   \code{bam_files}, and \code{donor_map}. Each column except
+#'   \code{bam_files} is passed to the \code{\link{import_cellsnp}} argument of
+#'   the same name for that row; see \sQuote{Sample sheet} below.
+#' @param gene_annotation A data.frame, required, with columns \code{chrom},
+#'   \code{start}, \code{end}, \code{gene_name}, \code{strand}. Gene
+#'   annotations, shared by every run and stored on the result; see
+#'   \code{\link{import_cellsnp}}.
+#' @param barcode_column Character scalar (default \code{"barcode"}). Name of
+#'   the barcode column in every run's \code{vdj_file}.
+#' @param clonotype_column Character scalar (default
+#'   \code{"raw_clonotype_id"}). Name of the clonotype column in every run's
+#'   \code{vdj_file}.
+#'
+#' @return A SNPData object holding the cells of every run. Its SNPs are the
+#'   union of all runs' SNPs, zero-filled where a run did not measure a SNP.
+#'
+#' @section Sample sheet:
+#' \describe{
+#'   \item{\code{cellsnp_dir}}{Required. Directory of cellSNP-lite output. Each
+#'     directory may appear only once, since importing it twice would double
+#'     its counts.}
+#'   \item{\code{library_id}}{Required. Name of the sequencing library the run
+#'     came from. A 10x barcode is unique only within its library, so cells
+#'     are matched on (\code{library_id}, \code{barcode}): a barcode repeated
+#'     across rows with the same \code{library_id} is one cell, and one
+#'     repeated across different libraries is two.}
+#'   \item{\code{vdj_file}, \code{vireo_folder}}{Optional character columns;
+#'     \code{NA} means none for that row.}
+#'   \item{\code{bam_files}}{Optional. A character column (one BAM per row) or a
+#'     list column of character vectors (several BAMs per row); \code{NA} or
+#'     \code{NULL} means none. Used only to check that repeat runs of a
+#'     library do not count the same reads twice (see \sQuote{Repeat runs of a
+#'     library}); the paths are not stored on the returned object. Each path is
+#'     checked to exist.}
+#'   \item{\code{donor_map}}{Optional list column of named character vectors,
+#'     \code{c(new_label = old_label, ...)}, relabelling that row's donors;
+#'     \code{NULL} means no relabelling.}
+#' }
+#'
+#' @section Repeat runs of a library:
+#' Summing the counts of runs that share a \code{library_id} is correct only
+#' when no read is counted by both: either the runs come from different BAM
+#' files (the library sequenced twice), or they come from the same BAM but
+#' cover disjoint SNPs (e.g. one run per chromosome). Two runs over the same
+#' BAM that share SNPs count those reads twice, which breaks the independence
+#' assumed by the binomial and beta-binomial tests. The function therefore:
+#' \itemize{
+#'   \item errors when two runs of a library share a \code{bam_files} path
+#'     and at least one SNP;
+#'   \item warns when two runs of a library share SNPs but either lacks
+#'     \code{bam_files}, since the two cases cannot then be told apart;
+#'   \item errors when two runs of a library assign the same cell to
+#'     different donors, as can happen when each run has its own
+#'     \code{vireo_folder}, since Vireo labels donors independently per run.
+#' }
+#'
+#' @section Donor labels:
+#' Donors must not span libraries. Vireo numbers donors from \code{donor0} in
+#' every run, and a run imported without \code{vireo_folder} labels all its
+#' cells \code{donor0}, so the same label in two libraries almost always names
+#' two different people. The function therefore errors when a donor label
+#' (other than \code{"doublet"} or \code{"unassigned"}) appears in more than
+#' one library; give each library distinct labels through \code{donor_map}.
+#'
+#' @family import and export functions
+#' @export
+#'
+#' @examples
+#' \dontrun{
+#' # Two libraries, the first sequenced twice (so two BAMs holding different
+#' # reads). Vireo labels donors from donor0 in each library, so donor_map
+#' # gives every library its own labels.
+#' sheet <- tibble::tibble(
+#'   cellsnp_dir = c("lib1_run1/", "lib1_run2/", "lib2/"),
+#'   library_id = c("lib1", "lib1", "lib2"),
+#'   vireo_folder = c("vireo_lib1/", "vireo_lib1/", "vireo_lib2/"),
+#'   bam_files = c("lib1_seq1.bam", "lib1_seq2.bam", "lib2.bam"),
+#'   donor_map = list(
+#'     c(PatientA = "donor0", PatientB = "donor1"),
+#'     c(PatientA = "donor0", PatientB = "donor1"),
+#'     c(PatientC = "donor0", PatientD = "donor1")
+#'   )
+#' )
+#' snp_data <- import_cellsnp_libraries(sheet, gene_anno_df)
+#' }
+import_cellsnp_libraries <- function(
+    sheet,
+    gene_annotation,
+    barcode_column = "barcode",
+    clonotype_column = "raw_clonotype_id"
+) {
+    sheet <- .validate_import_sheet(sheet)
+
+    logger::log_info(
+        "Importing {nrow(sheet)} cellSNP run(s) from {dplyr::n_distinct(sheet$library_id)} library(ies)"
+    )
+    runs <- purrr::pmap(sheet, function(cellsnp_dir, library_id, vdj_file, vireo_folder, bam_files, donor_map) {
+        import_cellsnp(
+            cellsnp_dir = cellsnp_dir,
+            gene_annotation = gene_annotation,
+            library_id = library_id,
+            vdj_file = vdj_file,
+            vireo_folder = vireo_folder,
+            donor_map = donor_map,
+            barcode_column = barcode_column,
+            clonotype_column = clonotype_column
+        )
+    })
+
+    .check_repeat_run_overlap(sheet, runs)
+    .check_repeat_run_donors(runs)
+    .check_donors_within_library(runs)
+
+    # merge_snpdata() defaults to union joins on both axes, which is what a
+    # sample sheet means: keep every run's SNPs and cells, summing only where
+    # two runs share a (library_id, barcode) cell.
+    Reduce(merge_snpdata, runs)
+}
+
+# Columns a sample sheet may carry, in the order .validate_import_sheet()
+# returns them and import_cellsnp_libraries() unpacks them.
+.IMPORT_SHEET_COLUMNS <- c("cellsnp_dir", "library_id", "vdj_file", "vireo_folder", "bam_files", "donor_map")
+
+# Checks a sample sheet and normalises it to a tibble with every column in
+# .IMPORT_SHEET_COLUMNS. Optional columns become list columns holding NULL
+# where a row has no value, so each row unpacks straight into import_cellsnp()
+# arguments. Unknown columns are rejected rather than ignored, so a misspelt
+# optional column cannot silently drop its data.
+.validate_import_sheet <- function(sheet) {
+    if (!is.data.frame(sheet) || nrow(sheet) == 0) {
+        stop("sheet must be a data.frame with one row per cellSNP-lite run.")
     }
 
-    return(snp_data)
+    missing_cols <- setdiff(c("cellsnp_dir", "library_id"), colnames(sheet))
+    if (length(missing_cols) > 0) {
+        stop("sheet is missing required column(s): ", paste(missing_cols, collapse = ", "))
+    }
+
+    unknown_cols <- setdiff(colnames(sheet), .IMPORT_SHEET_COLUMNS)
+    if (length(unknown_cols) > 0) {
+        stop(
+            "sheet has unrecognised column(s): ",
+            paste(unknown_cols, collapse = ", "),
+            ". Allowed columns are: ",
+            paste(.IMPORT_SHEET_COLUMNS, collapse = ", ")
+        )
+    }
+
+    sheet <- tibble::as_tibble(sheet)
+    sheet$cellsnp_dir <- as.character(sheet$cellsnp_dir)
+    sheet$library_id <- as.character(sheet$library_id)
+
+    if (anyNA(sheet$library_id) || any(sheet$library_id == "")) {
+        stop(
+            "Every row of sheet needs a library_id: cells from different runs are matched on ",
+            "(library_id, barcode), so an unlabelled run cannot be combined safely."
+        )
+    }
+
+    dir_keys <- as.character(fs::path_abs(sheet$cellsnp_dir))
+    if (anyDuplicated(dir_keys)) {
+        stop(
+            "sheet lists the same cellsnp_dir more than once, which would double its counts: ",
+            paste(unique(sheet$cellsnp_dir[duplicated(dir_keys)]), collapse = ", ")
+        )
+    }
+
+    for (col in setdiff(.IMPORT_SHEET_COLUMNS, c("cellsnp_dir", "library_id"))) {
+        sheet[[col]] <- .as_sheet_list_column(sheet[[col]], nrow(sheet))
+    }
+    for (bam_file in unlist(sheet$bam_files)) {
+        check_file(bam_file)
+    }
+
+    sheet[.IMPORT_SHEET_COLUMNS]
+}
+
+# An optional sheet column as a list, one element per row, with NULL for an
+# absent column or an NA entry: import_cellsnp() reads NULL, not NA, as "none".
+.as_sheet_list_column <- function(values, n_rows) {
+    if (is.null(values)) {
+        return(vector("list", n_rows))
+    }
+    purrr::map(as.list(values), .na_to_null)
+}
+
+.na_to_null <- function(value) {
+    if (length(value) == 1 && is.na(value)) {
+        return(NULL)
+    }
+    value
+}
+
+# Runs of one library are summed cell by cell, which is only correct when no
+# read is counted by both. Two runs over different BAMs (the library sequenced
+# twice) hold different reads; two runs over the same BAM hold the same reads, so
+# they may only be summed if they pile up different SNPs (e.g. split by
+# chromosome). A shared BAM with shared SNPs double counts every read at those
+# SNPs, breaking the independence the binomial and beta-binomial tests assume,
+# so it errors. Without BAM paths the two cases look identical, so shared SNPs
+# only warn.
+.check_repeat_run_overlap <- function(sheet, runs) {
+    run_pairs <- .same_library_run_pairs(sheet$library_id)
+    if (nrow(run_pairs) == 0) {
+        return(invisible(NULL))
+    }
+
+    run_pairs$n_shared_snps <- purrr::map2_int(run_pairs$first, run_pairs$second, function(first, second) {
+        length(intersect(snp_info(runs[[first]])$snp_id, snp_info(runs[[second]])$snp_id))
+    })
+    run_pairs$bams_known <- purrr::map2_lgl(run_pairs$first, run_pairs$second, function(first, second) {
+        !is.null(sheet$bam_files[[first]]) && !is.null(sheet$bam_files[[second]])
+    })
+    run_pairs$shares_bam <- purrr::map2_lgl(run_pairs$first, run_pairs$second, function(first, second) {
+        shared <- intersect(.bam_keys(sheet$bam_files[[first]]), .bam_keys(sheet$bam_files[[second]]))
+        length(shared) > 0
+    })
+    run_pairs$label <- paste0(
+        sheet$cellsnp_dir[run_pairs$first],
+        " and ",
+        sheet$cellsnp_dir[run_pairs$second],
+        " (",
+        run_pairs$n_shared_snps,
+        " shared SNPs)"
+    )
+
+    double_counted <- run_pairs[run_pairs$shares_bam & run_pairs$n_shared_snps > 0, ]
+    if (nrow(double_counted) > 0) {
+        stop(
+            "Runs of the same library share a BAM file and SNPs, so summing them would count ",
+            "the same reads twice: ",
+            paste(double_counted$label, collapse = "; "),
+            ". Runs over one BAM must cover disjoint SNPs, e.g. one run per chromosome."
+        )
+    }
+
+    unverifiable <- run_pairs[!run_pairs$bams_known & run_pairs$n_shared_snps > 0, ]
+    if (nrow(unverifiable) > 0) {
+        warning(
+            "Runs of the same library share SNPs, and their counts will be summed: ",
+            paste(unverifiable$label, collapse = "; "),
+            ". This is correct only if the runs were made from different BAM files; if they ",
+            "share a BAM, the same reads are counted twice. Add a bam_files column to sheet ",
+            "to have this checked.",
+            call. = FALSE
+        )
+    }
+
+    invisible(NULL)
+}
+
+# Every unordered pair of sheet rows that share a library_id, as row indices.
+.same_library_run_pairs <- function(library_id) {
+    same_library <- outer(library_id, library_id, "==") & upper.tri(diag(length(library_id)))
+    pairs <- which(same_library, arr.ind = TRUE)
+    tibble::tibble(first = unname(pairs[, 1]), second = unname(pairs[, 2]))
+}
+
+# A BAM path in a form comparable across rows, so the same file written two
+# ways (relative vs absolute, via a symlink) is still recognised.
+# .validate_import_sheet() has already checked that each path exists.
+.bam_keys <- function(bam_files) {
+    if (is.null(bam_files)) {
+        return(character(0))
+    }
+    as.character(fs::path_real(bam_files))
+}
+
+# A cell seen by more than one run of its library is one cell, so every run must
+# give it the same donor. Vireo labels each run independently, so two runs with
+# their own vireo_folder can call the same person donor0 in one and donor1 in the
+# other; merging would then keep the first run's label and attach the second
+# run's genotype calls to the wrong person. Checked after each row's donor_map,
+# since it is the final labels that must agree.
+.check_repeat_run_donors <- function(runs) {
+    cell_donors <- purrr::map(runs, function(run) {
+        dplyr::select(barcode_info(run), library_id, barcode, donor)
+    }) %>%
+        dplyr::bind_rows() %>%
+        dplyr::distinct()
+
+    # After distinct(), a (library_id, barcode) key repeats only where its runs
+    # disagree on the donor.
+    conflicting <- duplicated(cell_donors[c("library_id", "barcode")])
+    if (!any(conflicting)) {
+        return(invisible(NULL))
+    }
+
+    conflict_keys <- unique(cell_donors[conflicting, c("library_id", "barcode")])
+    examples <- utils::head(conflict_keys, 5)
+    example_labels <- purrr::map2_chr(examples$library_id, examples$barcode, function(lib, bc) {
+        donors <- cell_donors$donor[cell_donors$library_id == lib & cell_donors$barcode == bc]
+        paste0(lib, "/", bc, " (", paste(donors, collapse = " vs "), ")")
+    })
+
+    stop(
+        nrow(conflict_keys),
+        " cell(s) are assigned different donors by different runs of the same library, e.g. ",
+        paste(example_labels, collapse = ", "),
+        ". Vireo labels donors independently in each run; use one vireo_folder for every run ",
+        "of a library, or align the labels with donor_map."
+    )
+}
+
+# Donors must not span libraries (a library's BAM holds all of its donors'
+# cells, and molecule phasing looks donors up by library). Checked on the
+# imported runs, after each row's donor_map, because it is the final labels that
+# must be distinct. "doublet" and "unassigned" are Vireo's shared status labels
+# rather than donors, so they may appear in every library.
+.check_donors_within_library <- function(runs) {
+    donor_libraries <- purrr::map(runs, function(run) {
+        dplyr::distinct(barcode_info(run), library_id, donor)
+    }) %>%
+        dplyr::bind_rows() %>%
+        dplyr::distinct() %>%
+        dplyr::filter(!is.na(donor), !donor %in% .non_donor_labels)
+
+    shared_donors <- unique(donor_libraries$donor[duplicated(donor_libraries$donor)])
+    if (length(shared_donors) == 0) {
+        return(invisible(NULL))
+    }
+
+    stop(
+        "Donor label(s) found in more than one library: ",
+        paste(shared_donors, collapse = ", "),
+        ". Vireo numbers donors from donor0 in every library, and a run without vireo_folder labels ",
+        "all its cells donor0, so a shared label usually names different people. Give each library ",
+        "distinct labels with a donor_map list column in sheet."
+    )
 }
 
 #' Read Vireo genotype calls and classify per-donor zygosity
@@ -718,7 +994,92 @@ read_vcf_base <- function(vcf_file) {
     return(vcf_data)
 }
 
+# cellSNP.samples.tsv names the matrix columns in order, so it must hold exactly
+# one distinct barcode per column; anything else leaves the columns unlabelled.
+.check_cell_barcodes <- function(barcodes, n_columns, samples_file) {
+    if (length(barcodes) != n_columns) {
+        stop(
+            samples_file,
+            " lists ",
+            length(barcodes),
+            " barcodes but the count matrices have ",
+            n_columns,
+            " columns; the cellSNP-lite output may be incomplete or mixed from different runs."
+        )
+    }
+    if (anyNA(barcodes) || anyDuplicated(barcodes)) {
+        stop(samples_file, " contains missing or repeated barcodes, so matrix columns cannot be matched to cells.")
+    }
+    invisible(NULL)
+}
+
+# Puts barcode_info in matrix column order. donor_ids.tsv comes from a separate
+# Vireo run and a VDJ join can repeat rows, so neither is trusted to follow
+# cellSNP.samples.tsv: rows are matched by barcode, and any cell missing,
+# extra, or repeated is an error, since positional misalignment would silently
+# give every cell another cell's donor.
+.align_barcode_info <- function(barcode_info, barcodes, vireo_file = NULL) {
+    source_label <- "cell annotations"
+    if (!is.null(vireo_file)) {
+        source_label <- vireo_file
+    }
+    describe <- function(values) {
+        paste0(length(values), " (e.g. ", paste(utils::head(values, 3), collapse = ", "), ")")
+    }
+
+    repeated <- unique(barcode_info$barcode[duplicated(barcode_info$barcode)])
+    if (length(repeated) > 0) {
+        stop(
+            source_label,
+            " has more than one row for ",
+            describe(repeated),
+            " barcode(s); check for repeated cells or a VDJ barcode with several clonotypes."
+        )
+    }
+
+    missing <- setdiff(barcodes, barcode_info$barcode)
+    extra <- setdiff(barcode_info$barcode, barcodes)
+    if (length(missing) > 0 || length(extra) > 0) {
+        stop(
+            source_label,
+            " does not match the cellSNP-lite barcodes: ",
+            describe(missing),
+            " cellSNP barcode(s) have no row and ",
+            describe(extra),
+            " row(s) name barcodes cellSNP did not count. ",
+            "Was Vireo run on this cellSNP-lite output?"
+        )
+    }
+
+    row_order <- match(barcodes, barcode_info$barcode)
+    if (!identical(row_order, seq_along(barcodes))) {
+        logger::log_warn("Reordering {source_label} rows to match the cellSNP-lite barcode order")
+    }
+    barcode_info <- barcode_info[row_order, , drop = FALSE]
+    barcode_info$cell_id <- paste0("cell_", seq_len(nrow(barcode_info)))
+    barcode_info
+}
+
+# cellranger appends a GEM-well suffix ("-1") to barcodes, but upstream tools
+# differ in whether they keep it. A side counts as suffixed only if every
+# barcode carries one.
+.has_gem_suffix <- function(barcodes) {
+    length(barcodes) > 0 && all(stringr::str_detect(barcodes, "-[0-9]+$"))
+}
+
+# The key used to match VDJ barcodes to cells. Suffixes are kept when both sides
+# carry them, so aggregated libraries (-1, -2, ...) still match well-for-well.
+.barcode_join_key <- function(barcodes, strip_suffix) {
+    if (strip_suffix) {
+        return(stringr::str_remove(barcodes, "-[0-9]+$"))
+    }
+    barcodes
+}
+
 #' Merge donor and clonotype information
+#'
+#' VDJ barcodes are matched to cells ignoring the cellranger GEM-well suffix
+#' (\code{-1}) unless both sides carry one; cells keep their original barcode.
 #'
 #' @param donor_info Data frame with donor information from Vireo
 #' @param vdj_info Data frame with VDJ information from cellranger (NULL if not provided)
@@ -781,12 +1142,28 @@ merge_cell_annotations <- function(donor_info, vdj_info = NULL, barcode_column =
         ) %>%
         dplyr::distinct()
 
-    # Merge donor info with VDJ info
+    # Join on a suffix-normalised key so cells keep their cellSNP-lite barcode,
+    # which must still match the BAM CB tag
+    strip_suffix <- !(.has_gem_suffix(donor_info$barcode) && .has_gem_suffix(vdj_subset$barcode))
+    vdj_subset <- vdj_subset %>%
+        dplyr::mutate(join_key = .barcode_join_key(barcode, strip_suffix)) %>%
+        dplyr::select(join_key, clonotype) %>%
+        dplyr::distinct()
+
     barcode_info <- donor_info %>%
-        dplyr::left_join(vdj_subset, by = "barcode") %>%
+        dplyr::mutate(join_key = .barcode_join_key(barcode, strip_suffix)) %>%
+        dplyr::left_join(vdj_subset, by = "join_key") %>%
+        dplyr::select(-join_key) %>%
         dplyr::mutate(
             cell_id = paste0("cell_", seq_len(dplyr::n()))
         )
+
+    if (nrow(vdj_subset) > 0 && all(is.na(barcode_info$clonotype))) {
+        logger::log_warn(
+            "No VDJ barcodes matched any cell barcode, so every clonotype is NA. ",
+            "Example cell barcode: {donor_info$barcode[1]}; example VDJ barcode: {vdj_info[[barcode_column]][1]}"
+        )
+    }
 
     # Ensure required columns exist
     if (!"donor" %in% colnames(barcode_info)) {

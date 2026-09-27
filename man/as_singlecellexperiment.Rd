@@ -57,6 +57,7 @@ SummarizedExperiment::colData(sce)$active_x
 Other import and export functions:
 \code{\link[=export_cellsnp]{export_cellsnp()}},
 \code{\link[=get_example_snpdata]{get_example_snpdata()}},
-\code{\link[=import_cellsnp]{import_cellsnp()}}
+\code{\link[=import_cellsnp]{import_cellsnp()}},
+\code{\link[=import_cellsnp_libraries]{import_cellsnp_libraries()}}
 }
 \concept{import and export functions}

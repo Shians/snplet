@@ -55,8 +55,9 @@ SNPs or genes.}
 \item{inverted_phase_genes}{Character vector (default \code{"XIST"}).
 Gene names known to be transcribed predominantly from the
 \emph{inactive} X, whose stored phase is therefore expected to be
-inverted (see \sQuote{Genes masked by phase inversion}). Matching rows
-are marked \code{phase_likely_inverted}; nothing is dropped or
+inverted (see \sQuote{Genes masked by phase inversion}). Rows whose SNP
+overlaps any listed gene, including through a comma-joined label such
+as \code{"TSIX, XIST"}, are marked \code{phase_likely_inverted}; nothing is dropped or
 corrected. Pass \code{character(0)} to disable, or extend it with genes
 you have independent evidence for; this is curated prior biology, not a
 measurement, and the default is deliberately minimal because \code{XIST}
@@ -79,13 +80,16 @@ A tibble with one row per donor and gene, with columns \code{donor}
   \code{same_allele_dominant} (\code{TRUE} when both groups favour the same
   physical allele), \code{other_donor_escape} and \code{donor_discordant}
   (see \sQuote{Cross-donor consistency}). SNPs with no gene annotation
-  (\code{NA} \code{gene_name}) are excluded, as are genes with no SNP
-  covered in both active-X groups. This is the grain
+  (\code{NA} \code{gene_name}) or overlapping more than one gene are
+  excluded, as are genes with no remaining SNP covered in both active-X
+  groups. This is the grain
   \code{\link{test_escape}} expects, so the result can be passed to it
   directly.
 
   With \code{by_snp = TRUE} each row instead represents one donor and phased
-  SNP, and \code{other_donor_escape} and \code{donor_discordant} are
+  SNP, including SNPs overlapping several genes, \code{gene_name} keeps
+  the SNP's comma-joined label, and
+  \code{other_donor_escape} and \code{donor_discordant} are
   omitted, since they compare genes across donors.
 
   With \code{by_active_x = TRUE} each row is split in two, one per active-X
@@ -191,6 +195,15 @@ groups) among those covered in both groups; ties go to the lower
 are pooled, and a SNP seen in only one of them would report a single cell
 population's escape as the gene's. A (donor, gene) pair with no such SNP is
 dropped, with the number dropped reported via \code{logger}.
+
+A SNP inside overlapping gene bodies carries a comma-joined
+\code{gene_name} (see \code{\link{add_snp_gene_names}}), such as
+\code{"TSIX, XIST"}. Its counts are unstranded and mix the reads of every
+gene it overlaps, so it is never a representative: it is excluded from the
+gene-level output, and a gene whose SNPs all overlap another gene is
+dropped. Such SNPs still appear with \code{by_snp = TRUE}. For a
+strand-resolved count at overlapping genes, use
+\code{\link{haplotype_expression_by_molecule}}.
 
 The representative is \emph{not} required to flip its dominant physical
 allele between the groups. For a gene escaping near 0.5, which side of 0.5

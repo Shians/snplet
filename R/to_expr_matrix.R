@@ -88,18 +88,19 @@ setMethod("to_expr_matrix", signature(x = "SNPData"), function(x, level = c("bar
 
 #' @keywords internal
 .prepare_grouped_counts <- function(x, groups, level) {
-    if (all(is.na(groups))) {
+    # Doublet and unassigned cells belong to no donor, so they form no column.
+    keep <- if (level == "donor") .is_real_donor(groups) else !is.na(groups)
+    if (!any(keep)) {
         if (level == "clonotype") {
             stop(
                 "All clonotype values are NA. Cannot perform clonotype-level expression matrix conversion. Add clonotype data using add_barcode_metadata() or import_cellsnp() with vdj_file parameter."
             )
         }
         stop(
-            "All donor values are NA. Cannot perform donor-level expression matrix conversion. Add donor data using add_barcode_metadata() or import_cellsnp() with vireo_folder parameter."
+            "No barcode is assigned to a donor (all donor values are NA, doublet, or unassigned). Cannot perform donor-level expression matrix conversion. Add donor data using add_barcode_metadata() or import_cellsnp() with vireo_folder parameter."
         )
     }
 
-    keep <- !is.na(groups)
     if (any(!keep)) {
         x <- x[, keep, drop = FALSE]
         groups <- groups[keep]

@@ -296,6 +296,48 @@ test_that("phase_likely_inverted survives the gene-level election", {
     expect_true(all(dplyr::filter(res, gene_name == "XIST")$phase_likely_inverted))
 })
 
+test_that("phase_likely_inverted matches a curated gene inside a comma-joined label", {
+    fixture <- make_hap_fixture()
+    snp1 <- fixture$snp_ids[1]
+    # XIST's 3' end overlaps TSIX, so add_snp_gene_names() labels its SNPs
+    # "TSIX, XIST"; an exact match against "XIST" would never fire there
+    snp_info(fixture$obj)$gene_name[snp_info(fixture$obj)$snp_id == snp1] <- "TSIX, XIST"
+
+    res <- haplotype_expression(fixture$obj, by_snp = TRUE)
+    shared <- dplyr::filter(res, snp_id == snp1)
+
+    # Verify the per-SNP output keeps the joined label
+    expect_equal(unique(shared$gene_name), "TSIX, XIST")
+    # Verify the curated gene is matched as a component of the label
+    expect_true(all(shared$phase_likely_inverted))
+    # Ensure single-gene SNPs are not flagged inverted
+    expect_false(any(dplyr::filter(res, snp_id != snp1)$phase_likely_inverted))
+})
+
+test_that("gene-level output ignores SNPs overlapping more than one gene", {
+    fixture <- make_hap_fixture()
+    snp1 <- fixture$snp_ids[1]
+    snp2 <- fixture$snp_ids[2]
+    # snp1 sits in the TSIX/XIST overlap, snp2 in XIST alone. Both have 40
+    # reads in donor0, so snp1 would win the tie on snp_id if it competed.
+    snp_info(fixture$obj)$gene_name[snp_info(fixture$obj)$snp_id == snp1] <- "TSIX, XIST"
+    snp_info(fixture$obj)$gene_name[snp_info(fixture$obj)$snp_id == snp2] <- "XIST"
+
+    res <- haplotype_expression(fixture$obj)
+    d0 <- dplyr::filter(res, donor == "donor0")
+
+    # Verify the joined label is never reported as a gene of its own
+    expect_false("TSIX, XIST" %in% res$gene_name)
+    # Verify TSIX, whose only SNP is shared, is dropped rather than represented by it
+    expect_setequal(d0$gene_name, c("gene3", "XIST"))
+    # Confirm XIST is represented by its own SNP, not the shared one
+    expect_equal(d0$snp_id[d0$gene_name == "XIST"], snp2)
+    # Ensure the shared SNP represents no gene in any donor
+    expect_false(snp1 %in% res$snp_id)
+    # Check that the shared SNP is still reported per SNP
+    expect_true(snp1 %in% haplotype_expression(fixture$obj, by_snp = TRUE)$snp_id)
+})
+
 test_that("haplotype_expression() splits active/inactive counts by the stored phase", {
     fixture <- make_hap_fixture()
     snp2 <- fixture$snp_ids[2]

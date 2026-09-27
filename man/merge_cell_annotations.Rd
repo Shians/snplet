@@ -24,6 +24,7 @@ merge_cell_annotations(
 Data frame with merged cell annotations
 }
 \description{
-Merge donor and clonotype information
+VDJ barcodes are matched to cells ignoring the cellranger GEM-well suffix
+(\code{-1}) unless both sides carry one; cells keep their original barcode.
 }
 \keyword{internal}

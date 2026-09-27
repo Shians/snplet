@@ -11,7 +11,7 @@ cells.
 | Input | Source | Required? |
 | --- | --- | --- |
 | REF/ALT/OTH count matrices, SNP and barcode lists | [cellSNP-lite](https://github.com/single-cell-genetics/cellSNP-lite) | Required |
-| Gene annotation (`chrom`, `start`, `end`, `gene_name`, optionally `strand`) | Any annotation source | Required |
+| Gene annotation (`chrom`, `start`, `end`, `gene_name`, `strand`) | Any annotation source | Required |
 | Donor assignments, and per-donor genotypes if `GT_donors.vireo.vcf.gz` is present | [Vireo](https://github.com/single-cell-genetics/vireo) | Optional |
 | Clonotype annotations (`filtered_contig_annotations.csv`) | cellranger VDJ (TCR/BCR-seq) | Optional |
 | Aligned reads for molecule-level counting | Indexed BAM file(s) | Optional |
@@ -39,21 +39,21 @@ aggregation, MAF testing, and expression-matrix export.
 
 ### Import and export
 - `import_cellsnp()` builds a `SNPData` object from a cellSNP-lite directory, taking optional
-  `vdj_file`, `vireo_folder`, and `bam_files` arguments.
-- `merge_snpdata()` combines runs, using each object's `library_id` to keep cells that share a
-  10x barcode by chance apart.
+  `vdj_file` and `vireo_folder` arguments.
+- `import_cellsnp_libraries()` imports several runs from a sample sheet into one object,
+  using each run's `library_id` to keep cells that share a 10x barcode by chance apart.
 - `export_cellsnp()` writes an object back out in cellSNP-lite format; `to_expr_matrix()`
   converts allele counts into an expression-like matrix.
 
 ### Processing and aggregation
 - **Filtering**: `filter_snps()`, `filter_barcodes()` (`filter_samples()` is a
-  backwards-compatible alias), `remove_doublets()`, `remove_na_clonotypes()`,
-  `remove_na_genes()`.
+  backwards-compatible alias), `remove_doublets()`, `remove_unassigned()`,
+  `keep_singlets()`, `remove_na_clonotypes()`, `remove_na_genes()`.
 - **Aggregation**: `barcode_count_df()`, `donor_count_df()`, `clonotype_count_df()`, and
   `aggregate_count_df()` for any `barcode_info` column, each with an optional exact binomial
   test of allele usage against a null minor allele frequency.
 - **Metadata**: `add_barcode_metadata()`, `add_snp_metadata()`, `add_donor_metadata()`,
-  `add_snp_gene_names()`, `assign_snp_genes()`, `add_library_bams()`, `rename_donor()`.
+  `add_snp_gene_names()`, `assign_snp_genes()`, `rename_donor()`.
 
 ### Zygosity
 - Vireo genotypes populate per-(SNP, donor) zygosity at import when `GT_donors.vireo.vcf.gz` is
@@ -121,18 +121,23 @@ snp_data <- import_cellsnp(
   library_id = "run1"
 )
 
-# Add donor assignments, TCR/BCR clonotypes and BAM paths, all optional
+# Add donor assignments and TCR/BCR clonotypes, both optional
 snp_data <- import_cellsnp(
   cellsnp_dir = "path/to/cellsnp_output",
   gene_annotation = gene_anno_df,
   library_id = "run1",
   vireo_folder = "path/to/vireo_output",
-  vdj_file = "path/to/filtered_contig_annotations.csv",
-  bam_files = "path/to/possorted_genome_bam.bam"
+  vdj_file = "path/to/filtered_contig_annotations.csv"
 )
 
-# Multiple libraries merge on distinct library_id labels
-combined <- merge_snpdata(run1, run2)
+# Several runs or libraries from a sample sheet, one row per cellSNP-lite run
+sheet <- tibble::tibble(
+  cellsnp_dir = c("lib1_output/", "lib2_output/"),
+  library_id = c("lib1", "lib2"),
+  vireo_folder = c("lib1_vireo/", "lib2_vireo/"),
+  donor_map = list(c(PatientA = "donor0"), c(PatientB = "donor0"))
+)
+combined <- import_cellsnp_libraries(sheet, gene_anno_df)
 ```
 
 ## XCI and escape workflow
@@ -147,18 +152,24 @@ plot_xci_heatmap(snp_data, donor = "donor1")
 
 # Per-gene active/inactive haplotype counts, and a test for escape
 hap <- haplotype_expression(snp_data)
-escape <- test_escape(snp_data)
+escape_snp <- test_escape(snp_data)
 ```
 
-If BAM files were recorded at import (or added later with `add_library_bams()`), read-backed
-phase and molecule-level counts can be added before testing:
+With the libraries' BAM files, read-backed phase and molecule-level counts can reinforce the
+fit. Run `phase_from_molecules()` once, after `assign_xci()`; to fit again, re-import. Molecules
+are assigned to genes from the annotation stored at import (`gene_anno(snp_data)`), and the
+calls are stored in `molecules(snp_data)`, surviving later filtering:
 
 ```r
-snp_data <- phase_from_molecules(snp_data)
+snp_data <- phase_from_molecules(
+  snp_data,
+  bam_files = c(run1 = "path/to/possorted_genome_bam.bam")
+)
 hap_mol <- haplotype_expression_by_molecule(snp_data)
 
-# test_escape() uses the molecule counts automatically when they are present
-escape <- test_escape(snp_data)
+# test_escape() now counts molecules. Compare with escape_snp from before this step: per-SNP
+# counts taken from here on also use the SNPs that molecules phased
+escape_mol <- test_escape(snp_data)
 ```
 
 See the function documentation (`?import_cellsnp`, `?assign_xci`, `?haplotype_expression`,

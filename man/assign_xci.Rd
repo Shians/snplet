@@ -36,6 +36,10 @@ SNPData object with an additional \code{active_x} column in
   than counted from the confidence-thresholded hard calls in
   \code{active_x} (which excludes low-confidence cells and so
   underestimates skew in coverage-limited donors).
+
+  Errors once \code{\link{phase_from_molecules}} has run on \code{x}: its
+  read-backed phase is oriented against the current fit, so a refit would
+  leave the two disagreeing. Re-import to refit.
 }
 \description{
 Identifies which X chromosome is active in female cells based on allelic

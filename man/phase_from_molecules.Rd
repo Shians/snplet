@@ -6,7 +6,7 @@
 \usage{
 phase_from_molecules(
   x,
-  bam_files = NULL,
+  bam_files,
   target_chrom = "chrX",
   min_mapq = 20L,
   min_baseq = 10L,
@@ -20,12 +20,11 @@ phase_from_molecules(
 \arguments{
 \item{x}{A SNPData object, required, already fit by `assign_xci()` or
 `assign_xci_by_clonotype()` (see `.has_xci_diagnostics()`), with a
-`donor` column in `barcode_info`. See Details for per-donor library
-constraints.}
+`donor` column in `barcode_info` and the gene annotation stored at
+import (`gene_anno(x)`), which the SNP-to-gene map is built from. See
+Details for per-donor library constraints.}
 
-\item{bam_files}{A named character vector or list, optional (default
-`NULL`, taking the paths recorded in `library_info(x)$bam_files` by
-`import_cellsnp()` or `add_library_bams()`, and erroring if none were),
+\item{bam_files}{A named character vector or list, required,
 `library_id = path(s)`, giving the indexed BAM file or files holding that
 library's reads. See Details for naming and pooling rules.}
 
@@ -54,30 +53,19 @@ A SNPData object with `donor_snp_info` gaining these columns:
       from molecules spanning the SNP itself;
       `startsWith(phase_source, "read_backed")` selects the two
       block-based cases together.
-    \item `allele_on_x1`, re-derived: the EM's value where present (so
-      nothing downstream that already reads `allele_on_x1` changes
-      behaviour), else the molecule value, else `NA` where
-      `phase_conflict` is `TRUE`.
+    \item `allele_on_x1`, re-derived: the EM's value where present, else
+      the molecule value, else `NA` where `phase_conflict` is `TRUE`.
+      SNPs the EM had phased keep their value; the others it newly phases
+      are counted by `haplotype_expression()` from here on.
   }
-  The object also carries two attributes:
-  \itemize{
-    \item `"molecule_calls"`: a tibble with columns `donor`, `barcode`,
-      `umi`, `snp_id`, `allele`, and `transcript_strand`
-      (`"+"`/`"-"`/`NA`, the molecule's inferred transcript strand; see
-      `.infer_bam_strand_orientation()` and `molecule_read_strand()`).
-      It is the per-donor `molecule_snp_alleles()` output already
-      computed here, and lets `haplotype_expression_by_molecule()`
-      resolve SNPs `assign_snp_genes()` flagged `ambiguous` by reading it
-      straight off the object it is given, rather than re-extracting
-      from the BAM. Being an attribute, it does not survive operations
-      that rebuild the object, so subset before this call rather than
-      after.
-    \item `"bam_calibration"`: one row per BAM file scanned, with columns
-      `bam_file`, `orientation` (`"sense"`/`"antisense"`/`NA` where it
-      could not be inferred), `n_ts_reads`, `concordance`, and
-      `n_scanned`, so the strand call applied to each file's molecules
-      can be inspected afterwards.
-  }
+  The object's `molecules` slot is also set to a
+  \code{\link[=MoleculeCalls-class]{MoleculeCalls}} object holding the
+  per-molecule allele calls extracted here (keyed on `library_id` and
+  `barcode`), the SNP-to-gene map built from `gene_anno(x)`, the per-BAM
+  strand calibration (`bam_calibration()`), and the BAM paths and settings
+  used. `haplotype_expression_by_molecule()` and `test_escape()` count
+  escape from it without re-reading the BAMs, and it survives subsetting,
+  so the object can be filtered after this call as freely as before it.
 }
 \description{
 Sharpens `assign_xci()`'s expression-derived X1/X2 phase with direct
@@ -90,8 +78,14 @@ to X1/X2 against `assign_xci()`'s already-stored EM phase (see
 }
 \details{
 The change is additive: `assign_xci()`'s own phase calls are never
-replaced, and `haplotype_expression()` is unaffected unless told to read
-the new columns.
+replaced. SNPs the EM left unphased do gain phase, though, so per-SNP
+counting (`haplotype_expression()`, `test_escape(count_source = "snp")`)
+uses more SNPs after this call than before it. To compare per-SNP with
+molecule counting, take the per-SNP result before running this.
+
+Run it once, after `assign_xci()`: it errors on an object it has already
+phased, and `assign_xci()` then errors too, since the read-backed phase is
+oriented against that fit. Re-import to start over.
 
 
 BAM files are looked up by library, not by donor, so each donor's cells
@@ -147,6 +141,7 @@ within a gene without escaping this constraint.
 
 \seealso{
 Other molecule-level allele counting functions:
+\code{\link{MoleculeCalls-class}},
 \code{\link[=assign_snp_genes]{assign_snp_genes()}},
 \code{\link[=extract_snp_calls]{extract_snp_calls()}},
 \code{\link[=molecule_haplotype_counts]{molecule_haplotype_counts()}},

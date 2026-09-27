@@ -50,12 +50,10 @@
         filter_snps(snp_id %in% het_snp_ids)
     n_het <- nrow(snp_info(snp_data))
 
-    top_snp_per_gene <- snp_info(snp_data) %>%
-        dplyr::arrange(dplyr::desc(coverage)) %>%
-        dplyr::slice_head(n = 1, by = "gene_name")
+    top_snp_ids <- .top_snp_per_gene(snp_info(snp_data))
 
     snp_data <- snp_data %>%
-        filter_snps(snp_id %in% top_snp_per_gene$snp_id)
+        filter_snps(snp_id %in% top_snp_ids)
     n_genes <- nrow(snp_info(snp_data))
 
     logger::log_info(
@@ -63,6 +61,29 @@
     )
 
     snp_data
+}
+
+.top_snp_per_gene <- function(snp_info) {
+    # Returns the snp_ids of the highest-coverage SNP per gene, such that no
+    # gene is represented by more than one SNP. The EM treats each selected SNP
+    # as an independent gene, so a SNP whose comma-joined label names several
+    # overlapping genes ("TSIX, XIST") claims all of them: selecting per label
+    # instead would let XIST vote twice, once as "XIST" and once as
+    # "TSIX, XIST". Selection is greedy in descending coverage, ties kept in
+    # input order; a SNP is skipped if any of its genes is already claimed.
+    # Unannotated SNPs share the single NA key, as before.
+    ordered <- dplyr::arrange(snp_info, dplyr::desc(coverage))
+    genes_per_snp <- .split_gene_label(ordered$gene_name)
+    claimed <- character(0)
+    keep <- logical(nrow(ordered))
+    for (i in seq_along(genes_per_snp)) {
+        genes <- genes_per_snp[[i]]
+        if (!any(genes %in% claimed)) {
+            keep[i] <- TRUE
+            claimed <- c(claimed, genes)
+        }
+    }
+    ordered$snp_id[keep]
 }
 
 .infer_xci <- function(

@@ -6,7 +6,7 @@
 \usage{
 molecule_haplotype_counts(
   x,
-  bam_files = NULL,
+  bam_files,
   target_chrom = NULL,
   min_mapq = 20L,
   min_baseq = 10L,
@@ -20,10 +20,11 @@ molecule_haplotype_counts(
 \arguments{
 \item{x}{A SNPData object, required, with a `donor` column in
 `barcode_info` and a zygosity source established (Vireo genotypes read
-at import, or \code{\link{infer_zygosity}}).}
+at import, or \code{\link{infer_zygosity}}), and the gene annotation
+stored at import (`gene_anno(x)`), which the SNP-to-gene map is built
+from.}
 
-\item{bam_files}{A named character vector or list, optional (default
-`NULL`, taking the paths recorded in `library_info(x)$bam_files`),
+\item{bam_files}{A named character vector or list, required,
 `library_id = path(s)`. See \code{\link{phase_from_molecules}}'s
 `bam_files` argument for the full matching rules; the same rules apply
 here.}
@@ -95,6 +96,7 @@ hap_blocks$maf <- pmin(hap_blocks$h1_count, hap_blocks$h2_count) / hap_blocks$co
 }
 \seealso{
 Other molecule-level allele counting functions:
+\code{\link{MoleculeCalls-class}},
 \code{\link[=assign_snp_genes]{assign_snp_genes()}},
 \code{\link[=extract_snp_calls]{extract_snp_calls()}},
 \code{\link[=molecule_read_strand]{molecule_read_strand()}},

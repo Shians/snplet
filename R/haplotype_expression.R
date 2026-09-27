@@ -100,8 +100,9 @@
 #' @param inverted_phase_genes Character vector (default \code{"XIST"}).
 #'   Gene names known to be transcribed predominantly from the
 #'   \emph{inactive} X, whose stored phase is therefore expected to be
-#'   inverted (see \sQuote{Genes masked by phase inversion}). Matching rows
-#'   are marked \code{phase_likely_inverted}; nothing is dropped or
+#'   inverted (see \sQuote{Genes masked by phase inversion}). Rows whose SNP
+#'   overlaps any listed gene, including through a comma-joined label such
+#'   as \code{"TSIX, XIST"}, are marked \code{phase_likely_inverted}; nothing is dropped or
 #'   corrected. Pass \code{character(0)} to disable, or extend it with genes
 #'   you have independent evidence for; this is curated prior biology, not a
 #'   measurement, and the default is deliberately minimal because \code{XIST}
@@ -126,6 +127,15 @@
 #' are pooled, and a SNP seen in only one of them would report a single cell
 #' population's escape as the gene's. A (donor, gene) pair with no such SNP is
 #' dropped, with the number dropped reported via \code{logger}.
+#'
+#' A SNP inside overlapping gene bodies carries a comma-joined
+#' \code{gene_name} (see \code{\link{add_snp_gene_names}}), such as
+#' \code{"TSIX, XIST"}. Its counts are unstranded and mix the reads of every
+#' gene it overlaps, so it is never a representative: it is excluded from the
+#' gene-level output, and a gene whose SNPs all overlap another gene is
+#' dropped. Such SNPs still appear with \code{by_snp = TRUE}. For a
+#' strand-resolved count at overlapping genes, use
+#' \code{\link{haplotype_expression_by_molecule}}.
 #'
 #' The representative is \emph{not} required to flip its dominant physical
 #' allele between the groups. For a gene escaping near 0.5, which side of 0.5
@@ -188,13 +198,16 @@
 #'   \code{same_allele_dominant} (\code{TRUE} when both groups favour the same
 #'   physical allele), \code{other_donor_escape} and \code{donor_discordant}
 #'   (see \sQuote{Cross-donor consistency}). SNPs with no gene annotation
-#'   (\code{NA} \code{gene_name}) are excluded, as are genes with no SNP
-#'   covered in both active-X groups. This is the grain
+#'   (\code{NA} \code{gene_name}) or overlapping more than one gene are
+#'   excluded, as are genes with no remaining SNP covered in both active-X
+#'   groups. This is the grain
 #'   \code{\link{test_escape}} expects, so the result can be passed to it
 #'   directly.
 #'
 #'   With \code{by_snp = TRUE} each row instead represents one donor and phased
-#'   SNP, and \code{other_donor_escape} and \code{donor_discordant} are
+#'   SNP, including SNPs overlapping several genes, \code{gene_name} keeps
+#'   the SNP's comma-joined label, and
+#'   \code{other_donor_escape} and \code{donor_discordant} are
 #'   omitted, since they compare genes across donors.
 #'
 #'   With \code{by_active_x = TRUE} each row is split in two, one per active-X
@@ -405,7 +418,18 @@ setMethod(
             # inactivation. Nothing in expression data separates the two, so the
             # only available signal is the gene's identity -- hence a curated
             # list rather than a derived flag.
-            dplyr::mutate(phase_likely_inverted = gene_name %in% inverted_phase_genes) %>%
+            #
+            # Matched per component gene, for by_snp = TRUE output: a SNP
+            # overlapping several gene bodies carries a comma-joined label
+            # (XIST's 3' end reads "TSIX, XIST"), and its unstranded counts
+            # include every listed gene's reads, so one inverted component is
+            # enough to invert the stored phase.
+            dplyr::mutate(
+                phase_likely_inverted = purrr::map_lgl(
+                    .split_gene_label(gene_name),
+                    function(genes) any(genes %in% inverted_phase_genes)
+                )
+            ) %>%
             # The flip must be assessed within a donor: X1/X2 labels are not
             # comparable across donors.
             dplyr::group_by(donor, snp_id) %>%
@@ -473,7 +497,19 @@ setMethod(
 #'
 #' @keywords internal
 .elect_gene_representative_snps <- function(result) {
-    annotated <- dplyr::filter(result, !is.na(gene_name))
+    # A SNP overlapping several gene bodies carries a comma-joined label
+    # ("TSIX, XIST"). Its unstranded counts mix every listed gene's reads and
+    # cannot be attributed to any one of them, so it represents no gene: it is
+    # neither a pseudo-gene of its own nor a candidate for its components.
+    single_gene <- lengths(.split_gene_label(result$gene_name)) == 1L
+    n_shared <- dplyr::n_distinct(result$snp_id[!is.na(result$gene_name) & !single_gene])
+    if (n_shared > 0) {
+        logger::log_info(
+            "Excluded {n_shared} SNP(s) overlapping more than one gene from gene-level output; ",
+            "use by_snp = TRUE or haplotype_expression_by_molecule() to see them"
+        )
+    }
+    annotated <- dplyr::filter(result, !is.na(gene_name), single_gene)
 
     # Coverage alone decides, among SNPs covered in both groups. Total coverage
     # is summed over both groups, so the ranking is not decided by whichever
@@ -744,26 +780,21 @@ setMethod(
 #'
 #' @section Where the inputs come from:
 #' Beyond \code{x}, there is nothing to supply. Both inputs this function needs
-#' are already on the object:
+#' are in \code{molecules(x)}, the
+#' \code{\link[=MoleculeCalls-class]{MoleculeCalls}} object
+#' \code{\link{phase_from_molecules}} stored when it read the BAM files:
 #'
 #' \describe{
-#'   \item{The per-molecule allele calls}{Read from the
-#'     \code{"molecule_calls"} attribute \code{\link{phase_from_molecules}} left
-#'     there when it extracted them from the BAM files. They are an attribute
-#'     rather than a slot because they are BAM-derived working data keyed by
-#'     molecule, not part of the object's SNP-by-cell counts, and so are lost
-#'     by operations that rebuild the object: pass the object
-#'     \code{phase_from_molecules()} returned, and subset \emph{before} that call
-#'     rather than after.}
-#'   \item{The SNP-to-gene map}{Read from \code{\link{snp_gene_map}}, built by
-#'     \code{\link{import_cellsnp}} from the gene annotation it was given, and
-#'     carried through subsetting and merging with its SNPs. It is distinct
-#'     from \code{snp_info$gene_name}, which comma-joins overlapping genes into
-#'     one label: attributing a molecule at a SNP overlapping two genes needs
-#'     each candidate as its own row with its strand. An annotation without a
-#'     \code{strand} column cannot supply that, so an object imported with one
-#'     has an empty map; \code{snp_gene_map(x) <- assign_snp_genes(snp_info(x),
-#'     gene_anno)} fills it in without re-importing.}
+#'   \item{The per-molecule allele calls}{Keyed on (\code{library_id},
+#'     \code{barcode}); each call's donor is looked up from
+#'     \code{barcode_info(x)}. The calls survive subsetting unchanged, and only
+#'     those for cells and SNPs still in \code{x} are counted, so \code{x} can
+#'     be filtered after \code{phase_from_molecules()} as freely as before it.}
+#'   \item{The SNP-to-gene map}{Built by \code{phase_from_molecules()} from
+#'     the annotation stored at import, \code{gene_anno(x)}. It is distinct from
+#'     \code{snp_info$gene_name}, which comma-joins overlapping genes into one
+#'     label: attributing a molecule at a SNP overlapping two genes needs each
+#'     candidate as its own row with its strand.}
 #' }
 #'
 #' A missing input is an error naming the step that produces it, rather than a
@@ -811,10 +842,6 @@ setMethod(
 #' snp_data <- phase_from_molecules(snp_data, bam_files = c(lib1 = "lib1.bam"))
 #'
 #' hap <- haplotype_expression_by_molecule(snp_data)
-#'
-#' # Only needed if the annotation given to import_cellsnp() had no strand
-#' # column, leaving snp_gene_map(snp_data) empty
-#' snp_gene_map(snp_data) <- assign_snp_genes(snp_info(snp_data), gene_anno)
 #' }
 setGeneric(
     "haplotype_expression_by_molecule",
@@ -841,31 +868,31 @@ setMethod(
         # The molecule calls are BAM-derived working data that phase_from_molecules()
         # already extracted, so they are taken from the object rather than asked
         # for: there is no other way to derive them that would agree with the
-        # phase blocks stored alongside. Being an attribute, they do not survive
-        # operations that rebuild the object, hence a named error rather than an
-        # empty result.
-        molecule_calls <- attr(x, "molecule_calls")
-        if (is.null(molecule_calls)) {
+        # phase blocks stored alongside.
+        molecules <- molecules(x)
+        if (!.has_molecule_calls(molecules)) {
             stop(
-                "This object carries no molecule calls; they are attached by phase_from_molecules(x). ",
-                "Attributes are lost by operations that rebuild the object, so re-run it, ",
-                "or subset before it rather than after."
+                "This object carries no molecule calls; they are stored by phase_from_molecules(x). ",
+                "Re-import the data and run it once."
             )
         }
-        required_call_cols <- c("donor", "barcode", "umi", "snp_id", "allele", "transcript_strand")
-        missing_call_cols <- setdiff(required_call_cols, colnames(molecule_calls))
-        if (length(missing_call_cols) > 0) {
-            stop("molecule_calls is missing required column(s): ", paste(missing_call_cols, collapse = ", "))
-        }
-        # Built at import from the gene annotation, where strand is available;
-        # snp_info$gene_name cannot stand in for it, being a comma-joined label
-        # with no strand and no per-candidate rows.
-        snp_gene_map <- snp_gene_map(x)
+        # Calls are keyed on (library_id, barcode) so relabelling donors cannot
+        # orphan them; each call takes its donor from the cell it names, and
+        # calls for cells no longer in x drop out here.
+        molecule_calls <- molecule_calls(molecules) %>%
+            dplyr::inner_join(
+                dplyr::distinct(barcode_info, library_id, barcode, donor),
+                by = c("library_id", "barcode")
+            )
+        # snp_info$gene_name cannot stand in for this map, being a comma-joined
+        # label with no strand and no per-candidate rows.
+        snp_gene_map <- snp_gene_map(molecules)
+        # Only reachable for an object migrated from before the map moved here,
+        # whose annotation had no strand column, or saved with an empty one.
         if (nrow(snp_gene_map) == 0) {
             stop(
-                "This object carries no SNP-to-gene map. It is built by import_cellsnp() from a gene ",
-                "annotation with a strand column; set it on an existing object with ",
-                "snp_gene_map(x) <- assign_snp_genes(snp_info(x), gene_anno)."
+                "This object's molecule calls carry no SNP-to-gene map. Re-import the data with a stranded ",
+                "gene annotation and run phase_from_molecules(x, bam_files)."
             )
         }
 

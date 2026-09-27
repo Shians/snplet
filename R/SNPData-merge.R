@@ -3,7 +3,8 @@
 #' Combines two SNPData objects with flexible join strategies for SNPs and cells.
 #' Overlapping SNPs are summed, cells are matched on
 #' \code{(library_id, barcode)}, and unique entries are retained based on join
-#' type.
+#' type. Internal: users combine runs at import with
+#' \code{\link{import_cellsnp_libraries}}, which calls this with union joins.
 #'
 #' @param x A SNPData object, required.
 #' @param y A SNPData object, required. Object to merge with \code{x}.
@@ -95,39 +96,7 @@
 #' \code{import_cellsnp(..., library_id = )} or afterwards via
 #' \code{barcode_info(obj)$library_id <- }.
 #'
-#' @examples
-#' \dontrun{
-#' # Two cellSNP runs over the SAME library (e.g. rerun against a wider SNP
-#' # panel): the shared library_id means a repeated barcode is the same cell,
-#' # so depth is pooled.
-#' rep1 <- import_cellsnp("replicate1/", gene_anno, library_id = "lib1")
-#' rep2 <- import_cellsnp("replicate2/", gene_anno, library_id = "lib1")
-#' combined <- merge_snpdata(rep1, rep2,
-#'                          snp_join = "intersect",
-#'                          cell_join = "intersect")
-#'
-#' # Batch integration - two distinct libraries, so no cell is shared and
-#' # chance barcode collisions stay as separate cells
-#' batch1 <- import_cellsnp("donor1/", gene_anno, library_id = "batch1")
-#' batch2 <- import_cellsnp("donor2/", gene_anno, library_id = "batch2")
-#' integrated <- merge_snpdata(batch1, batch2,
-#'                             snp_join = "intersect",
-#'                             cell_join = "union")
-#'
-#' # SNP panel expansion over one library - all SNPs, validated cells only
-#' common <- import_cellsnp("common_vars/", gene_anno, library_id = "lib1")
-#' rare <- import_cellsnp("rare_vars/", gene_anno, library_id = "lib1")
-#' expanded <- merge_snpdata(common, rare,
-#'                          snp_join = "union",
-#'                          cell_join = "intersect")
-#'
-#' # Default: maximum data retention
-#' dataset1 <- import_cellsnp("cohort_A/", gene_anno, library_id = "cohort_A")
-#' dataset2 <- import_cellsnp("cohort_B/", gene_anno, library_id = "cohort_B")
-#' combined <- merge_snpdata(dataset1, dataset2)
-#' }
-#'
-#' @export
+#' @keywords internal
 merge_snpdata <- function(
     x,
     y,
@@ -159,6 +128,8 @@ merge_snpdata <- function(
     # what distinguishes the same cell sequenced twice from two different cells
     # that happened to draw the same barcode.
     .check_library_ids(x, y)
+    .check_no_molecule_calls(x, y)
+    gene_anno_merged <- .merge_gene_anno(x, y)
 
     # Barcodes are the real cell identity; cell_id is a positional label the
     # constructor generates, so it is only a fallback for objects built without
@@ -269,7 +240,7 @@ merge_snpdata <- function(
     # a donor with no surviving cells after the cell_join has its rows dropped
     # from both donor tables, same as `[` subsetting.
     donors_retained <- if ("donor" %in% colnames(barcode_info_merged)) {
-        unique(stats::na.omit(barcode_info_merged$donor))
+        .real_donors(barcode_info_merged$donor)
     } else {
         character(0)
     }
@@ -292,11 +263,10 @@ merge_snpdata <- function(
         snp_info = snp_info_merged,
         barcode_info = barcode_info_merged,
         donor_info = donor_info_merged,
-        donor_snp_info = donor_snp_info_merged
+        donor_snp_info = donor_snp_info_merged,
+        gene_anno = gene_anno_merged
     )
     merged_obj@zygosity_source <- zygosity_source_merged
-    merged_obj <- .merge_library_bams(merged_obj, x, y)
-    merged_obj <- .merge_snp_gene_map(merged_obj, x, y)
 
     logger::log_success(
         "Merged SNPData: {nrow(merged_obj)} SNPs x {ncol(merged_obj)} cells"

@@ -19,6 +19,17 @@ if (!nzchar(test_bam) || !file.exists(test_bam)) {
     test_bam <- "../../example_data/snp_counting/TASL.bam"
 }
 
+# One gene body spanning every fixture SNP on chr1 and chrX, so the SNP-to-gene
+# map phase_from_molecules() and molecule_haplotype_counts() build from it
+# attributes all of them to GENE1.
+test_gene_annotation <- tibble::tibble(
+    chrom = c("chr1", "chrX"),
+    start = 1L,
+    end = 1000000L,
+    gene_name = "GENE1",
+    strand = "+"
+)
+
 # ==============================================================================
 # Test: molecule_snp_alleles()
 # ==============================================================================
@@ -1489,7 +1500,8 @@ make_phase_fixture <- function() {
         ref_count = Matrix::Matrix(ref, sparse = TRUE),
         alt_count = Matrix::Matrix(alt, sparse = TRUE),
         snp_info = snp_info,
-        barcode_info = barcode_info
+        barcode_info = barcode_info,
+        gene_anno = test_gene_annotation
     )
     snp_ids <- snp_info(obj)$snp_id
 
@@ -1747,38 +1759,16 @@ test_that("phase_from_molecules() errors when no XCI diagnostics are stored", {
     alt <- Matrix::Matrix(matrix(1L, 2, 2), sparse = TRUE)
     snp_info <- data.frame(chrom = "chrX", pos = c(1L, 2L), ref = "A", alt = "G")
     barcode_info <- data.frame(barcode = c("c1", "c2"), donor = c("donor0", "donor0"))
-    obj <- SNPData(ref_count = ref, alt_count = alt, snp_info = snp_info, barcode_info = barcode_info)
+    obj <- SNPData(
+        ref_count = ref,
+        alt_count = alt,
+        snp_info = snp_info,
+        barcode_info = barcode_info,
+        gene_anno = test_gene_annotation
+    )
 
     # Verify the function refuses to run before assign_xci() has stored a fit
     expect_error(phase_from_molecules(obj, bam_files = c(donor0 = "x.bam")), "Run assign_xci")
-})
-
-test_that("phase_from_molecules() falls back to the BAM paths recorded on the object", {
-    fixture <- make_phase_fixture()
-    obj <- add_barcode_metadata(
-        fixture$obj,
-        data.frame(cell_id = barcode_info(fixture$obj)$cell_id, library_id = "lib_A"),
-        join_by = "cell_id",
-        overwrite = TRUE
-    )
-    bam <- local_fake_bam()
-    obj <- add_library_bams(obj, c(lib_A = bam))
-    call_log <- new_call_log()
-    local_mocked_extraction(call_log)
-
-    phase_from_molecules(obj)
-
-    # Verify a path recorded at import is used without being passed again,
-    # which is the point of storing it on the object
-    expect_identical(call_log$calls, bam)
-})
-
-test_that("phase_from_molecules() errors when no BAM paths are given or recorded", {
-    fixture <- make_phase_fixture()
-
-    # Verify the object says where the paths should come from rather than
-    # failing on a missing argument
-    expect_error(phase_from_molecules(fixture$obj), "none recorded on the object")
 })
 
 test_that("phase_from_molecules() errors on unrecognised library names in bam_files", {
@@ -1927,7 +1917,8 @@ test_that("phase_from_molecules() excludes the 'doublet' and 'unassigned' donor 
         ref_count = Matrix::Matrix(ref, sparse = TRUE),
         alt_count = Matrix::Matrix(alt, sparse = TRUE),
         snp_info = snp_info,
-        barcode_info = barcode_info
+        barcode_info = barcode_info,
+        gene_anno = test_gene_annotation
     )
     snp_id <- snp_info(obj)$snp_id
     obj <- add_donor_snp_metadata(
@@ -1999,20 +1990,25 @@ test_that("phase_from_molecules() excludes the 'doublet' and 'unassigned' donor 
     expect_length(called_for, 1)
 })
 
-test_that("phase_from_molecules() returns x unchanged when every donor is doublet/unassigned", {
-    ref <- rbind(c(5L, 5L))
-    alt <- rbind(c(5L, 5L))
+test_that("phase_from_molecules() returns x unchanged when the only BAM holds doublet/unassigned cells", {
+    # The real donor lives in lib_B, which has no BAM, so every cell phasing
+    # could reach carries a non-donor label. Non-donor labels cannot hold
+    # donor_snp_info rows, so the XCI diagnostics sit on the real donor.
+    ref <- rbind(c(5L, 5L, 5L))
+    alt <- rbind(c(5L, 5L, 5L))
     snp_info <- data.frame(chrom = "chrX", pos = 1000L, ref = "A", alt = "G", stringsAsFactors = FALSE)
     barcode_info <- data.frame(
-        barcode = c("cell1", "cell2"),
-        donor = c("doublet", "unassigned"),
+        barcode = c("cell1", "cell2", "cell3"),
+        donor = c("doublet", "unassigned", "donor0"),
+        library_id = c("lib_A", "lib_A", "lib_B"),
         stringsAsFactors = FALSE
     )
     obj <- SNPData(
         ref_count = Matrix::Matrix(ref, sparse = TRUE),
         alt_count = Matrix::Matrix(alt, sparse = TRUE),
         snp_info = snp_info,
-        barcode_info = barcode_info
+        barcode_info = barcode_info,
+        gene_anno = test_gene_annotation
     )
     snp_id <- snp_info(obj)$snp_id
     # xci_informative needs at least one TRUE for .has_xci_diagnostics() to pass,
@@ -2021,7 +2017,7 @@ test_that("phase_from_molecules() returns x unchanged when every donor is double
         obj,
         data.frame(
             snp_id = snp_id,
-            donor = "doublet",
+            donor = "donor0",
             xci_informative = TRUE,
             allele_on_x1 = "REF",
             stringsAsFactors = FALSE
@@ -2088,8 +2084,8 @@ test_that("phase_from_molecules() phases a donor's split BAMs as if they were on
     # Confirm the pooled molecule calls match too, so each split molecule was
     # reassembled with all of its reads rather than counted once per file
     expect_equal(
-        dplyr::arrange(attr(split, "molecule_calls"), barcode, umi, snp_id),
-        dplyr::arrange(attr(single, "molecule_calls"), barcode, umi, snp_id)
+        dplyr::arrange(molecule_calls(molecules(split)), barcode, umi, snp_id),
+        dplyr::arrange(molecule_calls(molecules(single)), barcode, umi, snp_id)
     )
 })
 
@@ -2118,13 +2114,85 @@ test_that("phase_from_molecules() records the strand calibration of every BAM it
         .package = "snplet"
     )
 
-    calibration <- attr(phase_from_molecules(fixture$obj, bam_files = c(lib_A = bam)), "bam_calibration")
+    result <- phase_from_molecules(fixture$obj, bam_files = c(lib_A = bam))
+    calibration <- bam_calibration(molecules(result))
 
     # Verify the orientation applied to this file's molecules is recorded on
     # the object, so a misread strand can be diagnosed after the fact
     expect_equal(calibration$bam_file, bam)
     expect_equal(calibration$orientation, "antisense")
     expect_equal(calibration$concordance, 0.99)
+})
+
+test_that("phase_from_molecules() stores its calls, gene map and BAM paths in the molecules slot", {
+    fixture <- make_phase_fixture()
+    snp_ids <- fixture$snp_ids
+    tallies <- tibble::tibble(
+        barcode = rep(paste0("c", 1:5), each = 2),
+        umi = rep(paste0("u", 1:5), each = 2),
+        snp_id = rep(snp_ids, times = 5),
+        allele = rep(c("REF", "ALT"), times = 5),
+        n_calls = 5L
+    )
+    reads <- tibble::tibble(
+        barcode = paste0("c", 1:5),
+        umi = paste0("u", 1:5),
+        qname = paste0("read", 1:5),
+        strand = "+"
+    )
+    bam <- local_fake_bam()
+    testthat::local_mocked_bindings(
+        extract_snp_calls = function(...) list(tallies = tallies, reads = reads),
+        .infer_bam_strand_orientation = function(bam_file, ...) {
+            list(orientation = "sense", n_ts_reads = 500L, concordance = 1, n_scanned = 5000L)
+        },
+        .package = "snplet"
+    )
+
+    stored <- molecules(phase_from_molecules(fixture$obj, bam_files = c(lib_A = bam)))
+
+    # Verify calls are keyed on the cell's library as barcode_info records it
+    # (NA for this unlabelled fixture), with no donor column to go stale
+    expect_true(all(is.na(molecule_calls(stored)$library_id)))
+    expect_false("donor" %in% colnames(molecule_calls(stored)))
+    # Check every extracted (molecule, SNP) call is stored
+    expect_equal(nrow(molecule_calls(stored)), nrow(tallies))
+    # Confirm the gene map is built from the annotation stored on the object
+    expect_setequal(snp_gene_map(stored)$snp_id, snp_ids)
+    # Ensure the BAM paths are recorded as provenance
+    expect_equal(names(stored@bam_files), "lib_A")
+})
+
+test_that("phase_from_molecules() errors on an object with no stored gene annotation", {
+    fixture <- make_phase_fixture()
+    fixture$obj@gene_anno <- .empty_gene_anno()
+
+    # Ensure the caller is told to re-import, since no annotation can be passed per call
+    expect_error(phase_from_molecules(fixture$obj, bam_files = c(lib_A = "x.bam")), "stores no gene annotation")
+})
+
+test_that("phase_from_molecules() errors on an object it has already phased", {
+    fixture <- make_phase_fixture()
+    tallies <- tibble::tibble(
+        barcode = rep(paste0("c", 1:5), each = 2),
+        umi = rep(paste0("u", 1:5), each = 2),
+        snp_id = rep(fixture$snp_ids, times = 5),
+        allele = rep(c("REF", "ALT"), times = 5),
+        n_calls = 5L
+    )
+    reads <- tibble::tibble(barcode = paste0("c", 1:5), umi = paste0("u", 1:5), qname = "r", strand = "+")
+    bam <- local_fake_bam()
+    testthat::local_mocked_bindings(
+        extract_snp_calls = function(...) list(tallies = tallies, reads = reads),
+        .infer_bam_strand_orientation = function(bam_file, ...) {
+            list(orientation = "sense", n_ts_reads = 500L, concordance = 1, n_scanned = 5000L)
+        },
+        .package = "snplet"
+    )
+    once <- phase_from_molecules(fixture$obj, bam_files = c(lib_A = bam))
+
+    # Ensure a second run is refused, since the first run's molecule phase would be taken for EM phase
+    expect_error(phase_from_molecules(once, bam_files = c(lib_A = bam)), "has already run on this object")
 })
 
 test_that("phase_from_molecules() never overwrites an existing EM-derived allele_on_x1", {
@@ -2239,7 +2307,7 @@ test_that("phase_from_molecules() never overwrites an existing EM-derived allele
 # ==============================================================================
 
 # One donor, no XCI diagnostics at all: het SNPs (2 by default, or 4 for a
-# multi-block test) all assigned to GENE1 via snp_gene_map, and a zygosity
+# multi-block test) all inside GENE1 in test_gene_annotation, and a zygosity
 # source (Vireo GT) so donor_het_status_df() can resolve het status without
 # assign_xci() ever having run. 3 cells (not 2), to avoid a square
 # ref_count/alt_count matrix: Matrix::Matrix()'s rownames<- is a no-op on a
@@ -2265,7 +2333,8 @@ make_molecule_haplotype_fixture <- function(n_snps = 2) {
         ref_count = Matrix::Matrix(ref, sparse = TRUE),
         alt_count = Matrix::Matrix(alt, sparse = TRUE),
         snp_info = snp_info,
-        barcode_info = barcode_info
+        barcode_info = barcode_info,
+        gene_anno = test_gene_annotation
     )
     snp_ids <- snp_info(obj)$snp_id
     names(snp_ids) <- paste0("snp", LETTERS[seq_len(n_snps)])
@@ -2282,25 +2351,18 @@ make_molecule_haplotype_fixture <- function(n_snps = 2) {
         join_by = c("snp_id", "donor"),
         overwrite = TRUE
     )
-    snp_gene_map(obj) <- data.frame(
-        snp_id = snp_ids,
-        gene_name = "GENE1",
-        gene_strand = "+",
-        ambiguous = FALSE,
-        stringsAsFactors = FALSE
-    )
     list(obj = obj, snp_ids = snp_ids)
 }
 
-test_that("molecule_haplotype_counts() errors when the object carries no SNP-to-gene map", {
-    ref <- Matrix::Matrix(matrix(5L, 2, 2), sparse = TRUE)
-    alt <- Matrix::Matrix(matrix(5L, 2, 2), sparse = TRUE)
-    snp_info <- data.frame(chrom = "chr1", pos = c(1L, 2L), ref = "A", alt = "G")
-    barcode_info <- data.frame(barcode = c("c1", "c2"), donor = "donor0")
-    obj <- SNPData(ref_count = ref, alt_count = alt, snp_info = snp_info, barcode_info = barcode_info)
+test_that("molecule_haplotype_counts() errors on an object with no stored gene annotation", {
+    fixture <- make_molecule_haplotype_fixture()
+    fixture$obj@gene_anno <- .empty_gene_anno()
 
-    # Verify the error names the step that builds the map rather than returning an empty result
-    expect_error(molecule_haplotype_counts(obj, bam_files = c(lib_A = "fake.bam")), "no SNP-to-gene map")
+    # Verify the SNP-to-gene map is never built from anything but the stored annotation
+    expect_error(
+        molecule_haplotype_counts(fixture$obj, bam_files = c(lib_A = "fake.bam")),
+        "stores no gene annotation"
+    )
 })
 
 test_that("molecule_haplotype_counts() runs without assign_xci() ever having been called", {

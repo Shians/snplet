@@ -10,7 +10,8 @@ detect_chr_style(chr_names)
 \item{chr_names}{Character vector of chromosome names}
 }
 \value{
-Character string indicating the detected style
+Character string indicating the detected style. Errors if the names mix more than
+  one recognised style (e.g. both "chrX" and "X").
 }
 \description{
 Automatically detects the chromosome naming convention used in a character vector.

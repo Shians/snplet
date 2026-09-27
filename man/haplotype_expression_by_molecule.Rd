@@ -131,26 +131,21 @@ is visible rather than silently averaged in.
 \section{Where the inputs come from}{
 
 Beyond \code{x}, there is nothing to supply. Both inputs this function needs
-are already on the object:
+are in \code{molecules(x)}, the
+\code{\link[=MoleculeCalls-class]{MoleculeCalls}} object
+\code{\link{phase_from_molecules}} stored when it read the BAM files:
 
 \describe{
-  \item{The per-molecule allele calls}{Read from the
-    \code{"molecule_calls"} attribute \code{\link{phase_from_molecules}} left
-    there when it extracted them from the BAM files. They are an attribute
-    rather than a slot because they are BAM-derived working data keyed by
-    molecule, not part of the object's SNP-by-cell counts, and so are lost
-    by operations that rebuild the object: pass the object
-    \code{phase_from_molecules()} returned, and subset \emph{before} that call
-    rather than after.}
-  \item{The SNP-to-gene map}{Read from \code{\link{snp_gene_map}}, built by
-    \code{\link{import_cellsnp}} from the gene annotation it was given, and
-    carried through subsetting and merging with its SNPs. It is distinct
-    from \code{snp_info$gene_name}, which comma-joins overlapping genes into
-    one label: attributing a molecule at a SNP overlapping two genes needs
-    each candidate as its own row with its strand. An annotation without a
-    \code{strand} column cannot supply that, so an object imported with one
-    has an empty map; \code{snp_gene_map(x) <- assign_snp_genes(snp_info(x),
-    gene_anno)} fills it in without re-importing.}
+  \item{The per-molecule allele calls}{Keyed on (\code{library_id},
+    \code{barcode}); each call's donor is looked up from
+    \code{barcode_info(x)}. The calls survive subsetting unchanged, and only
+    those for cells and SNPs still in \code{x} are counted, so \code{x} can
+    be filtered after \code{phase_from_molecules()} as freely as before it.}
+  \item{The SNP-to-gene map}{Built by \code{phase_from_molecules()} from
+    the annotation stored at import, \code{gene_anno(x)}. It is distinct from
+    \code{snp_info$gene_name}, which comma-joins overlapping genes into one
+    label: attributing a molecule at a SNP overlapping two genes needs each
+    candidate as its own row with its strand.}
 }
 
 A missing input is an error naming the step that produces it, rather than a
@@ -212,10 +207,6 @@ snp_data <- assign_xci(snp_data)
 snp_data <- phase_from_molecules(snp_data, bam_files = c(lib1 = "lib1.bam"))
 
 hap <- haplotype_expression_by_molecule(snp_data)
-
-# Only needed if the annotation given to import_cellsnp() had no strand
-# column, leaving snp_gene_map(snp_data) empty
-snp_gene_map(snp_data) <- assign_snp_genes(snp_info(snp_data), gene_anno)
 }
 }
 \seealso{

@@ -63,6 +63,15 @@
 #'   per-donor \code{p} and \code{rho}. \code{FALSE} corrects across the whole
 #'   table at once, appropriate when donors are replicates of one experiment.
 #'   Ignored when \code{x} carries no \code{donor} column.
+#' @param count_source Character scalar, one of \code{"auto"},
+#'   \code{"molecule"}, or \code{"snp"} (default \code{"auto"}). Where a
+#'   SNPData's gene-level counts come from: \code{"molecule"} counts the
+#'   read-backed molecules \code{\link{phase_from_molecules}} stored
+#'   (\code{\link{haplotype_expression_by_molecule}}), \code{"snp"} the
+#'   per-SNP reads (\code{\link{haplotype_expression}}), and \code{"auto"}
+#'   molecules when they are stored and per-SNP reads otherwise. Naming it
+#'   makes a result reproducible from the call alone. Ignored for a
+#'   data.frame.
 #'
 #' @return For a data.frame, the input with three columns appended; for a
 #'   SNPData, the gene-level count table those same columns are appended to
@@ -115,208 +124,245 @@
 #' # Uses read-backed molecule counts automatically once they are available
 #' snp_data <- phase_from_molecules(snp_data, bam_files = c(lib1 = "lib1.bam"))
 #' escape_result <- test_escape(snp_data)
+#'
+#' # Or name the counting method, e.g. per-SNP reads despite stored molecules
+#' escape_result <- test_escape(snp_data, count_source = "snp")
 #' }
 setGeneric(
     "test_escape",
-    function(x, p = NULL, rho = NULL, by_donor = TRUE) {
+    function(x, p = NULL, rho = NULL, by_donor = TRUE, count_source = c("auto", "molecule", "snp")) {
         standardGeneric("test_escape")
     }
 )
 
 #' @rdname test_escape
-setMethod("test_escape", signature(x = "data.frame"), function(x, p = NULL, rho = NULL, by_donor = TRUE) {
-    # The data.frame method has no donor fit to read a null off, so it falls
-    # back to fixed values rather than erroring: it is the method for counts
-    # that came from somewhere other than assign_xci().
-    if (is.null(p)) {
-        p <- 0.10
-    }
-    if (is.null(rho)) {
-        rho <- 0.05
-    }
-
-    req_cols <- c("active_count", "inactive_count")
-    missing_cols <- setdiff(req_cols, colnames(x))
-    if (length(missing_cols) > 0) {
-        missing_list <- paste0(missing_cols, collapse = ", ")
-        stop(glue::glue("Missing required columns: {missing_list}"))
-    }
-
-    # validate that all counts are non-negative
-    negative_active <- which(x$active_count < 0)
-    if (length(negative_active) > 0) {
-        if (length(negative_active) <= 5) {
-            row_list <- paste0(negative_active, collapse = ", ")
-        } else {
-            row_list <- paste0(paste0(head(negative_active, 5), collapse = ", "), ", ...")
+setMethod(
+    "test_escape",
+    signature(x = "data.frame"),
+    function(
+        x,
+        p = NULL,
+        rho = NULL,
+        by_donor = TRUE,
+        count_source = c("auto", "molecule", "snp")
+    ) {
+        # The data.frame method has no donor fit to read a null off, so it falls
+        # back to fixed values rather than erroring: it is the method for counts
+        # that came from somewhere other than assign_xci().
+        if (is.null(p)) {
+            p <- 0.10
         }
-        stop(glue::glue("Invalid data: active_count < 0 in row(s): {row_list}"))
-    }
-
-    negative_inactive <- which(x$inactive_count < 0)
-    if (length(negative_inactive) > 0) {
-        if (length(negative_inactive) <= 5) {
-            row_list <- paste0(negative_inactive, collapse = ", ")
-        } else {
-            row_list <- paste0(paste0(head(negative_inactive, 5), collapse = ", "), ", ...")
+        if (is.null(rho)) {
+            rho <- 0.05
         }
-        stop(glue::glue("Invalid data: inactive_count < 0 in row(s): {row_list}"))
+
+        req_cols <- c("active_count", "inactive_count")
+        missing_cols <- setdiff(req_cols, colnames(x))
+        if (length(missing_cols) > 0) {
+            missing_list <- paste0(missing_cols, collapse = ", ")
+            stop(glue::glue("Missing required columns: {missing_list}"))
+        }
+
+        # validate that all counts are non-negative
+        negative_active <- which(x$active_count < 0)
+        if (length(negative_active) > 0) {
+            if (length(negative_active) <= 5) {
+                row_list <- paste0(negative_active, collapse = ", ")
+            } else {
+                row_list <- paste0(paste0(head(negative_active, 5), collapse = ", "), ", ...")
+            }
+            stop(glue::glue("Invalid data: active_count < 0 in row(s): {row_list}"))
+        }
+
+        negative_inactive <- which(x$inactive_count < 0)
+        if (length(negative_inactive) > 0) {
+            if (length(negative_inactive) <= 5) {
+                row_list <- paste0(negative_inactive, collapse = ", ")
+            } else {
+                row_list <- paste0(paste0(head(negative_inactive, 5), collapse = ", "), ", ...")
+            }
+            stop(glue::glue("Invalid data: inactive_count < 0 in row(s): {row_list}"))
+        }
+
+        inactive_count <- x$inactive_count
+        coverage <- ceiling(x$active_count + x$inactive_count)
+
+        # Recycle up front so that subsetting to the testable rows below keeps p and
+        # rho aligned with the counts, whether they arrived as a scalar or per row.
+        p <- rep_len(p, nrow(x))
+        rho <- rep_len(rho, nrow(x))
+
+        # A row with no reads carries no evidence either way, and a donor whose fit
+        # produced no p or rho has no null to test against. Both get NA rather than
+        # a p-value of 1: p.adjust() drops NAs from the denominator, so an
+        # untestable row no longer costs the testable ones power.
+        testable <- coverage > 0 & !is.na(p) & !is.na(rho)
+        p_val <- rep(NA_real_, nrow(x))
+        if (any(testable)) {
+            p_val[testable] <- betabinom_test(
+                inactive_count[testable],
+                coverage[testable],
+                p[testable],
+                rho[testable],
+                alternative = "greater"
+            )
+        }
+
+        result <- dplyr::mutate(x, coverage = coverage, p_val = p_val)
+
+        # Correcting within a donor keeps the correction on the same footing as the
+        # per-donor p and rho above: one experiment per donor.
+        if (by_donor && "donor" %in% colnames(result)) {
+            result <- dplyr::mutate(result, adj_p_val = p.adjust(p_val, method = "BH"), .by = donor)
+        } else {
+            result <- dplyr::mutate(result, adj_p_val = p.adjust(p_val, method = "BH"))
+        }
+
+        result
     }
-
-    inactive_count <- x$inactive_count
-    coverage <- ceiling(x$active_count + x$inactive_count)
-
-    # Recycle up front so that subsetting to the testable rows below keeps p and
-    # rho aligned with the counts, whether they arrived as a scalar or per row.
-    p <- rep_len(p, nrow(x))
-    rho <- rep_len(rho, nrow(x))
-
-    # A row with no reads carries no evidence either way, and a donor whose fit
-    # produced no p or rho has no null to test against. Both get NA rather than
-    # a p-value of 1: p.adjust() drops NAs from the denominator, so an
-    # untestable row no longer costs the testable ones power.
-    testable <- coverage > 0 & !is.na(p) & !is.na(rho)
-    p_val <- rep(NA_real_, nrow(x))
-    if (any(testable)) {
-        p_val[testable] <- betabinom_test(
-            inactive_count[testable],
-            coverage[testable],
-            p[testable],
-            rho[testable],
-            alternative = "greater"
-        )
-    }
-
-    result <- dplyr::mutate(x, coverage = coverage, p_val = p_val)
-
-    # Correcting within a donor keeps the correction on the same footing as the
-    # per-donor p and rho above: one experiment per donor.
-    if (by_donor && "donor" %in% colnames(result)) {
-        result <- dplyr::mutate(result, adj_p_val = p.adjust(p_val, method = "BH"), .by = donor)
-    } else {
-        result <- dplyr::mutate(result, adj_p_val = p.adjust(p_val, method = "BH"))
-    }
-
-    result
-})
+)
 
 #' @rdname test_escape
 #' @include SNPData-class.R
-setMethod("test_escape", signature(x = "SNPData"), function(x, p = NULL, rho = NULL, by_donor = TRUE) {
-    if (!.has_xci_diagnostics(x)) {
-        stop("No stored XCI diagnostics found. Run assign_xci(x) first.")
-    }
-
-    counts <- .escape_counts(x)
-
-    donor_fit <- donor_info(x)
-    # Only a null the caller left to the fit needs a stored column to come
-    # from: supplying `rho` makes a missing `xci_rho` irrelevant, so the two
-    # are checked against their own arguments rather than as a pair.
-    fit_column <- c(p = "xci_median_pi_g", rho = "xci_rho")
-    needed_fit <- fit_column[c(is.null(p), is.null(rho))]
-    missing_fit <- needed_fit[!needed_fit %in% colnames(donor_fit)]
-    if (length(missing_fit) > 0) {
-        stop(
-            "donor_info(x) has no ",
-            paste(missing_fit, collapse = " or "),
-            " to take the null from; re-run assign_xci(x), or pass ",
-            paste(names(missing_fit), collapse = " and "),
-            " explicitly."
-        )
-    }
-
-    # Only the null the caller did not supply needs taking from the fit, so a
-    # column the object lacks is only ever read when it is actually wanted.
-    # The guard above has already rejected the one combination this cannot
-    # serve: a missing column whose value was not passed in.
-    stored_null <- intersect(c("xci_median_pi_g", "xci_rho"), colnames(donor_fit))
-
-    # Left join rather than filter: a donor whose fit yielded no null keeps its
-    # genes in the output with NA p_val, so it reads as untested rather than
-    # silently vanishing.
-    if ("donor" %in% colnames(counts)) {
-        counts <- dplyr::left_join(
-            counts,
-            dplyr::select(donor_fit, dplyr::all_of(c("donor", stored_null))),
-            by = "donor"
-        )
-    } else {
-        # No donor column means a single-donor object; its sole fit applies to
-        # every row.
-        for (column in stored_null) {
-            counts[[column]] <- dplyr::first(donor_fit[[column]])
+setMethod(
+    "test_escape",
+    signature(x = "SNPData"),
+    function(
+        x,
+        p = NULL,
+        rho = NULL,
+        by_donor = TRUE,
+        count_source = c("auto", "molecule", "snp")
+    ) {
+        count_source <- match.arg(count_source)
+        if (!.has_xci_diagnostics(x)) {
+            stop("No stored XCI diagnostics found. Run assign_xci(x) first.")
         }
-    }
 
-    # A null the caller supplied overrides the stored fit entirely; one they
-    # did not comes from the columns just attached, which the guard guarantees
-    # are present in that case.
-    if (is.null(p)) {
-        p <- counts$xci_median_pi_g
-    }
-    if (is.null(rho)) {
-        rho <- counts$xci_rho
-    }
+        counts <- .escape_counts(x, count_source)
 
-    # Reported per donor where there are donors to name; a single-donor object
-    # has no donor column to report against, so the warning is only that some
-    # rows are untestable.
-    unfitted_rows <- is.na(p) | is.na(rho)
-    if (any(unfitted_rows)) {
+        donor_fit <- donor_info(x)
+        # Only a null the caller left to the fit needs a stored column to come
+        # from: supplying `rho` makes a missing `xci_rho` irrelevant, so the two
+        # are checked against their own arguments rather than as a pair.
+        fit_column <- c(p = "xci_median_pi_g", rho = "xci_rho")
+        needed_fit <- fit_column[c(is.null(p), is.null(rho))]
+        missing_fit <- needed_fit[!needed_fit %in% colnames(donor_fit)]
+        if (length(missing_fit) > 0) {
+            stop(
+                "donor_info(x) has no ",
+                paste(missing_fit, collapse = " or "),
+                " to take the null from; re-run assign_xci(x), or pass ",
+                paste(names(missing_fit), collapse = " and "),
+                " explicitly."
+            )
+        }
+
+        # Only the null the caller did not supply needs taking from the fit, so a
+        # column the object lacks is only ever read when it is actually wanted.
+        # The guard above has already rejected the one combination this cannot
+        # serve: a missing column whose value was not passed in.
+        stored_null <- intersect(c("xci_median_pi_g", "xci_rho"), colnames(donor_fit))
+
+        # Left join rather than filter: a donor whose fit yielded no null keeps its
+        # genes in the output with NA p_val, so it reads as untested rather than
+        # silently vanishing.
         if ("donor" %in% colnames(counts)) {
-            unfitted <- unique(counts$donor[unfitted_rows])
-            logger::log_warn(
-                "No stored null for donor(s) {paste(unfitted, collapse = ', ')}; ",
-                "their genes are returned untested (NA p_val)"
+            counts <- dplyr::left_join(
+                counts,
+                dplyr::select(donor_fit, dplyr::all_of(c("donor", stored_null))),
+                by = "donor"
             )
         } else {
-            logger::log_warn(
-                "No stored null available; {sum(unfitted_rows)} gene(s) are returned untested (NA p_val)"
-            )
+            # No donor column means a single-donor object; its sole fit applies to
+            # every row.
+            for (column in stored_null) {
+                counts[[column]] <- dplyr::first(donor_fit[[column]])
+            }
         }
+
+        # A null the caller supplied overrides the stored fit entirely; one they
+        # did not comes from the columns just attached, which the guard guarantees
+        # are present in that case.
+        if (is.null(p)) {
+            p <- counts$xci_median_pi_g
+        }
+        if (is.null(rho)) {
+            rho <- counts$xci_rho
+        }
+
+        # Reported per donor where there are donors to name; a single-donor object
+        # has no donor column to report against, so the warning is only that some
+        # rows are untestable.
+        unfitted_rows <- is.na(p) | is.na(rho)
+        if (any(unfitted_rows)) {
+            if ("donor" %in% colnames(counts)) {
+                unfitted <- unique(counts$donor[unfitted_rows])
+                logger::log_warn(
+                    "No stored null for donor(s) {paste(unfitted, collapse = ', ')}; ",
+                    "their genes are returned untested (NA p_val)"
+                )
+            } else {
+                logger::log_warn(
+                    "No stored null available; {sum(unfitted_rows)} gene(s) are returned untested (NA p_val)"
+                )
+            }
+        }
+
+        # Dropped by name rather than by negation so that a column the object never
+        # had is simply absent, not an error.
+        test_escape(
+            dplyr::select(counts, -dplyr::any_of(c("xci_median_pi_g", "xci_rho"))),
+            p = p,
+            rho = rho,
+            by_donor = by_donor
+        )
     }
+)
 
-    # Dropped by name rather than by negation so that a column the object never
-    # had is simply absent, not an error.
-    test_escape(
-        dplyr::select(counts, -dplyr::any_of(c("xci_median_pi_g", "xci_rho"))),
-        p = p,
-        rho = rho,
-        by_donor = by_donor
-    )
-})
-
-#' Take gene-level escape counts from whichever source the object carries
+#' Take gene-level escape counts from the requested source
 #'
-#' Prefers read-backed molecule counts, which count a molecule spanning several
-#' of a gene's het SNPs once instead of once per SNP and so use every SNP's
-#' evidence, and falls back to the per-SNP counts of
-#' \code{\link{haplotype_expression}}, which elect a single representative SNP
-#' per gene. Both are returned at one row per (donor, gene).
+#' Read-backed molecule counts count a molecule spanning several of a gene's
+#' het SNPs once instead of once per SNP, and so use every SNP's evidence; the
+#' per-SNP counts of \code{\link{haplotype_expression}} elect a single
+#' representative SNP per gene. Both are returned at one row per (donor, gene).
 #'
-#' Which source was used is logged and returned as \code{count_source} rather
-#' than left implicit, since it depends on the object's state: the same call on
-#' the same data before and after \code{\link{phase_from_molecules}} gives
-#' different counts, and the column is what makes that visible in the result.
+#' \code{"auto"} takes molecules when both halves of
+#' \code{\link{phase_from_molecules}}'s output are present (its phase columns in
+#' \code{donor_snp_info} and the calls in \code{molecules(x)}) and per-SNP
+#' reads when neither is. Only one half present means the object was built by
+#' an older version or edited by hand, so it is an error rather than a silent
+#' fallback that would change the counts without saying so.
 #'
 #' @param x A SNPData object with stored XCI diagnostics, required.
+#' @param count_source Character scalar, one of \code{"auto"},
+#'   \code{"molecule"}, or \code{"snp"}, required.
 #'
 #' @return The chosen count table with a \code{count_source} column of
 #'   \code{"molecule"} or \code{"snp"}.
 #'
 #' @keywords internal
-.escape_counts <- function(x) {
-    donor_snp_info <- donor_snp_info(x)
-    has_molecules <- !is.null(attr(x, "molecule_calls")) &&
-        all(c("phase_block", "allele_on_x1") %in% colnames(donor_snp_info)) &&
-        nrow(snp_gene_map(x)) > 0
+.escape_counts <- function(x, count_source = "auto") {
+    has_phase <- all(c("phase_block", "allele_on_x1") %in% colnames(donor_snp_info(x)))
+    has_calls <- .has_molecule_calls(molecules(x))
 
-    if (has_molecules) {
+    if (count_source == "auto") {
+        if (has_phase != has_calls) {
+            stop(
+                "This object has ",
+                if (has_phase) "molecule phase but no molecule calls" else "molecule calls but no molecule phase",
+                ", so the counting method cannot be chosen automatically. Re-import the data and run ",
+                "phase_from_molecules(x, bam_files) once, or pass count_source = \"snp\"."
+            )
+        }
+        count_source <- if (has_calls) "molecule" else "snp"
+    }
+
+    if (count_source == "molecule") {
         logger::log_info("Counting escape from read-backed molecules")
         return(dplyr::mutate(haplotype_expression_by_molecule(x), count_source = "molecule"))
     }
 
-    logger::log_info("No molecule phase stored; counting escape from per-SNP reads")
+    logger::log_info("Counting escape from per-SNP reads")
     dplyr::mutate(haplotype_expression(x), count_source = "snp")
 }

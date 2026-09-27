@@ -34,7 +34,9 @@ SNPData object with an additional \code{active_x} column in
   \code{donor_info(x)$xci_skew} gives the fitted X1-active prior, here
   estimated over clonotypes rather than cells: it is the skew of the
   clonotype population the EM was fit on, which only equals cell-level
-  skew if clonotypes carry comparable cell counts.
+  skew if clonotypes carry comparable cell counts. As with
+  \code{\link{assign_xci}}, it errors once
+  \code{\link{phase_from_molecules}} has run on \code{x}.
 }
 \description{
 Identifies which X chromosome is active in female cells based on allelic

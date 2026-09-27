@@ -30,6 +30,17 @@ test_barcode_info <- data.frame(
     stringsAsFactors = FALSE
 )
 
+# One molecule call at snp_1 in cell_2's barcode, for tests that only need the
+# molecules slot to be non-empty
+test_molecule_calls <- tibble::tibble(
+    library_id = NA_character_,
+    barcode = "cell_2",
+    umi = "u1",
+    snp_id = "snp_1",
+    allele = "REF",
+    transcript_strand = "+"
+)
+
 # Create test SNPData object using the standard fixtures above
 create_test_snpdata <- function() {
     SNPData(
@@ -177,8 +188,6 @@ test_that("library_info() derives one row per labelled library", {
     expect_equal(library_info(snp_data)$library_id, "lib_A")
     # Check n_cells counts the cells that library actually contributed
     expect_equal(library_info(snp_data)$n_cells, 2L)
-    # Ensure BAM paths start empty, to be recorded later
-    expect_equal(library_info(snp_data)$bam_files, list(character(0)))
 })
 
 test_that("library_info() is empty when no cell carries a library_id", {
@@ -189,102 +198,226 @@ test_that("library_info() is empty when no cell carries a library_id", {
     expect_equal(nrow(library_info(snp_data)), 0L)
 })
 
-test_that("add_library_bams() records paths against the named library", {
+test_that("SNPData() starts with an empty molecules slot", {
+    snp_data <- create_test_snpdata()
+
+    # Verify a freshly built object holds an empty MoleculeCalls, not NULL
+    expect_s4_class(molecules(snp_data), "MoleculeCalls")
+    # Check it carries no calls until phase_from_molecules() fills it
+    expect_equal(nrow(molecule_calls(molecules(snp_data))), 0L)
+})
+
+test_that("[() passes the molecules slot through unchanged", {
+    snp_data <- create_test_snpdata()
+    snp_data@molecules <- MoleculeCalls(calls = test_molecule_calls)
+
+    result <- snp_data["snp_1", "cell_1"]
+
+    # Confirm subsetting keeps every call, including those for the dropped SNP
+    # and cell, since counting functions only use calls the object still holds
+    expect_identical(molecules(result), molecules(snp_data))
+})
+
+test_that("rename_donor() keeps the molecules slot", {
+    snp_data <- create_test_snpdata()
+    snp_data@molecules <- MoleculeCalls(calls = test_molecule_calls)
+
+    result <- rename_donor(snp_data, c(PatientA = "donor_1"))
+
+    # Verify relabelling donors leaves the calls, keyed on library and barcode, intact
+    expect_identical(molecules(result), molecules(snp_data))
+})
+
+# A two-cell object with barcodes but no library labels, holding one molecule
+# call for each cell, as phase_from_molecules() would leave an unlabelled object
+create_phased_test_snpdata <- function(barcodes = c("AAA", "CCC")) {
+    barcode_info_barcoded <- test_barcode_info
+    barcode_info_barcoded$barcode <- barcodes
+    snp_data <- SNPData(
+        ref_count = test_ref_count,
+        alt_count = test_alt_count,
+        snp_info = test_snp_info,
+        barcode_info = barcode_info_barcoded
+    )
+    snp_data@molecules <- MoleculeCalls(
+        calls = tibble::tibble(
+            library_id = NA_character_,
+            barcode = barcodes,
+            umi = c("u1", "u2"),
+            snp_id = "snp_1",
+            allele = "REF",
+            transcript_strand = "+"
+        )
+    )
+    snp_data
+}
+
+test_that("barcode_info<- re-keys molecule calls when library_id changes", {
+    snp_data <- create_phased_test_snpdata()
+    updated <- barcode_info(snp_data)
+    updated$library_id <- c("lib_A", "lib_B")
+
+    barcode_info(snp_data) <- updated
+
+    # Verify each call follows its cell to the new library label
+    expect_equal(molecule_calls(molecules(snp_data))$library_id, c("lib_A", "lib_B"))
+})
+
+test_that("add_barcode_metadata() re-keys molecule calls when it overwrites library_id", {
+    snp_data <- create_phased_test_snpdata()
+
+    result <- add_barcode_metadata(
+        snp_data,
+        data.frame(cell_id = c("cell_1", "cell_2"), library_id = "lib_A"),
+        join_by = "cell_id",
+        overwrite = TRUE
+    )
+
+    # Confirm the metadata route re-keys calls the same way as barcode_info<-
+    expect_equal(molecule_calls(molecules(result))$library_id, c("lib_A", "lib_A"))
+})
+
+test_that("barcode_info<- re-keys molecule calls when a barcode changes", {
+    snp_data <- create_phased_test_snpdata()
+    updated <- barcode_info(snp_data)
+    updated$barcode <- c("AAA-1", "CCC-1")
+
+    barcode_info(snp_data) <- updated
+
+    # Verify the calls take the new barcodes, so they still match their cells
+    expect_equal(molecule_calls(molecules(snp_data))$barcode, c("AAA-1", "CCC-1"))
+})
+
+test_that("re-keying drops molecule calls for cells no longer in the object", {
+    snp_data <- create_phased_test_snpdata()[, "cell_1"]
+    updated <- barcode_info(snp_data)
+    updated$library_id <- "lib_A"
+
+    barcode_info(snp_data) <- updated
+
+    # Check that only the remaining cell's call is kept, so the dropped cell's
+    # call cannot later match a cell that takes over its old key
+    expect_equal(molecule_calls(molecules(snp_data))$barcode, "AAA")
+})
+
+test_that("barcode_info<- refuses to give two cells one key while molecule calls are stored", {
+    snp_data <- create_phased_test_snpdata(barcodes = c("AAA", "AAA"))
+    snp_data@molecules@calls$library_id <- c("lib_A", "lib_B")
+    snp_data@barcode_info$library_id <- c("lib_A", "lib_B")
+    updated <- barcode_info(snp_data)
+    updated$library_id <- "lib_A"
+
+    # Ensure calls are never left unable to tell two cells apart
+    expect_error(barcode_info(snp_data) <- updated, "same \\(library_id, barcode\\) pair")
+})
+
+test_that("updateObject() moves pre-slot molecule data into the molecules slot", {
     barcode_info_labelled <- test_barcode_info
-    barcode_info_labelled$library_id <- c("lib_A", "lib_A")
+    barcode_info_labelled$barcode <- c("AAA", "CCC")
+    barcode_info_labelled$library_id <- "lib_A"
     snp_data <- SNPData(
         ref_count = test_ref_count,
         alt_count = test_alt_count,
         snp_info = test_snp_info,
         barcode_info = barcode_info_labelled
     )
+    legacy <- snp_data
+    # Rebuild the shape an older version saved: no molecules slot, calls keyed
+    # on donor in an attribute, and BAM paths in library_info
+    attr(legacy, "molecules") <- NULL
+    attr(legacy, "molecule_calls") <- tibble::tibble(
+        donor = "donor_1",
+        barcode = "CCC",
+        umi = "u1",
+        snp_id = "snp_1",
+        allele = "REF",
+        transcript_strand = "+"
+    )
+    legacy@library_info$bam_files <- list("a.bam")
 
-    result <- add_library_bams(snp_data, list(lib_A = c("a.bam", "b.bam")))
+    updated <- updateObject(legacy)
 
-    # Verify several BAM files can be recorded for one library, since a
-    # library's reads may be split across files
-    expect_equal(library_info(result)$bam_files[[1]], c("a.bam", "b.bam"))
+    # Verify the calls moved into the slot and were keyed on the cell's library
+    expect_equal(molecule_calls(molecules(updated))$library_id, "lib_A")
+    expect_false("donor" %in% colnames(molecule_calls(molecules(updated))))
+    # Check the recorded BAM paths became provenance on the MoleculeCalls
+    expect_equal(molecules(updated)@bam_files, list(lib_A = "a.bam"))
+    expect_false("bam_files" %in% colnames(library_info(updated)))
+    # Ensure the old attribute is removed rather than left to go stale
+    expect_null(attr(updated, "molecule_calls"))
 })
 
-test_that("add_library_bams() unions with paths already recorded", {
-    barcode_info_labelled <- test_barcode_info
-    barcode_info_labelled$library_id <- c("lib_A", "lib_A")
-    snp_data <- SNPData(
+test_gene_annotation <- data.frame(
+    chrom = c("chr1", "chr1"),
+    start = c(50, 150),
+    end = c(120, 250),
+    gene_name = c("GENE1", "GENE2"),
+    strand = c("+", "-"),
+    attributes = c("ID=GENE1", "ID=GENE2"),
+    stringsAsFactors = FALSE
+)
+
+create_annotated_snpdata <- function(gene_anno = test_gene_annotation) {
+    SNPData(
         ref_count = test_ref_count,
         alt_count = test_alt_count,
         snp_info = test_snp_info,
-        barcode_info = barcode_info_labelled
+        barcode_info = test_barcode_info,
+        gene_anno = gene_anno
     )
-    snp_data <- add_library_bams(snp_data, c(lib_A = "a.bam"))
+}
 
-    result <- add_library_bams(snp_data, c(lib_A = "b.bam"))
+test_that("SNPData() stores the gene annotation trimmed to its gene-body columns", {
+    stored <- gene_anno(create_annotated_snpdata())
 
-    # Verify a second call adds to the record rather than replacing it, and
-    # does not duplicate a path already present
-    expect_equal(result %>% library_info() %>% dplyr::pull(bam_files) %>% .[[1]], c("a.bam", "b.bam"))
-    expect_equal(
-        add_library_bams(snp_data, c(lib_A = "a.bam")) %>%
-            library_info() %>%
-            dplyr::pull(bam_files) %>%
-            .[[1]],
-        "a.bam"
-    )
+    # Verify only the gene-body columns are kept, strand included
+    expect_equal(colnames(stored), c("chrom", "start", "end", "gene_name", "strand"))
+    # Check every gene is kept as given
+    expect_equal(stored$gene_name, c("GENE1", "GENE2"))
 })
 
-test_that("add_library_bams() replaces stored paths when overwrite is TRUE", {
-    barcode_info_labelled <- test_barcode_info
-    barcode_info_labelled$library_id <- c("lib_A", "lib_A")
-    snp_data <- SNPData(
-        ref_count = test_ref_count,
-        alt_count = test_alt_count,
-        snp_info = test_snp_info,
-        barcode_info = barcode_info_labelled
-    )
-    snp_data <- add_library_bams(snp_data, c(lib_A = "a.bam"))
-
-    result <- add_library_bams(snp_data, c(lib_A = "b.bam"), overwrite = TRUE)
-
-    # Confirm overwrite discards the previous record rather than unioning
-    expect_equal(library_info(result)$bam_files[[1]], "b.bam")
+test_that("SNPData() stores an empty gene annotation when none is given", {
+    # Verify an unannotated object reports no genes rather than NULL
+    expect_equal(nrow(gene_anno(create_test_snpdata())), 0)
 })
 
-test_that("add_library_bams() errors on a library absent from the object", {
-    barcode_info_labelled <- test_barcode_info
-    barcode_info_labelled$library_id <- c("lib_A", "lib_A")
-    snp_data <- SNPData(
-        ref_count = test_ref_count,
-        alt_count = test_alt_count,
-        snp_info = test_snp_info,
-        barcode_info = barcode_info_labelled
-    )
+test_that("SNPData() errors on a gene annotation without strand", {
+    unstranded <- test_gene_annotation[, c("chrom", "start", "end", "gene_name")]
 
-    # Verify a path cannot be filed against a library the object doesn't hold,
-    # which would otherwise sit unread and look like it had been recorded
-    expect_error(
-        add_library_bams(snp_data, c(lib_B = "b.bam")),
-        "not found in library_info"
-    )
+    # Ensure strand is required, since the molecule functions build their gene map from this copy
+    expect_error(create_annotated_snpdata(unstranded), "missing required column\\(s\\): strand")
 })
 
-test_that("recorded BAM paths survive subsetting", {
-    barcode_info_labelled <- test_barcode_info
-    barcode_info_labelled$library_id <- c("lib_A", "lib_A")
-    snp_data <- SNPData(
-        ref_count = test_ref_count,
-        alt_count = test_alt_count,
-        snp_info = test_snp_info,
-        barcode_info = barcode_info_labelled
-    )
-    snp_data <- add_library_bams(snp_data, c(lib_A = "a.bam"))
+test_that("SNPData() errors on a gene strand other than + or -", {
+    unstranded_gene <- test_gene_annotation
+    unstranded_gene$strand <- c(".", NA)
 
-    result <- snp_data[1, ]
-
-    # Verify subsetting rebuilds the object through the constructor without
-    # losing the paths, which derive-from-cells alone would silently drop
-    expect_equal(library_info(result)$bam_files[[1]], "a.bam")
+    # Ensure each offending value is named, NA included, rather than the gene silently losing its molecules
+    expect_error(create_annotated_snpdata(unstranded_gene), "found: \"\\.\", NA")
 })
 
-test_that("a library that loses all of its cells loses its recorded paths", {
+test_that("[() and rename_donor() keep the whole gene annotation", {
+    snp_data <- create_annotated_snpdata()
+
+    # Verify subsetting to one SNP keeps every gene, not just those it overlaps
+    expect_identical(gene_anno(snp_data[1, ]), gene_anno(snp_data))
+    # Check relabelling donors leaves the annotation in place
+    expect_identical(gene_anno(rename_donor(snp_data, c(PatientA = "donor_1"))), gene_anno(snp_data))
+})
+
+test_that("updateObject() gives a pre-annotation object an empty gene annotation", {
+    legacy <- create_annotated_snpdata()
+    # Rebuild the shape an older version saved: no gene_anno slot
+    attr(legacy, "gene_anno") <- NULL
+
+    updated <- updateObject(legacy)
+
+    # Verify the slot now exists, and is empty since there is nothing to recover
+    expect_true(methods::.hasSlot(updated, "gene_anno"))
+    expect_equal(nrow(gene_anno(updated)), 0)
+})
+
+test_that("a library that loses all of its cells loses its library_info row", {
     barcode_info_labelled <- test_barcode_info
     barcode_info_labelled$library_id <- c("lib_A", "lib_B")
     snp_data <- SNPData(
@@ -293,14 +426,11 @@ test_that("a library that loses all of its cells loses its recorded paths", {
         snp_info = test_snp_info,
         barcode_info = barcode_info_labelled
     )
-    snp_data <- add_library_bams(snp_data, c(lib_A = "a.bam", lib_B = "b.bam"))
-
     result <- snp_data[, 1]
 
     # Confirm library_info tracks the libraries actually present: lib_B has no
-    # cells left, so it has no row and its path goes with it
+    # cells left, so it has no row
     expect_equal(library_info(result)$library_id, "lib_A")
-    expect_equal(library_info(result)$bam_files[[1]], "a.bam")
 })
 
 test_that("barcode_info<- re-derives library_info when library_id changes", {
@@ -312,8 +442,6 @@ test_that("barcode_info<- re-derives library_info when library_id changes", {
         snp_info = test_snp_info,
         barcode_info = barcode_info_labelled
     )
-    snp_data <- add_library_bams(snp_data, c(lib_A = "a.bam"))
-
     updated <- barcode_info(snp_data)
     updated$library_id <- c("lib_A", "lib_B")
     barcode_info(snp_data) <- updated
@@ -321,11 +449,6 @@ test_that("barcode_info<- re-derives library_info when library_id changes", {
     # Verify the new library gains a row rather than leaving library_info
     # describing libraries the cells no longer belong to
     expect_equal(library_info(snp_data)$library_id, c("lib_A", "lib_B"))
-    # Check the surviving library keeps its recorded path
-    expect_equal(library_info(snp_data)$bam_files[[1]], "a.bam")
-    # Ensure the newly named library starts with no paths rather than
-    # inheriting another library's
-    expect_equal(library_info(snp_data)$bam_files[[2]], character(0))
 })
 
 test_that("SNPData() coerces a non-character library_id to character", {
@@ -380,6 +503,51 @@ test_that("[() subsetting by name returns SNPData object with correct dimensions
     expect_s4_class(subset_data, "SNPData")
     # Check that named subset has correct dimensions
     expect_equal(dim(subset_data), c(1, 1))
+})
+
+test_that("[() subsetting SNPs by name keeps snp_info aligned with the matrices", {
+    snp_data <- create_test_snpdata()
+
+    subset_data <- snp_data[c("snp_2", "snp_1"), ]
+
+    # Verify snp_info rows follow the requested names, not NA rows
+    expect_equal(snp_info(subset_data)$snp_id, c("snp_2", "snp_1"))
+    # Confirm the matrix rows carry the counts of the named SNPs
+    expect_equal(as.numeric(alt_count(subset_data)["snp_2", ]), c(2, 4))
+})
+
+test_that("[() subsetting cells by name keeps barcode_info aligned with the matrices", {
+    snp_data <- create_test_snpdata()
+
+    subset_data <- snp_data[, "cell_2"]
+
+    # Verify barcode_info metadata is carried over rather than set to NA
+    expect_equal(barcode_info(subset_data)$clonotype, "clonotype_2")
+    # Confirm the matrix column matches the named cell
+    expect_equal(colnames(subset_data), "cell_2")
+})
+
+test_that("[() errors on SNP names that are not in the object", {
+    snp_data <- create_test_snpdata()
+
+    # Ensure an unknown name errors instead of producing an NA row
+    expect_error(snp_data["snp_missing", ], "SNP index not found: snp_missing")
+})
+
+test_that("[() errors on out-of-range cell positions", {
+    snp_data <- create_test_snpdata()
+
+    # Ensure an out-of-range position errors instead of producing an NA row
+    expect_error(snp_data[, 3], "cell index not found: 3")
+})
+
+test_that("[() subsetting with negative indices drops the named positions", {
+    snp_data <- create_test_snpdata()
+
+    subset_data <- snp_data[-1, ]
+
+    # Confirm negative indexing still excludes rows as in base R
+    expect_equal(snp_info(subset_data)$snp_id, "snp_2")
 })
 
 test_that("[() ignores drop parameter and always returns SNPData object", {
@@ -653,6 +821,20 @@ test_that("donor_info() auto-derives one row per distinct donor in barcode_info"
 
     # Verify the single donor in test_barcode_info produces one donor_info row
     expect_equal(donor_info(snp_data)$donor, "donor_1")
+})
+
+test_that("donor_info() omits the doublet and unassigned labels", {
+    barcode_info <- test_barcode_info
+    barcode_info$donor <- c("doublet", "unassigned")
+    snp_data <- SNPData(
+        alt_count = test_alt_count,
+        ref_count = test_ref_count,
+        snp_info = test_snp_info,
+        barcode_info = barcode_info
+    )
+
+    # Verify neither non-donor label gets a donor_info row
+    expect_equal(nrow(donor_info(snp_data)), 0)
 })
 
 test_that("donor_snp_info() defaults to an empty tibble with the expected columns", {

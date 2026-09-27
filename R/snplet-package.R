@@ -7,8 +7,8 @@
 #'
 #' @section Typical workflow:
 #' \enumerate{
-#'   \item Import data with \code{\link{import_cellsnp}} (optionally merge multiple runs with
-#'     \code{\link{merge_snpdata}}).
+#'   \item Import data with \code{\link{import_cellsnp}}, or several runs and libraries at once
+#'     with \code{\link{import_cellsnp_libraries}}.
 #'   \item Filter SNPs and cells with \code{\link{filter_snps}} and \code{\link{filter_barcodes}}.
 #'   \item Aggregate counts with \code{\link{barcode_count_df}}, \code{\link{donor_count_df}}, or
 #'     \code{\link{clonotype_count_df}}, and visualise with the \code{plot_*} functions.

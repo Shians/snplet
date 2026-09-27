@@ -452,6 +452,72 @@ test_that("test_escape() on a SNPData reports where the counts came from", {
     expect_equal(unique(result$count_source), "snp")
 })
 
+# Both halves of phase_from_molecules()'s output, without a BAM: the phase
+# columns in donor_snp_info (every SNP in one block), and one X1 (REF) molecule
+# per cell at geneA's SNP, attributed to geneA through the stored gene map.
+with_molecule_phase <- function(obj, calls = TRUE, phase = TRUE) {
+    snp_ids <- snp_info(obj)$snp_id
+    if (phase) {
+        obj <- add_donor_snp_metadata(
+            obj,
+            expand.grid(snp_id = snp_ids, donor = c("donor0", "donor1"), stringsAsFactors = FALSE) %>%
+                dplyr::mutate(phase_block = 1L),
+            join_by = c("snp_id", "donor"),
+            overwrite = TRUE
+        )
+    }
+    if (calls) {
+        obj@molecules <- MoleculeCalls(
+            calls = tibble::tibble(
+                library_id = NA_character_,
+                barcode = barcode_info(obj)$barcode,
+                umi = paste0("u", seq_len(ncol(obj))),
+                snp_id = snp_ids[1],
+                allele = "REF",
+                transcript_strand = "+"
+            ),
+            snp_gene_map = tibble::tibble(
+                snp_id = snp_ids,
+                gene_name = c("geneA", "geneB"),
+                gene_strand = "+",
+                ambiguous = FALSE
+            )
+        )
+    }
+    obj
+}
+
+test_that("test_escape() on a SNPData counts stored molecules by default", {
+    result <- test_escape(with_molecule_phase(make_escape_fixture()))
+
+    # Verify "auto" takes the read-backed molecules once both halves are stored
+    expect_equal(unique(result$count_source), "molecule")
+})
+
+test_that("test_escape() on a SNPData counts per-SNP reads when count_source is \"snp\"", {
+    result <- test_escape(with_molecule_phase(make_escape_fixture()), count_source = "snp")
+
+    # Confirm naming the source overrides the stored molecules
+    expect_equal(unique(result$count_source), "snp")
+})
+
+test_that("test_escape() on a SNPData errors when asked for molecules it does not have", {
+    obj <- make_escape_fixture()
+
+    # Ensure an explicit request is not quietly downgraded to per-SNP counts
+    expect_error(test_escape(obj, count_source = "molecule"), "Run phase_from_molecules")
+})
+
+test_that("test_escape() on a SNPData refuses to guess for half-phased objects", {
+    obj <- with_molecule_phase(make_escape_fixture(), calls = FALSE)
+
+    # Check that phase without calls stops "auto" rather than silently
+    # switching to per-SNP counts
+    expect_error(test_escape(obj), "cannot be chosen automatically")
+    # Verify the caller can still name a source explicitly
+    expect_equal(unique(test_escape(obj, count_source = "snp")$count_source), "snp")
+})
+
 test_that("test_escape() on a SNPData returns a donor with no stored fit untested", {
     obj <- make_escape_fixture()
     obj <- add_donor_metadata(

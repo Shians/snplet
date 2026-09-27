@@ -81,3 +81,21 @@ add_snp_gene_names <- function(snp_df, gene_anno) {
     out$.snp_row <- NULL
     out
 }
+
+#' Split comma-joined gene labels into their component genes
+#'
+#' Inverts the \code{", "} join \code{\link{add_snp_gene_names}} applies to a
+#' SNP overlapping several gene bodies, so per-gene logic can match each gene
+#' on its own rather than treating a label such as \code{"TSIX, XIST"} as a
+#' gene distinct from both.
+#'
+#' @param gene_name Character vector, required. Labels as stored in
+#'   \code{snp_info$gene_name}; \code{NA} is kept as a single \code{NA}.
+#'
+#' @return A list the length of \code{gene_name}, each element the character
+#'   vector of that label's component genes.
+#'
+#' @keywords internal
+.split_gene_label <- function(gene_name) {
+    strsplit(as.character(gene_name), ", ", fixed = TRUE)
+}

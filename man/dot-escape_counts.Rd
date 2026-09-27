@@ -2,28 +2,32 @@
 % Please edit documentation in R/test_escape.R
 \name{.escape_counts}
 \alias{.escape_counts}
-\title{Take gene-level escape counts from whichever source the object carries}
+\title{Take gene-level escape counts from the requested source}
 \usage{
-.escape_counts(x)
+.escape_counts(x, count_source = "auto")
 }
 \arguments{
 \item{x}{A SNPData object with stored XCI diagnostics, required.}
+
+\item{count_source}{Character scalar, one of \code{"auto"},
+\code{"molecule"}, or \code{"snp"}, required.}
 }
 \value{
 The chosen count table with a \code{count_source} column of
   \code{"molecule"} or \code{"snp"}.
 }
 \description{
-Prefers read-backed molecule counts, which count a molecule spanning several
-of a gene's het SNPs once instead of once per SNP and so use every SNP's
-evidence, and falls back to the per-SNP counts of
-\code{\link{haplotype_expression}}, which elect a single representative SNP
-per gene. Both are returned at one row per (donor, gene).
+Read-backed molecule counts count a molecule spanning several of a gene's
+het SNPs once instead of once per SNP, and so use every SNP's evidence; the
+per-SNP counts of \code{\link{haplotype_expression}} elect a single
+representative SNP per gene. Both are returned at one row per (donor, gene).
 }
 \details{
-Which source was used is logged and returned as \code{count_source} rather
-than left implicit, since it depends on the object's state: the same call on
-the same data before and after \code{\link{phase_from_molecules}} gives
-different counts, and the column is what makes that visible in the result.
+\code{"auto"} takes molecules when both halves of
+\code{\link{phase_from_molecules}}'s output are present (its phase columns in
+\code{donor_snp_info} and the calls in \code{molecules(x)}) and per-SNP
+reads when neither is. Only one half present means the object was built by
+an older version or edited by hand, so it is an error rather than a silent
+fallback that would change the counts without saying so.
 }
 \keyword{internal}

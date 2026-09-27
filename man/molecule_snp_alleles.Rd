@@ -34,6 +34,7 @@ SNPs a molecule spans, which those two functions take.
 }
 \seealso{
 Other molecule-level allele counting functions:
+\code{\link{MoleculeCalls-class}},
 \code{\link[=assign_snp_genes]{assign_snp_genes()}},
 \code{\link[=extract_snp_calls]{extract_snp_calls()}},
 \code{\link[=molecule_haplotype_counts]{molecule_haplotype_counts()}},

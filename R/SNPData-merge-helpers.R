@@ -157,31 +157,40 @@
     tibble::as_tibble(merged)
 }
 
-# The merged object's library_info is already derived from its cells, so only
-# the BAM paths need carrying over. They are unioned rather than given to one
-# side: two cellSNP runs over the same library legitimately share a BAM, and a
-# library present in both objects has the same reads behind it either way. A
-# path that is genuinely wrong is caught where it is used, by
-# phase_from_molecules()'s existence and duplicate checks, rather than guessed at
-# here.
-.merge_library_bams <- function(merged, x, y) {
-    if (nrow(merged@library_info) == 0) {
-        return(merged)
+# Merging only happens at import, inside import_cellsnp_libraries(), before any
+# molecule phasing, so neither object should carry molecule calls. Combining
+# them would mean reconciling two independent phasing runs, which nothing here
+# attempts, so an object that has them is refused rather than silently
+# dropping them.
+.check_no_molecule_calls <- function(x, y) {
+    if (.has_molecule_calls(molecules(x)) || .has_molecule_calls(molecules(y))) {
+        stop(
+            "merge_snpdata() cannot merge objects carrying molecule calls. Import and merge every ",
+            "run first, then run phase_from_molecules() on the combined object."
+        )
     }
-    from_x <- .lookup_bam_files(merged@library_info$library_id, library_info(x))
-    from_y <- .lookup_bam_files(merged@library_info$library_id, library_info(y))
-    merged@library_info$bam_files <- purrr::map2(from_x, from_y, union)
-    merged
+    invisible(NULL)
 }
 
-# The map is a property of the genome annotation, not of either object's cells,
-# so the two sides' rows are unioned and cut to the SNPs the merge retained. An
-# object whose annotation lacked strand contributes nothing, leaving the other's
-# rows intact rather than blanking them.
-.merge_snp_gene_map <- function(merged, x, y) {
-    combined <- dplyr::distinct(dplyr::bind_rows(snp_gene_map(x), snp_gene_map(y)))
-    merged@snp_gene_map <- combined[combined$snp_id %in% merged@snp_info$snp_id, , drop = FALSE]
-    merged
+# Runs imported together share one annotation, so the merged object keeps it.
+# Two different ones would have filled snp_info$gene_name differently for the
+# same SNP, which no choice between them can fix, so that is refused.
+.merge_gene_anno <- function(x, y) {
+    x_anno <- gene_anno(x)
+    y_anno <- gene_anno(y)
+    if (nrow(x_anno) == 0) {
+        return(y_anno)
+    }
+    if (nrow(y_anno) == 0) {
+        return(x_anno)
+    }
+    if (!identical(x_anno, y_anno)) {
+        stop(
+            "merge_snpdata() cannot merge objects imported with different gene annotations, since their ",
+            "snp_info$gene_name columns would disagree. Import every run with the same gene_annotation."
+        )
+    }
+    x_anno
 }
 
 .merge_donor_info <- function(x, y, donors_retained) {
