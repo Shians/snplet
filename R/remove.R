@@ -1,14 +1,17 @@
 #' Remove doublet cells from a SNPData object
 #'
-#' This function filters out cells that are identified as doublets from a SNPData object.
-#' Doublets are identified based on the 'donor' column in the barcode_info slot, where
-#' cells labelled as 'doublet' are removed.
+#' Removes cells whose \code{donor} in \code{barcode_info} is \code{"doublet"}:
+#' barcodes Vireo judged to hold two cells from different donors. Their reads
+#' mix two genotypes, so they are unreliable at every level, including
+#' per-barcode.
 #'
 #' @param x A SNPData object, required.
 #' @param drop_na Logical (default \code{TRUE}). Whether to also remove
 #'   cells with NA donor assignments.
 #'
 #' @return A filtered SNPData object with doublets removed
+#' @seealso \code{\link{remove_unassigned}} for cells Vireo could not assign,
+#'   and \code{\link{keep_singlets}} to remove both.
 #' @family data cleaning functions
 #' @export
 #'
@@ -19,40 +22,101 @@
 #' filtered_data <- remove_doublets(snp_data)
 #' }
 remove_doublets <- function(x, drop_na = TRUE) {
-    # Check that x is a SNPData object
+    .remove_donor_labels(x, "doublet", drop_na)
+}
+
+#' Remove unassigned cells from a SNPData object
+#'
+#' Removes cells whose \code{donor} in \code{barcode_info} is
+#' \code{"unassigned"}: single cells Vireo could not confidently assign to a
+#' donor. Unlike doublets their per-barcode counts are valid, so removing them
+#' is optional; donor-level functions exclude them regardless.
+#'
+#' @param x A SNPData object, required.
+#' @param drop_na Logical (default \code{TRUE}). Whether to also remove
+#'   cells with NA donor assignments.
+#'
+#' @return A filtered SNPData object with unassigned cells removed
+#' @seealso \code{\link{remove_doublets}} for doublets, and
+#'   \code{\link{keep_singlets}} to remove both.
+#' @family data cleaning functions
+#' @export
+#'
+#' @examples
+#' \dontrun{
+#' snp_data <- get_example_snpdata()
+#' # Remove unassigned cells from SNPData object
+#' filtered_data <- remove_unassigned(snp_data)
+#' }
+remove_unassigned <- function(x, drop_na = TRUE) {
+    .remove_donor_labels(x, "unassigned", drop_na)
+}
+
+#' Keep only singlet cells in a SNPData object
+#'
+#' Keeps cells that Vireo assigned to exactly one donor, removing those whose
+#' \code{donor} in \code{barcode_info} is \code{"doublet"}, \code{"unassigned"},
+#' or \code{NA}. These are the same cells that donor-level functions such as
+#' \code{\link{donor_count_df}} and \code{\link{assign_xci}} use.
+#'
+#' @param x A SNPData object, required. Its \code{barcode_info} must have a
+#'   \code{donor} column.
+#'
+#' @return A filtered SNPData object holding only singlet cells.
+#' @seealso \code{\link{remove_doublets}} and \code{\link{remove_unassigned}}
+#'   to remove one label only.
+#' @family data cleaning functions
+#' @export
+#'
+#' @examples
+#' \dontrun{
+#' snp_data <- get_example_snpdata()
+#' # Keep only cells assigned to a single donor
+#' singlets <- keep_singlets(snp_data)
+#' }
+keep_singlets <- function(x) {
+    if (!methods::is(x, "SNPData")) {
+        stop("Input must be a SNPData object")
+    }
+    barcode_info <- barcode_info(x)
+    if (!"donor" %in% colnames(barcode_info)) {
+        stop(
+            "Donor information not available. Add donor data using add_barcode_metadata() or import_cellsnp() with vireo_folder parameter."
+        )
+    }
+
+    .drop_barcodes(x, !.is_real_donor(barcode_info$donor), "doublet, unassigned or NA-donor")
+}
+
+# Removes cells whose donor label is one of `labels` (and, if drop_na, cells
+# with no donor).
+.remove_donor_labels <- function(x, labels, drop_na) {
     if (!methods::is(x, "SNPData")) {
         stop("Input must be a SNPData object")
     }
 
-    # Get sample info
     barcode_info <- barcode_info(x)
-
-    # Check if donor column exists
     if (!"donor" %in% colnames(barcode_info)) {
         warning("No 'donor' column found in barcode_info, returning original object")
         return(x)
     }
 
-    # Identify doublets
-    cells_to_remove <- barcode_info$donor == "doublet"
+    cells_to_remove <- barcode_info$donor %in% labels | (drop_na & is.na(barcode_info$donor))
+    .drop_barcodes(x, cells_to_remove, paste(labels, collapse = "/"))
+}
 
-    # Handle NA values
-    if (drop_na) {
-        cells_to_remove[is.na(cells_to_remove)] <- TRUE
-    } else {
-        cells_to_remove[is.na(cells_to_remove)] <- FALSE
-    }
-
+# Subsets out the cells flagged in `cells_to_remove`, logging how many were
+# removed under the description `what`.
+.drop_barcodes <- function(x, cells_to_remove, what) {
     barcodes_total <- ncol(x)
     barcodes_removed <- sum(cells_to_remove)
     barcodes_remaining <- barcodes_total - barcodes_removed
     removed_perc <- scales::percent(barcodes_removed / barcodes_total, accuracy = 0.01)
     logger::log_info(
-        "{barcodes_removed} ({removed_perc}) doublet barcodes removed. {barcodes_remaining} barcodes remaining."
+        "{barcodes_removed} ({removed_perc}) {what} barcodes removed. {barcodes_remaining} barcodes remaining."
     )
 
-    # Return filtered data
-    return(x[, !cells_to_remove])
+    x[, !cells_to_remove]
 }
 
 #' Remove SNPs with NA gene names

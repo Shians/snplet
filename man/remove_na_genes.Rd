@@ -27,7 +27,9 @@ filtered_data <- remove_na_genes(snp_data)
 }
 \seealso{
 Other data cleaning functions:
+\code{\link[=keep_singlets]{keep_singlets()}},
 \code{\link[=remove_doublets]{remove_doublets()}},
-\code{\link[=remove_na_clonotypes]{remove_na_clonotypes()}}
+\code{\link[=remove_na_clonotypes]{remove_na_clonotypes()}},
+\code{\link[=remove_unassigned]{remove_unassigned()}}
 }
 \concept{data cleaning functions}

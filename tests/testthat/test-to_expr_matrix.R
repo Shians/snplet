@@ -417,6 +417,29 @@ test_that("to_expr_matrix() skips partial NA donors", {
     expect_equal(colnames(result), "donor_2")
 })
 
+test_that("to_expr_matrix() excludes doublet and unassigned cells at donor level", {
+    snp_data <- create_test_snp_data()
+    snp_data@barcode_info$donor[1] <- "doublet"
+    snp_data_unassigned <- create_test_snp_data()
+    snp_data_unassigned@barcode_info$donor[1] <- "unassigned"
+
+    # Verify a doublet cell forms no donor column
+    expect_equal(colnames(to_expr_matrix(snp_data, level = "donor")), "donor_2")
+    # Verify an unassigned cell forms no donor column
+    expect_equal(colnames(to_expr_matrix(snp_data_unassigned, level = "donor")), "donor_2")
+})
+
+test_that("to_expr_matrix() errors when no cell has a real donor", {
+    snp_data <- create_test_snp_data()
+    snp_data@barcode_info$donor <- c("doublet", "unassigned")
+
+    # Ensure donor-level conversion refuses data with only non-donor labels
+    expect_error(
+        to_expr_matrix(snp_data, level = "donor"),
+        "No barcode is assigned to a donor"
+    )
+})
+
 test_that("to_expr_matrix() skips partial NA clonotypes", {
     snp_data <- create_test_snp_data()
     snp_data@barcode_info$clonotype[1] <- NA_character_

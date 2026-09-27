@@ -240,7 +240,7 @@ merge_snpdata <- function(
     # a donor with no surviving cells after the cell_join has its rows dropped
     # from both donor tables, same as `[` subsetting.
     donors_retained <- if ("donor" %in% colnames(barcode_info_merged)) {
-        unique(stats::na.omit(barcode_info_merged$donor))
+        .real_donors(barcode_info_merged$donor)
     } else {
         character(0)
     }

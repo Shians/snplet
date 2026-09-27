@@ -313,7 +313,7 @@ setMethod(
         # dropped from both donor tables rather than carried over stale.
         if (methods::.hasSlot(x, "donor_snp_info")) {
             surviving_donors <- if ("donor" %in% colnames(barcode_info)) {
-                unique(stats::na.omit(barcode_info$donor))
+                .real_donors(barcode_info$donor)
             } else {
                 character(0)
             }

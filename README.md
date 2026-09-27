@@ -47,8 +47,8 @@ aggregation, MAF testing, and expression-matrix export.
 
 ### Processing and aggregation
 - **Filtering**: `filter_snps()`, `filter_barcodes()` (`filter_samples()` is a
-  backwards-compatible alias), `remove_doublets()`, `remove_na_clonotypes()`,
-  `remove_na_genes()`.
+  backwards-compatible alias), `remove_doublets()`, `remove_unassigned()`,
+  `keep_singlets()`, `remove_na_clonotypes()`, `remove_na_genes()`.
 - **Aggregation**: `barcode_count_df()`, `donor_count_df()`, `clonotype_count_df()`, and
   `aggregate_count_df()` for any `barcode_info` column, each with an optional exact binomial
   test of allele usage against a null minor allele frequency.

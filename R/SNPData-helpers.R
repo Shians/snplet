@@ -168,9 +168,24 @@
     if (length(sources) == 1) sources else NA_character_
 }
 
+# Vireo's status labels for cells it could not assign to one donor. They share
+# the donor column with real donors but name no genotype, so every donor-level
+# operation (donor tables, aggregation, XCI fitting, phasing) excludes them.
+.non_donor_labels <- c("doublet", "unassigned")
+
+# TRUE where a donor label names a real donor: neither NA nor a Vireo status label.
+.is_real_donor <- function(donor) {
+    !is.na(donor) & !donor %in% .non_donor_labels
+}
+
+# Sorted unique real donors in a donor-label vector.
+.real_donors <- function(donor) {
+    sort(unique(donor[.is_real_donor(donor)]))
+}
+
 .default_donor_info <- function(barcode_info) {
     if ("donor" %in% colnames(barcode_info)) {
-        tibble::tibble(donor = sort(unique(stats::na.omit(barcode_info$donor))))
+        tibble::tibble(donor = .real_donors(barcode_info$donor))
     } else {
         tibble::tibble(donor = character(0))
     }

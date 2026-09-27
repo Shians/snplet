@@ -16,9 +16,10 @@ cells with NA donor assignments.}
 A filtered SNPData object with doublets removed
 }
 \description{
-This function filters out cells that are identified as doublets from a SNPData object.
-Doublets are identified based on the 'donor' column in the barcode_info slot, where
-cells labelled as 'doublet' are removed.
+Removes cells whose \code{donor} in \code{barcode_info} is \code{"doublet"}:
+barcodes Vireo judged to hold two cells from different donors. Their reads
+mix two genotypes, so they are unreliable at every level, including
+per-barcode.
 }
 \examples{
 \dontrun{
@@ -28,8 +29,13 @@ filtered_data <- remove_doublets(snp_data)
 }
 }
 \seealso{
+\code{\link{remove_unassigned}} for cells Vireo could not assign,
+  and \code{\link{keep_singlets}} to remove both.
+
 Other data cleaning functions:
+\code{\link[=keep_singlets]{keep_singlets()}},
 \code{\link[=remove_na_clonotypes]{remove_na_clonotypes()}},
-\code{\link[=remove_na_genes]{remove_na_genes()}}
+\code{\link[=remove_na_genes]{remove_na_genes()}},
+\code{\link[=remove_unassigned]{remove_unassigned()}}
 }
 \concept{data cleaning functions}

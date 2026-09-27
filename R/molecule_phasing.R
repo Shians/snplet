@@ -379,14 +379,14 @@ phase_from_molecules <- function(
 
     # Neither has a genuine genotype to phase against; excluded the same way
     # assign_xci() excludes them from its own per-donor EM fit.
-    non_donor_labels <- intersect(donor_library$donor, c("doublet", "unassigned"))
+    non_donor_labels <- intersect(donor_library$donor, .non_donor_labels)
     if (length(non_donor_labels) > 0) {
         logger::log_warn(
             "Excluding non-donor label(s) from phasing: {paste(non_donor_labels, collapse = ', ')}"
         )
     }
     donor_library <- donor_library %>%
-        dplyr::filter(!donor %in% c("doublet", "unassigned"), library_id %in% names(bam_files))
+        dplyr::filter(!donor %in% .non_donor_labels, library_id %in% names(bam_files))
     if (nrow(donor_library) == 0) {
         logger::log_warn("No real donors have BAM files supplied for their library; nothing to phase.")
         return(list(per_donor = list(), calibration = NULL, bam_files = list()))

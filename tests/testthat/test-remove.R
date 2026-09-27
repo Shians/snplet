@@ -420,6 +420,67 @@ test_that("remove_doublets handles all doublets edge case", {
     expect_equal(ncol(all_doublets_removed), 0)
 })
 
+test_that("remove_doublets, remove_unassigned and keep_singlets each remove their own labels", {
+    mixed_info <- data.frame(
+        cell_id = c("cell_1", "cell_2", "cell_3"),
+        donor = c("donor_1", "doublet", "unassigned"),
+        stringsAsFactors = FALSE
+    )
+    snp_data <- SNPData(
+        alt_count = Matrix::Matrix(matrix(1:9, nrow = 3, ncol = 3)),
+        ref_count = Matrix::Matrix(matrix(10:18, nrow = 3, ncol = 3)),
+        snp_info = test_snp_info,
+        barcode_info = mixed_info
+    )
+
+    # Verify remove_doublets keeps unassigned cells
+    expect_equal(barcode_info(remove_doublets(snp_data))$donor, c("donor_1", "unassigned"))
+    # Verify remove_unassigned keeps doublets
+    expect_equal(barcode_info(remove_unassigned(snp_data))$donor, c("donor_1", "doublet"))
+    # Verify keep_singlets removes both
+    expect_equal(barcode_info(keep_singlets(snp_data))$donor, "donor_1")
+})
+
+test_that("remove_unassigned follows drop_na and keep_singlets always drops NA donors", {
+    na_info <- data.frame(
+        cell_id = c("cell_1", "cell_2", "cell_3"),
+        donor = c("donor_1", NA, "unassigned"),
+        stringsAsFactors = FALSE
+    )
+    snp_data <- SNPData(
+        alt_count = Matrix::Matrix(matrix(1:9, nrow = 3, ncol = 3)),
+        ref_count = Matrix::Matrix(matrix(10:18, nrow = 3, ncol = 3)),
+        snp_info = test_snp_info,
+        barcode_info = na_info
+    )
+
+    # Verify NA donors are removed by default
+    expect_equal(ncol(remove_unassigned(snp_data)), 1)
+    # Verify NA donors are kept when drop_na = FALSE
+    expect_equal(ncol(remove_unassigned(snp_data, drop_na = FALSE)), 2)
+    # Verify keep_singlets removes NA donors alongside unassigned cells
+    expect_equal(barcode_info(keep_singlets(snp_data))$donor, "donor_1")
+})
+
+test_that("remove_unassigned and keep_singlets error on non-SNPData input", {
+    # Ensure remove_unassigned rejects non-SNPData input
+    expect_error(remove_unassigned("not_snpdata"), "Input must be a SNPData object")
+    # Ensure keep_singlets rejects non-SNPData input
+    expect_error(keep_singlets("not_snpdata"), "Input must be a SNPData object")
+})
+
+test_that("keep_singlets errors when barcode_info has no donor column", {
+    snp_data_no_donor <- SNPData(
+        alt_count = test_alt_count,
+        ref_count = test_ref_count,
+        snp_info = test_snp_info,
+        barcode_info = data.frame(cell_id = c("cell_1", "cell_2"), stringsAsFactors = FALSE)
+    )
+
+    # Ensure a missing donor column is an error rather than a silent no-op
+    expect_error(keep_singlets(snp_data_no_donor), "Donor information not available")
+})
+
 test_that("remove_na_genes handles all NA genes edge case", {
     all_na_genes_info <- data.frame(
         snp_id = c("snp_1", "snp_2", "snp_3"),

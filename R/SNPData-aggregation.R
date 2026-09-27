@@ -89,7 +89,7 @@ setGeneric("barcode_count_df", function(x, test_maf = TRUE) standardGeneric("bar
     }
 
     if ("donor" %in% group_by) {
-        keep_donor <- !barcode_info$donor %in% c("unassigned", "doublet")
+        keep_donor <- .is_real_donor(barcode_info$donor)
         barcode_info <- barcode_info[keep_donor, , drop = FALSE]
     }
 

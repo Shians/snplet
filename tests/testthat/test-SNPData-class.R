@@ -823,6 +823,20 @@ test_that("donor_info() auto-derives one row per distinct donor in barcode_info"
     expect_equal(donor_info(snp_data)$donor, "donor_1")
 })
 
+test_that("donor_info() omits the doublet and unassigned labels", {
+    barcode_info <- test_barcode_info
+    barcode_info$donor <- c("doublet", "unassigned")
+    snp_data <- SNPData(
+        alt_count = test_alt_count,
+        ref_count = test_ref_count,
+        snp_info = test_snp_info,
+        barcode_info = barcode_info
+    )
+
+    # Verify neither non-donor label gets a donor_info row
+    expect_equal(nrow(donor_info(snp_data)), 0)
+})
+
 test_that("donor_snp_info() defaults to an empty tibble with the expected columns", {
     snp_data <- create_test_snpdata()
 

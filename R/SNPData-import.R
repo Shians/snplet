@@ -567,7 +567,7 @@ import_cellsnp_libraries <- function(
     }) %>%
         dplyr::bind_rows() %>%
         dplyr::distinct() %>%
-        dplyr::filter(!is.na(donor), !donor %in% c("doublet", "unassigned"))
+        dplyr::filter(!is.na(donor), !donor %in% .non_donor_labels)
 
     shared_donors <- unique(donor_libraries$donor[duplicated(donor_libraries$donor)])
     if (length(shared_donors) == 0) {

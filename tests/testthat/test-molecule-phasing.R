@@ -1990,13 +1990,17 @@ test_that("phase_from_molecules() excludes the 'doublet' and 'unassigned' donor 
     expect_length(called_for, 1)
 })
 
-test_that("phase_from_molecules() returns x unchanged when every donor is doublet/unassigned", {
-    ref <- rbind(c(5L, 5L))
-    alt <- rbind(c(5L, 5L))
+test_that("phase_from_molecules() returns x unchanged when the only BAM holds doublet/unassigned cells", {
+    # The real donor lives in lib_B, which has no BAM, so every cell phasing
+    # could reach carries a non-donor label. Non-donor labels cannot hold
+    # donor_snp_info rows, so the XCI diagnostics sit on the real donor.
+    ref <- rbind(c(5L, 5L, 5L))
+    alt <- rbind(c(5L, 5L, 5L))
     snp_info <- data.frame(chrom = "chrX", pos = 1000L, ref = "A", alt = "G", stringsAsFactors = FALSE)
     barcode_info <- data.frame(
-        barcode = c("cell1", "cell2"),
-        donor = c("doublet", "unassigned"),
+        barcode = c("cell1", "cell2", "cell3"),
+        donor = c("doublet", "unassigned", "donor0"),
+        library_id = c("lib_A", "lib_A", "lib_B"),
         stringsAsFactors = FALSE
     )
     obj <- SNPData(
@@ -2013,7 +2017,7 @@ test_that("phase_from_molecules() returns x unchanged when every donor is double
         obj,
         data.frame(
             snp_id = snp_id,
-            donor = "doublet",
+            donor = "donor0",
             xci_informative = TRUE,
             allele_on_x1 = "REF",
             stringsAsFactors = FALSE
