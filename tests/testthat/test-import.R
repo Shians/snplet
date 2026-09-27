@@ -1067,6 +1067,92 @@ test_that("merge_cell_annotations handles empty vdj_info data frame", {
     expect_equal(result$donor[result$barcode == "CELL1"], "donor1")
 })
 
+test_that("merge_cell_annotations matches barcodes when only one side has a GEM-well suffix", {
+    # Setup - cellSNP/Vireo barcodes carry "-1", VDJ barcodes do not, and vice versa
+    suffixed <- c("AAAC-1", "CCCG-1", "GGGT-1")
+    bare <- c("AAAC", "CCCG", "TTTT")
+
+    donor_info <- data.frame(cell = suffixed, donor_id = "donor0", stringsAsFactors = FALSE)
+    vdj_info <- data.frame(barcode = bare, raw_clonotype_id = c("ct1", "ct2", "ct3"), stringsAsFactors = FALSE)
+    result <- merge_cell_annotations(donor_info, vdj_info, "barcode", "raw_clonotype_id")
+
+    # Verify clonotypes are joined despite the suffix only on the cell side
+    expect_equal(result$clonotype, c("ct1", "ct2", NA))
+    # Ensure cells keep their original suffixed barcodes (needed to match BAM CB tags)
+    expect_equal(result$barcode, suffixed)
+
+    donor_info <- data.frame(cell = bare, donor_id = "donor0", stringsAsFactors = FALSE)
+    vdj_info <- data.frame(barcode = suffixed, raw_clonotype_id = c("ct1", "ct2", "ct3"), stringsAsFactors = FALSE)
+    result <- merge_cell_annotations(donor_info, vdj_info, "barcode", "raw_clonotype_id")
+
+    # Verify clonotypes are joined despite the suffix only on the VDJ side
+    expect_equal(result$clonotype, c("ct1", "ct2", NA))
+})
+
+test_that("merge_cell_annotations keeps GEM wells distinct when both sides are suffixed", {
+    # Setup - aggregated library where the same sequence appears in two GEM wells
+    donor_info <- data.frame(cell = c("AAAC-1", "AAAC-2"), donor_id = "donor0", stringsAsFactors = FALSE)
+    vdj_info <- data.frame(barcode = c("AAAC-1", "AAAC-2"), raw_clonotype_id = c("ct1", "ct2"), stringsAsFactors = FALSE)
+
+    result <- merge_cell_annotations(donor_info, vdj_info, "barcode", "raw_clonotype_id")
+
+    # Verify each GEM well receives its own clonotype rather than being collapsed
+    expect_equal(result$clonotype, c("ct1", "ct2"))
+    # Confirm no rows are duplicated by the join
+    expect_equal(nrow(result), 2)
+})
+
+test_that("merge_cell_annotations warns when no VDJ barcode matches a cell", {
+    # Setup - disjoint barcode sets
+    donor_info <- data.frame(cell = c("AAAC", "CCCG"), donor_id = "donor0", stringsAsFactors = FALSE)
+    vdj_info <- data.frame(barcode = c("GGGT", "TTTT"), raw_clonotype_id = c("ct1", "ct2"), stringsAsFactors = FALSE)
+    log_file <- withr::local_tempfile(fileext = ".log")
+    original_appender <- get(as.character(logger::log_appender()), asNamespace("logger"))
+    original_threshold <- logger::log_threshold()
+    logger::log_appender(logger::appender_file(log_file))
+    logger::log_threshold(logger::WARN)
+    withr::defer(logger::log_appender(original_appender))
+    withr::defer(logger::log_threshold(original_threshold))
+
+    result <- merge_cell_annotations(donor_info, vdj_info, "barcode", "raw_clonotype_id")
+
+    # Confirm a warning is logged instead of silently returning all-NA clonotypes
+    expect_true(any(grepl("No VDJ barcodes matched", readLines(log_file, warn = FALSE))))
+    # Verify every clonotype is NA
+    expect_true(all(is.na(result$clonotype)))
+})
+
+test_that("import_cellsnp honours barcode_column for a VDJ file with suffixed barcodes", {
+    # Setup - copy the example run and rewrite the VDJ file with a renamed, suffixed barcode column
+    example_dir <- system.file("extdata/example_snpdata", package = "snplet")
+    vdj <- readr::read_csv(fs::path(example_dir, "filtered_contig_annotations.csv"), show_col_types = FALSE)
+    vdj_file <- withr::local_tempfile(fileext = ".csv")
+    readr::write_csv(
+        dplyr::transmute(vdj, cell_barcode = paste0(barcode, "-1"), raw_clonotype_id),
+        vdj_file
+    )
+
+    gene_anno <- readr::read_tsv(
+        system.file("extdata/example_gene_anno.tsv", package = "snplet"),
+        show_col_types = FALSE
+    )
+
+    reference <- get_example_snpdata()
+    result <- import_cellsnp(
+        example_dir,
+        gene_annotation = gene_anno,
+        library_id = "example",
+        vdj_file = vdj_file,
+        vireo_folder = example_dir,
+        barcode_column = "cell_barcode"
+    )
+
+    # Verify clonotypes match the unsuffixed reference import
+    expect_equal(barcode_info(result)$clonotype, barcode_info(reference)$clonotype)
+    # Check that at least some clonotypes were assigned
+    expect_true(any(!is.na(barcode_info(result)$clonotype)))
+})
+
 # ==============================================================================
 # Test Suite: Vireo genotype ingestion
 # Description: .read_vireo_gt() parses a Vireo GT VCF into per-(SNP, donor)

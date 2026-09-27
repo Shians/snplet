@@ -3,6 +3,7 @@ utils::globalVariables(c(
     ".data",
     ".env",
     ".snp_row",
+    "join_key",
     "adj_p_val",
     "allele_on_x1",
     "alt",

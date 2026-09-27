@@ -199,10 +199,7 @@ import_cellsnp <- function(
         vdj_info <- readr::read_csv(
             vdj_file,
             col_types = readr::cols(.default = readr::col_character())
-        ) %>%
-            dplyr::mutate(
-                barcode = stringr::str_remove(barcode, "-[0-9]+$") # Remove suffix if present
-            )
+        )
     } else {
         vdj_info <- NULL
     }
@@ -1063,7 +1060,26 @@ read_vcf_base <- function(vcf_file) {
     barcode_info
 }
 
+# cellranger appends a GEM-well suffix ("-1") to barcodes, but upstream tools
+# differ in whether they keep it. A side counts as suffixed only if every
+# barcode carries one.
+.has_gem_suffix <- function(barcodes) {
+    length(barcodes) > 0 && all(stringr::str_detect(barcodes, "-[0-9]+$"))
+}
+
+# The key used to match VDJ barcodes to cells. Suffixes are kept when both sides
+# carry them, so aggregated libraries (-1, -2, ...) still match well-for-well.
+.barcode_join_key <- function(barcodes, strip_suffix) {
+    if (strip_suffix) {
+        return(stringr::str_remove(barcodes, "-[0-9]+$"))
+    }
+    barcodes
+}
+
 #' Merge donor and clonotype information
+#'
+#' VDJ barcodes are matched to cells ignoring the cellranger GEM-well suffix
+#' (\code{-1}) unless both sides carry one; cells keep their original barcode.
 #'
 #' @param donor_info Data frame with donor information from Vireo
 #' @param vdj_info Data frame with VDJ information from cellranger (NULL if not provided)
@@ -1126,12 +1142,28 @@ merge_cell_annotations <- function(donor_info, vdj_info = NULL, barcode_column =
         ) %>%
         dplyr::distinct()
 
-    # Merge donor info with VDJ info
+    # Join on a suffix-normalised key so cells keep their cellSNP-lite barcode,
+    # which must still match the BAM CB tag
+    strip_suffix <- !(.has_gem_suffix(donor_info$barcode) && .has_gem_suffix(vdj_subset$barcode))
+    vdj_subset <- vdj_subset %>%
+        dplyr::mutate(join_key = .barcode_join_key(barcode, strip_suffix)) %>%
+        dplyr::select(join_key, clonotype) %>%
+        dplyr::distinct()
+
     barcode_info <- donor_info %>%
-        dplyr::left_join(vdj_subset, by = "barcode") %>%
+        dplyr::mutate(join_key = .barcode_join_key(barcode, strip_suffix)) %>%
+        dplyr::left_join(vdj_subset, by = "join_key") %>%
+        dplyr::select(-join_key) %>%
         dplyr::mutate(
             cell_id = paste0("cell_", seq_len(dplyr::n()))
         )
+
+    if (nrow(vdj_subset) > 0 && all(is.na(barcode_info$clonotype))) {
+        logger::log_warn(
+            "No VDJ barcodes matched any cell barcode, so every clonotype is NA. ",
+            "Example cell barcode: {donor_info$barcode[1]}; example VDJ barcode: {vdj_info[[barcode_column]][1]}"
+        )
+    }
 
     # Ensure required columns exist
     if (!"donor" %in% colnames(barcode_info)) {
