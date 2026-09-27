@@ -194,7 +194,7 @@ snp_data <- assign_xci(snp_data)
 escape_result <- test_escape(snp_data)
 
 # Uses read-backed molecule counts automatically once they are available
-snp_data <- phase_from_molecules(snp_data, bam_files = c(lib1 = "lib1.bam"), gene_annotation = gene_anno)
+snp_data <- phase_from_molecules(snp_data, bam_files = c(lib1 = "lib1.bam"))
 escape_result <- test_escape(snp_data)
 
 # Or name the counting method, e.g. per-SNP reads despite stored molecules

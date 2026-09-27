@@ -122,7 +122,7 @@
 #' escape_result <- test_escape(snp_data)
 #'
 #' # Uses read-backed molecule counts automatically once they are available
-#' snp_data <- phase_from_molecules(snp_data, bam_files = c(lib1 = "lib1.bam"), gene_annotation = gene_anno)
+#' snp_data <- phase_from_molecules(snp_data, bam_files = c(lib1 = "lib1.bam"))
 #' escape_result <- test_escape(snp_data)
 #'
 #' # Or name the counting method, e.g. per-SNP reads despite stored molecules
@@ -351,8 +351,8 @@ setMethod(
             stop(
                 "This object has ",
                 if (has_phase) "molecule phase but no molecule calls" else "molecule calls but no molecule phase",
-                ", so the counting method cannot be chosen automatically. Re-run ",
-                "phase_from_molecules(x, bam_files, gene_annotation), or pass count_source = \"snp\"."
+                ", so the counting method cannot be chosen automatically. Re-import the data and run ",
+                "phase_from_molecules(x, bam_files) once, or pass count_source = \"snp\"."
             )
         }
         count_source <- if (has_calls) "molecule" else "snp"

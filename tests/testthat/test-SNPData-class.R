@@ -228,6 +228,89 @@ test_that("rename_donor() keeps the molecules slot", {
     expect_identical(molecules(result), molecules(snp_data))
 })
 
+# A two-cell object with barcodes but no library labels, holding one molecule
+# call for each cell, as phase_from_molecules() would leave an unlabelled object
+create_phased_test_snpdata <- function(barcodes = c("AAA", "CCC")) {
+    barcode_info_barcoded <- test_barcode_info
+    barcode_info_barcoded$barcode <- barcodes
+    snp_data <- SNPData(
+        ref_count = test_ref_count,
+        alt_count = test_alt_count,
+        snp_info = test_snp_info,
+        barcode_info = barcode_info_barcoded
+    )
+    snp_data@molecules <- MoleculeCalls(
+        calls = tibble::tibble(
+            library_id = NA_character_,
+            barcode = barcodes,
+            umi = c("u1", "u2"),
+            snp_id = "snp_1",
+            allele = "REF",
+            transcript_strand = "+"
+        )
+    )
+    snp_data
+}
+
+test_that("barcode_info<- re-keys molecule calls when library_id changes", {
+    snp_data <- create_phased_test_snpdata()
+    updated <- barcode_info(snp_data)
+    updated$library_id <- c("lib_A", "lib_B")
+
+    barcode_info(snp_data) <- updated
+
+    # Verify each call follows its cell to the new library label
+    expect_equal(molecule_calls(molecules(snp_data))$library_id, c("lib_A", "lib_B"))
+})
+
+test_that("add_barcode_metadata() re-keys molecule calls when it overwrites library_id", {
+    snp_data <- create_phased_test_snpdata()
+
+    result <- add_barcode_metadata(
+        snp_data,
+        data.frame(cell_id = c("cell_1", "cell_2"), library_id = "lib_A"),
+        join_by = "cell_id",
+        overwrite = TRUE
+    )
+
+    # Confirm the metadata route re-keys calls the same way as barcode_info<-
+    expect_equal(molecule_calls(molecules(result))$library_id, c("lib_A", "lib_A"))
+})
+
+test_that("barcode_info<- re-keys molecule calls when a barcode changes", {
+    snp_data <- create_phased_test_snpdata()
+    updated <- barcode_info(snp_data)
+    updated$barcode <- c("AAA-1", "CCC-1")
+
+    barcode_info(snp_data) <- updated
+
+    # Verify the calls take the new barcodes, so they still match their cells
+    expect_equal(molecule_calls(molecules(snp_data))$barcode, c("AAA-1", "CCC-1"))
+})
+
+test_that("re-keying drops molecule calls for cells no longer in the object", {
+    snp_data <- create_phased_test_snpdata()[, "cell_1"]
+    updated <- barcode_info(snp_data)
+    updated$library_id <- "lib_A"
+
+    barcode_info(snp_data) <- updated
+
+    # Check that only the remaining cell's call is kept, so the dropped cell's
+    # call cannot later match a cell that takes over its old key
+    expect_equal(molecule_calls(molecules(snp_data))$barcode, "AAA")
+})
+
+test_that("barcode_info<- refuses to give two cells one key while molecule calls are stored", {
+    snp_data <- create_phased_test_snpdata(barcodes = c("AAA", "AAA"))
+    snp_data@molecules@calls$library_id <- c("lib_A", "lib_B")
+    snp_data@barcode_info$library_id <- c("lib_A", "lib_B")
+    updated <- barcode_info(snp_data)
+    updated$library_id <- "lib_A"
+
+    # Ensure calls are never left unable to tell two cells apart
+    expect_error(barcode_info(snp_data) <- updated, "same \\(library_id, barcode\\) pair")
+})
+
 test_that("updateObject() moves pre-slot molecule data into the molecules slot", {
     barcode_info_labelled <- test_barcode_info
     barcode_info_labelled$barcode <- c("AAA", "CCC")
@@ -262,6 +345,76 @@ test_that("updateObject() moves pre-slot molecule data into the molecules slot",
     expect_false("bam_files" %in% colnames(library_info(updated)))
     # Ensure the old attribute is removed rather than left to go stale
     expect_null(attr(updated, "molecule_calls"))
+})
+
+test_gene_annotation <- data.frame(
+    chrom = c("chr1", "chr1"),
+    start = c(50, 150),
+    end = c(120, 250),
+    gene_name = c("GENE1", "GENE2"),
+    strand = c("+", "-"),
+    attributes = c("ID=GENE1", "ID=GENE2"),
+    stringsAsFactors = FALSE
+)
+
+create_annotated_snpdata <- function(gene_anno = test_gene_annotation) {
+    SNPData(
+        ref_count = test_ref_count,
+        alt_count = test_alt_count,
+        snp_info = test_snp_info,
+        barcode_info = test_barcode_info,
+        gene_anno = gene_anno
+    )
+}
+
+test_that("SNPData() stores the gene annotation trimmed to its gene-body columns", {
+    stored <- gene_anno(create_annotated_snpdata())
+
+    # Verify only the gene-body columns are kept, strand included
+    expect_equal(colnames(stored), c("chrom", "start", "end", "gene_name", "strand"))
+    # Check every gene is kept as given
+    expect_equal(stored$gene_name, c("GENE1", "GENE2"))
+})
+
+test_that("SNPData() stores an empty gene annotation when none is given", {
+    # Verify an unannotated object reports no genes rather than NULL
+    expect_equal(nrow(gene_anno(create_test_snpdata())), 0)
+})
+
+test_that("SNPData() errors on a gene annotation without strand", {
+    unstranded <- test_gene_annotation[, c("chrom", "start", "end", "gene_name")]
+
+    # Ensure strand is required, since the molecule functions build their gene map from this copy
+    expect_error(create_annotated_snpdata(unstranded), "missing required column\\(s\\): strand")
+})
+
+test_that("SNPData() errors on a gene strand other than + or -", {
+    unstranded_gene <- test_gene_annotation
+    unstranded_gene$strand <- c(".", NA)
+
+    # Ensure each offending value is named, NA included, rather than the gene silently losing its molecules
+    expect_error(create_annotated_snpdata(unstranded_gene), "found: \"\\.\", NA")
+})
+
+test_that("[() and rename_donor() keep the whole gene annotation", {
+    snp_data <- create_annotated_snpdata()
+
+    # Verify subsetting to one SNP keeps every gene, not just those it overlaps
+    expect_identical(gene_anno(snp_data[1, ]), gene_anno(snp_data))
+    # Check relabelling donors leaves the annotation in place
+    expect_identical(gene_anno(rename_donor(snp_data, c(PatientA = "donor_1"))), gene_anno(snp_data))
+})
+
+test_that("updateObject() gives a pre-annotation object an empty gene annotation", {
+    legacy <- create_annotated_snpdata()
+    # Rebuild the shape an older version saved: no gene_anno slot
+    attr(legacy, "gene_anno") <- NULL
+
+    updated <- updateObject(legacy)
+
+    # Verify the slot now exists, and is empty since there is nothing to recover
+    expect_true(methods::.hasSlot(updated, "gene_anno"))
+    expect_equal(nrow(gene_anno(updated)), 0)
 })
 
 test_that("a library that loses all of its cells loses its library_info row", {

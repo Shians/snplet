@@ -223,6 +223,107 @@
     object
 }
 
+# The gene annotation columns an SNPData object keeps. strand is needed by the
+# molecule functions, which build their SNP-to-gene map from this copy.
+.GENE_ANNO_COLUMNS <- c("chrom", "start", "end", "gene_name", "strand")
+
+.empty_gene_anno <- function() {
+    tibble::tibble(
+        chrom = character(0),
+        start = integer(0),
+        end = integer(0),
+        gene_name = character(0),
+        strand = character(0)
+    )
+}
+
+# Trims a gene annotation to the columns stored on SNPData, dropping the rest
+# (a GFF's attribute strings would otherwise bloat every saved object) and
+# any attributes such as readr's column spec, so two copies of one annotation
+# compare identical.
+.as_stored_gene_anno <- function(gene_anno) {
+    if (is.null(gene_anno)) {
+        return(.empty_gene_anno())
+    }
+    missing_cols <- setdiff(.GENE_ANNO_COLUMNS, colnames(gene_anno))
+    if (length(missing_cols) > 0) {
+        stop("gene_anno is missing required column(s): ", paste(missing_cols, collapse = ", "))
+    }
+    .check_gene_strand(gene_anno$strand)
+    stored <- tibble::as_tibble(lapply(as.list(gene_anno)[.GENE_ANNO_COLUMNS], as.vector))
+    stored$chrom <- as.character(stored$chrom)
+    dplyr::distinct(stored)
+}
+
+# Rejects gene strands other than "+"/"-". A molecule is credited to one of
+# two overlapping genes by matching its own transcript strand to the gene's,
+# so a gene with "." or "*" (common in GFFs) or NA would silently never
+# receive a molecule wherever it overlaps another gene.
+.check_gene_strand <- function(strand, arg_name = "gene_anno") {
+    invalid <- unique(as.character(strand)[!as.character(strand) %in% c("+", "-")])
+    if (length(invalid) > 0) {
+        stop(
+            arg_name,
+            "$strand must be \"+\" or \"-\" for every gene; found: ",
+            paste(ifelse(is.na(invalid), "NA", paste0("\"", invalid, "\"")), collapse = ", "),
+            ". Drop or assign a strand to unstranded genes."
+        )
+    }
+    invisible(NULL)
+}
+
+# Carries the gene annotation onto an object rebuilt from another. Kept whole
+# rather than cut to the surviving SNPs: it describes the genome, not the
+# object's contents.
+.propagate_gene_anno <- function(object, from) {
+    object@gene_anno <- gene_anno(from)
+    object
+}
+
+# Re-keys stored molecule calls when barcode_info is about to be replaced.
+# Calls are matched to cells on (library_id, barcode), so editing either column
+# after phase_from_molecules() would otherwise leave them matching nothing, or
+# the wrong cell. Each cell's old key is mapped to its new one; calls for cells
+# no longer in the object have no new key and are dropped, since they could
+# only ever be counted against a cell that later took over their old key.
+.rekey_molecule_calls <- function(x, new_barcode_info) {
+    molecules <- molecules(x)
+    if (!.has_molecule_calls(molecules)) {
+        return(x)
+    }
+    old_keys <- .cell_key_columns(x@barcode_info)
+    new_keys <- .cell_key_columns(new_barcode_info)[match(x@barcode_info$cell_id, new_barcode_info$cell_id), ]
+    if (identical(old_keys, new_keys)) {
+        return(x)
+    }
+    if (anyDuplicated(new_keys) > 0) {
+        stop(
+            "barcode_info would give two cells the same (library_id, barcode) pair, so the molecule calls ",
+            "phase_from_molecules() stored could not be told apart. Keep each pair unique."
+        )
+    }
+
+    key_map <- dplyr::bind_cols(old_keys, dplyr::rename_with(new_keys, ~ paste0("new_", .x)))
+    molecules@calls <- molecules@calls %>%
+        dplyr::inner_join(key_map, by = c("library_id", "barcode")) %>%
+        dplyr::mutate(library_id = new_library_id, barcode = new_barcode) %>%
+        dplyr::select(-new_library_id, -new_barcode)
+    x@molecules <- molecules
+    x
+}
+
+# The (library_id, barcode) key molecule calls are matched on, as character
+# columns, with NA standing in for a column barcode_info does not carry.
+.cell_key_columns <- function(barcode_info) {
+    key_column <- function(name) {
+        if (!name %in% colnames(barcode_info)) {
+            return(rep(NA_character_, nrow(barcode_info)))
+        }
+        as.character(barcode_info[[name]])
+    }
+    tibble::tibble(library_id = key_column("library_id"), barcode = key_column("barcode"))
+}
+
 # Moves the molecule data older versions kept elsewhere into the molecules
 # slot: the "molecule_calls" and "bam_calibration" attributes
 # phase_from_molecules() used to attach, the retired snp_gene_map slot, and the

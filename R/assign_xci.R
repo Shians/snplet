@@ -94,6 +94,10 @@
 #'   \code{active_x} (which excludes low-confidence cells and so
 #'   underestimates skew in coverage-limited donors).
 #'
+#'   Errors once \code{\link{phase_from_molecules}} has run on \code{x}: its
+#'   read-backed phase is oriented against the current fit, so a refit would
+#'   leave the two disagreeing. Re-import to refit.
+#'
 #' @family X-chromosome inactivation functions
 #' @export
 #'
@@ -188,7 +192,9 @@ setMethod(
 #'   \code{donor_info(x)$xci_skew} gives the fitted X1-active prior, here
 #'   estimated over clonotypes rather than cells: it is the skew of the
 #'   clonotype population the EM was fit on, which only equals cell-level
-#'   skew if clonotypes carry comparable cell counts.
+#'   skew if clonotypes carry comparable cell counts. As with
+#'   \code{\link{assign_xci}}, it errors once
+#'   \code{\link{phase_from_molecules}} has run on \code{x}.
 #'
 #' @family X-chromosome inactivation functions
 #' @export
@@ -242,6 +248,12 @@ setMethod(
     by = c("cell", "clonotype")
 ) {
     by <- match.arg(by)
+    if (.is_molecule_phased(x)) {
+        stop(
+            "phase_from_molecules() has already run on this object, and its read-backed phase is oriented against ",
+            "the current XCI fit. Re-import the data to refit."
+        )
+    }
     if (by == "clonotype") {
         # Errors early if clonotype metadata is missing or entirely NA.
         .check_clonotype_available(x)

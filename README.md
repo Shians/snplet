@@ -11,7 +11,7 @@ cells.
 | Input | Source | Required? |
 | --- | --- | --- |
 | REF/ALT/OTH count matrices, SNP and barcode lists | [cellSNP-lite](https://github.com/single-cell-genetics/cellSNP-lite) | Required |
-| Gene annotation (`chrom`, `start`, `end`, `gene_name`, optionally `strand`) | Any annotation source | Required |
+| Gene annotation (`chrom`, `start`, `end`, `gene_name`, `strand`) | Any annotation source | Required |
 | Donor assignments, and per-donor genotypes if `GT_donors.vireo.vcf.gz` is present | [Vireo](https://github.com/single-cell-genetics/vireo) | Optional |
 | Clonotype annotations (`filtered_contig_annotations.csv`) | cellranger VDJ (TCR/BCR-seq) | Optional |
 | Aligned reads for molecule-level counting | Indexed BAM file(s) | Optional |
@@ -152,24 +152,24 @@ plot_xci_heatmap(snp_data, donor = "donor1")
 
 # Per-gene active/inactive haplotype counts, and a test for escape
 hap <- haplotype_expression(snp_data)
-escape <- test_escape(snp_data)
+escape_snp <- test_escape(snp_data)
 ```
 
-With the libraries' BAM files and a stranded gene annotation, read-backed phase and
-molecule-level counts can be added before testing. The molecule calls are stored in
-`molecules(snp_data)` and survive later filtering:
+With the libraries' BAM files, read-backed phase and molecule-level counts can reinforce the
+fit. Run `phase_from_molecules()` once, after `assign_xci()`; to fit again, re-import. Molecules
+are assigned to genes from the annotation stored at import (`gene_anno(snp_data)`), and the
+calls are stored in `molecules(snp_data)`, surviving later filtering:
 
 ```r
 snp_data <- phase_from_molecules(
   snp_data,
-  bam_files = c(run1 = "path/to/possorted_genome_bam.bam"),
-  gene_annotation = gene_anno_df
+  bam_files = c(run1 = "path/to/possorted_genome_bam.bam")
 )
 hap_mol <- haplotype_expression_by_molecule(snp_data)
 
-# test_escape() uses the molecule counts when they are present; count_source names it explicitly
-escape <- test_escape(snp_data)
-escape_snp <- test_escape(snp_data, count_source = "snp")
+# test_escape() now counts molecules. Compare with escape_snp from before this step: per-SNP
+# counts taken from here on also use the SNPs that molecules phased
+escape_mol <- test_escape(snp_data)
 ```
 
 See the function documentation (`?import_cellsnp`, `?assign_xci`, `?haplotype_expression`,

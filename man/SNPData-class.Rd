@@ -28,6 +28,8 @@
 \alias{get_library_info}
 \alias{molecules}
 \alias{molecules,SNPData-method}
+\alias{gene_anno}
+\alias{gene_anno,SNPData-method}
 \alias{donor_snp_info}
 \alias{donor_snp_info,SNPData-method}
 \alias{get_donor_snp_info}
@@ -63,7 +65,8 @@ SNPData(
   donor_info = NULL,
   donor_snp_info = NULL,
   donor_map = NULL,
-  total_count = NULL
+  total_count = NULL,
+  gene_anno = NULL
 )
 
 \S4method{SNPData}{Matrix,Matrix,data.frame,data.frame}(
@@ -75,7 +78,8 @@ SNPData(
   donor_info = NULL,
   donor_snp_info = NULL,
   donor_map = NULL,
-  total_count = NULL
+  total_count = NULL,
+  gene_anno = NULL
 )
 
 ref_count(x)
@@ -121,6 +125,10 @@ get_library_info(x)
 molecules(x)
 
 \S4method{molecules}{SNPData}(x)
+
+gene_anno(x)
+
+\S4method{gene_anno}{SNPData}(x)
 
 donor_snp_info(x, source = NULL)
 
@@ -212,6 +220,13 @@ for a caller that already has it (e.g. \code{\link{import_cellsnp}}'s DP matrix)
 and wants to skip re-deriving it from \code{ref_count}/\code{alt_count}. Checked
 against \code{alt_count + ref_count} by row-sum margins, not element-by-element.}
 
+\item{gene_anno}{A data.frame, optional (default \code{NULL}, storing an
+empty annotation), with columns \code{chrom}, \code{start}, \code{end},
+\code{gene_name}, \code{strand} (\code{"+"} or \code{"-"}); other columns
+are dropped. Gene bodies,
+stored so every step assigns SNPs to genes from one annotation.
+\code{\link{import_cellsnp}} passes its own.}
+
 \item{source}{Character vector, optional (default \code{NULL}, meaning
 the object's active source; see \code{\link{zygosity_source}}).
 \code{zygosity_source} value(s) to filter \code{donor_snp_info(x)} to,
@@ -281,6 +296,12 @@ extracted, empty until it runs. Carried through subsetting and
 \code{\link{rename_donor}} unchanged, since the functions that count it only
 use calls for cells and SNPs the object still holds.}
 
+\item{\code{gene_anno}}{A tibble of gene bodies (\code{chrom}, \code{start},
+\code{end}, \code{gene_name}, \code{strand}), the annotation
+\code{snp_info$gene_name} was assigned from at import. The molecule functions
+build their SNP-to-gene map from it, so per-SNP and molecule counts use the
+same genes. Carried through subsetting unchanged; empty if none was given.}
+
 \item{\code{zygosity_source}}{Character string naming the \emph{active} zygosity-call source
 (a value of \code{donor_snp_info$zygosity_source}), or \code{NA_character_} if none
 is established yet. \code{\link{donor_snp_info}}, \code{\link{assign_xci}}, and other
@@ -304,6 +325,7 @@ importing Vireo genotypes) or by \code{\link{infer_zygosity}}.}
     filtered to the active zygosity source by default (alias: \code{get_donor_snp_info()})}
   \item{\code{molecules(x)}}{Get the \code{MoleculeCalls} object left by
     \code{\link{phase_from_molecules}}}
+  \item{\code{gene_anno(x)}}{Get the gene annotation stored at import}
   \item{\code{chr_style(x)}}{Get chromosome naming style}
   \item{\code{zygosity_source(x)}}{Get the active zygosity-call source; set with
     \code{zygosity_source<-()}}

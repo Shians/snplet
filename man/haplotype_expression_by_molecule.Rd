@@ -141,8 +141,8 @@ are in \code{molecules(x)}, the
     \code{barcode_info(x)}. The calls survive subsetting unchanged, and only
     those for cells and SNPs still in \code{x} are counted, so \code{x} can
     be filtered after \code{phase_from_molecules()} as freely as before it.}
-  \item{The SNP-to-gene map}{Built from the \code{gene_annotation} given to
-    \code{phase_from_molecules()}. It is distinct from
+  \item{The SNP-to-gene map}{Built by \code{phase_from_molecules()} from
+    the annotation stored at import, \code{gene_anno(x)}. It is distinct from
     \code{snp_info$gene_name}, which comma-joins overlapping genes into one
     label: attributing a molecule at a SNP overlapping two genes needs each
     candidate as its own row with its strand.}
@@ -204,7 +204,7 @@ within a gene without escaping this constraint.
 \dontrun{
 snp_data <- assign_xci(snp_data)
 # the molecule calls ride along on snp_data from here on
-snp_data <- phase_from_molecules(snp_data, bam_files = c(lib1 = "lib1.bam"), gene_annotation = gene_anno)
+snp_data <- phase_from_molecules(snp_data, bam_files = c(lib1 = "lib1.bam"))
 
 hap <- haplotype_expression_by_molecule(snp_data)
 }

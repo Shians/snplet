@@ -38,6 +38,21 @@ test_that("get_example_snpdata includes cell_id in sample info", {
     expect_true("cell_id" %in% colnames(barcode_info))
 })
 
+test_that("import_cellsnp() stores the gene annotation it assigned gene names from", {
+    snp_data <- get_example_snpdata()
+    gene_anno <- readr::read_tsv(
+        system.file("extdata/example_gene_anno.tsv", package = "snplet"),
+        show_col_types = FALSE
+    )
+    stored <- gene_anno(snp_data)
+
+    # Verify every gene of the import annotation is stored, strand included
+    expect_setequal(stored$gene_name, gene_anno$gene_name)
+    expect_true("strand" %in% colnames(stored))
+    # Check the GFF attribute strings are not carried onto the object
+    expect_false("attributes" %in% colnames(stored))
+})
+
 test_that("read_vcf_base works correctly", {
     # Setup - Get example VCF file
     vcf_file <- system.file("extdata/example_snpdata/cellSNP.base.vcf.gz", package = "snplet")
@@ -265,7 +280,7 @@ test_that("import_cellsnp() labels every cell with the supplied library_id", {
 
 test_that("import_cellsnp() leaves library_id as NA when not supplied", {
     cellsnp_dir <- system.file("extdata/example_snpdata", package = "snplet")
-    gene_annotation <- data.frame(chrom = "chr1", start = 1, end = 1e9, gene_name = "dummy")
+    gene_annotation <- data.frame(chrom = "chr1", start = 1, end = 1e9, gene_name = "dummy", strand = "+")
 
     # Verify a single-library workflow can omit library_id entirely
     snp_data <- expect_no_error(import_cellsnp(cellsnp_dir, gene_annotation))
@@ -275,7 +290,7 @@ test_that("import_cellsnp() leaves library_id as NA when not supplied", {
 
 test_that("import_cellsnp() rejects a library_id that is not a single string", {
     cellsnp_dir <- system.file("extdata/example_snpdata", package = "snplet")
-    gene_annotation <- data.frame(chrom = "chr1", start = 1, end = 1e9, gene_name = "dummy")
+    gene_annotation <- data.frame(chrom = "chr1", start = 1, end = 1e9, gene_name = "dummy", strand = "+")
 
     # Check that a vector of labels is refused, since one run is one library
     expect_error(
@@ -348,6 +363,16 @@ test_that("import_cellsnp validates gene_annotation input", {
             library_id = "lib1"
         ),
         "gene_annotation is missing required columns"
+    )
+})
+
+test_that("import_cellsnp validates gene_annotation strand values before reading any files", {
+    star_strand <- data.frame(chrom = "chr1", start = 1, end = 1e9, gene_name = "dummy", strand = "*")
+
+    # Verify an unstranded gene is refused up front, naming the argument and the value
+    expect_error(
+        import_cellsnp(cellsnp_dir = "dummy", gene_annotation = star_strand, library_id = "lib1"),
+        "gene_annotation\\$strand must be .* found: \"\\*\""
     )
 })
 
@@ -1129,7 +1154,7 @@ test_that("import_cellsnp(vireo_folder=) populates donor_snp_info from real Vire
         "Village example dataset not found (not part of the installed package)"
     )
 
-    gene_annotation <- data.frame(chrom = "chr1", start = 1, end = 1e9, gene_name = "dummy")
+    gene_annotation <- data.frame(chrom = "chr1", start = 1, end = 1e9, gene_name = "dummy", strand = "+")
     snp_data <- import_cellsnp(
         cellsnp_dir = cellsnp_dir,
         gene_annotation = gene_annotation,
@@ -1576,4 +1601,100 @@ test_that("import_cellsnp_libraries() rejects an empty sheet", {
 
     # Ensure a sheet with no runs is refused
     expect_error(import_cellsnp_libraries(sheet, example_gene_annotation()), "one row per cellSNP-lite run")
+})
+
+# ==============================================================================
+# import_cellsnp() cell barcode alignment
+# ==============================================================================
+
+read_example_donor_ids <- function(cellsnp_dir) {
+    readr::read_tsv(file.path(cellsnp_dir, "donor_ids.tsv"), col_types = readr::cols(.default = "c"))
+}
+
+write_example_donor_ids <- function(donor_ids, cellsnp_dir) {
+    readr::write_tsv(donor_ids, file.path(cellsnp_dir, "donor_ids.tsv"))
+}
+
+test_that("import_cellsnp() matches Vireo donors to cells by barcode, not row order", {
+    cellsnp_dir <- copy_example_cellsnp_dir()
+    donor_ids <- read_example_donor_ids(cellsnp_dir)
+    write_example_donor_ids(donor_ids[rev(seq_len(nrow(donor_ids))), ], cellsnp_dir)
+
+    snp_data <- import_cellsnp(cellsnp_dir, example_gene_annotation(), vireo_folder = cellsnp_dir)
+
+    imported <- barcode_info(snp_data)
+    # Verify cells stay in cellSNP.samples.tsv order despite the reversed Vireo file
+    expect_equal(imported$barcode, donor_ids$barcode)
+    # Confirm each cell keeps the donor Vireo assigned to its own barcode
+    expect_equal(imported$donor, donor_ids$donor_id)
+})
+
+test_that("import_cellsnp() errors when donor_ids.tsv lacks a cellSNP barcode", {
+    cellsnp_dir <- copy_example_cellsnp_dir()
+    donor_ids <- read_example_donor_ids(cellsnp_dir)
+    write_example_donor_ids(donor_ids[-1, ], cellsnp_dir)
+
+    # Ensure a Vireo file missing a cell is refused rather than shifted onto other cells
+    expect_error(
+        import_cellsnp(cellsnp_dir, example_gene_annotation(), vireo_folder = cellsnp_dir),
+        "does not match the cellSNP-lite barcodes"
+    )
+})
+
+test_that("import_cellsnp() errors when donor_ids.tsv names a barcode cellSNP did not count", {
+    cellsnp_dir <- copy_example_cellsnp_dir()
+    donor_ids <- read_example_donor_ids(cellsnp_dir)
+    donor_ids$barcode[1] <- "NOTABARCODE"
+    write_example_donor_ids(donor_ids, cellsnp_dir)
+
+    # Ensure a Vireo file from a different cellSNP run is refused
+    expect_error(
+        import_cellsnp(cellsnp_dir, example_gene_annotation(), vireo_folder = cellsnp_dir),
+        "NOTABARCODE"
+    )
+})
+
+test_that("import_cellsnp() errors when donor_ids.tsv repeats a barcode", {
+    cellsnp_dir <- copy_example_cellsnp_dir()
+    donor_ids <- read_example_donor_ids(cellsnp_dir)
+    write_example_donor_ids(rbind(donor_ids, donor_ids[1, ]), cellsnp_dir)
+
+    # Ensure a cell with two Vireo rows is refused rather than duplicated
+    expect_error(
+        import_cellsnp(cellsnp_dir, example_gene_annotation(), vireo_folder = cellsnp_dir),
+        "more than one row"
+    )
+})
+
+test_that("import_cellsnp() errors when cellSNP.samples.tsv is missing", {
+    cellsnp_dir <- copy_example_cellsnp_dir()
+    file.remove(file.path(cellsnp_dir, "cellSNP.samples.tsv"))
+
+    # Ensure the missing barcode file is reported by name
+    expect_error(
+        import_cellsnp(cellsnp_dir, example_gene_annotation()),
+        "Required file not found: .*cellSNP.samples.tsv"
+    )
+})
+
+test_that("import_cellsnp() errors when cellSNP.samples.tsv disagrees with the matrix column count", {
+    cellsnp_dir <- copy_example_cellsnp_dir()
+    samples_file <- file.path(cellsnp_dir, "cellSNP.samples.tsv")
+    writeLines(readLines(samples_file)[-1], samples_file)
+
+    # Ensure a barcode list that cannot label every matrix column is refused
+    expect_error(
+        import_cellsnp(cellsnp_dir, example_gene_annotation()),
+        "55 barcodes but the count matrices have 56 columns"
+    )
+})
+
+test_that("import_cellsnp() errors when cellSNP.samples.tsv repeats a barcode", {
+    cellsnp_dir <- copy_example_cellsnp_dir()
+    samples_file <- file.path(cellsnp_dir, "cellSNP.samples.tsv")
+    barcodes <- readLines(samples_file)
+    writeLines(c(barcodes[-1], barcodes[2]), samples_file)
+
+    # Ensure repeated barcodes cannot silently give two columns the same cell
+    expect_error(import_cellsnp(cellsnp_dir, example_gene_annotation()), "missing or repeated barcodes")
 })

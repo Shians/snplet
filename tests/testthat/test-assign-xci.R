@@ -304,6 +304,41 @@ test_that("assign_xci promotes diagnostics into SNPData slots and survives subse
     expect_true(all(donor_snp_info(subset_snps)$snp_id %in% snp_info(subset_snps)$snp_id))
 })
 
+test_that("assign_xci errors once phase_from_molecules() has run", {
+    fixture <- make_xci_snpdata()
+    stored <- assign_xci(fixture$snpdata, n_inits = 3)
+    # Simulate phase_from_molecules() output without a BAM: read-backed blocks
+    # written into donor_snp_info
+    phased <- add_donor_snp_metadata(
+        stored,
+        dplyr::transmute(donor_snp_info(stored), snp_id, donor, zygosity_source, phase_block = 1L),
+        join_by = c("snp_id", "donor", "zygosity_source")
+    )
+
+    # Ensure a refit is refused, since the read-backed phase is oriented against the current fit
+    expect_error(assign_xci(phased, n_inits = 3), "phase_from_molecules\\(\\) has already run")
+    # Check the clonotype-level fit is held to the same order
+    expect_error(assign_xci_by_clonotype(phased, n_inits = 3), "phase_from_molecules\\(\\) has already run")
+})
+
+test_that("assign_xci errors on an object carrying molecule calls", {
+    fixture <- make_xci_snpdata()
+    stored <- assign_xci(fixture$snpdata, n_inits = 3)
+    stored@molecules <- MoleculeCalls(
+        calls = tibble::tibble(
+            library_id = NA_character_,
+            barcode = "cell1",
+            umi = "u1",
+            snp_id = snp_info(stored)$snp_id[1],
+            allele = "REF",
+            transcript_strand = "+"
+        )
+    )
+
+    # Verify stored calls alone also mark the object as past the molecule step
+    expect_error(assign_xci(stored, n_inits = 3), "Re-import the data to refit")
+})
+
 test_that("assign_xci diagnostics drop a donor's donor_snp_info rows once its cells are gone", {
     fixture <- make_xci_snpdata(n_donors = 2)
     stored <- assign_xci(fixture$snpdata, n_inits = 3)

@@ -198,6 +198,7 @@ NULL
         result@snp_info <- tibble::as_tibble(snp_info)
     }
     if (!is.null(barcode_info)) {
+        result <- .rekey_molecule_calls(result, barcode_info)
         result@barcode_info <- tibble::as_tibble(barcode_info)
         result <- .resync_library_info(result, result@barcode_info)
     }

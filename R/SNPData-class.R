@@ -38,6 +38,12 @@
 #'   for a caller that already has it (e.g. \code{\link{import_cellsnp}}'s DP matrix)
 #'   and wants to skip re-deriving it from \code{ref_count}/\code{alt_count}. Checked
 #'   against \code{alt_count + ref_count} by row-sum margins, not element-by-element.
+#' @param gene_anno A data.frame, optional (default \code{NULL}, storing an
+#'   empty annotation), with columns \code{chrom}, \code{start}, \code{end},
+#'   \code{gene_name}, \code{strand} (\code{"+"} or \code{"-"}); other columns
+#'   are dropped. Gene bodies,
+#'   stored so every step assigns SNPs to genes from one annotation.
+#'   \code{\link{import_cellsnp}} passes its own.
 #' @param object A SNPData object, required. Passed to the show method.
 #' @param x A SNPData object, required.
 #' @param i Numeric or logical vector, optional. Subsets SNPs (rows).
@@ -79,6 +85,11 @@
 #'   extracted, empty until it runs. Carried through subsetting and
 #'   \code{\link{rename_donor}} unchanged, since the functions that count it only
 #'   use calls for cells and SNPs the object still holds.
+#' @slot gene_anno A tibble of gene bodies (\code{chrom}, \code{start},
+#'   \code{end}, \code{gene_name}, \code{strand}), the annotation
+#'   \code{snp_info$gene_name} was assigned from at import. The molecule functions
+#'   build their SNP-to-gene map from it, so per-SNP and molecule counts use the
+#'   same genes. Carried through subsetting unchanged; empty if none was given.
 #' @slot zygosity_source Character string naming the \emph{active} zygosity-call source
 #'   (a value of \code{donor_snp_info$zygosity_source}), or \code{NA_character_} if none
 #'   is established yet. \code{\link{donor_snp_info}}, \code{\link{assign_xci}}, and other
@@ -100,6 +111,7 @@
 #'     filtered to the active zygosity source by default (alias: \code{get_donor_snp_info()})}
 #'   \item{\code{molecules(x)}}{Get the \code{MoleculeCalls} object left by
 #'     \code{\link{phase_from_molecules}}}
+#'   \item{\code{gene_anno(x)}}{Get the gene annotation stored at import}
 #'   \item{\code{chr_style(x)}}{Get chromosome naming style}
 #'   \item{\code{zygosity_source(x)}}{Get the active zygosity-call source; set with
 #'     \code{zygosity_source<-()}}
@@ -159,6 +171,7 @@ setClass(
         donor_snp_info = "tbl_df",
         library_info = "tbl_df",
         molecules = "MoleculeCalls",
+        gene_anno = "tbl_df",
         zygosity_source = "character"
     )
 )
@@ -184,7 +197,8 @@ setMethod(
         donor_info = NULL,
         donor_snp_info = NULL,
         donor_map = NULL,
-        total_count = NULL
+        total_count = NULL,
+        gene_anno = NULL
     ) {
         oth_count <- .validate_count_dims(ref_count, alt_count, oth_count)
         .validate_info_dims(ref_count, alt_count, snp_info, barcode_info)
@@ -256,6 +270,7 @@ setMethod(
         .Object@donor_snp_info <- donor_snp_info
         .Object@library_info <- .default_library_info(metrics$barcode_info)
         .Object@molecules <- MoleculeCalls()
+        .Object@gene_anno <- .as_stored_gene_anno(gene_anno)
         .Object@zygosity_source <- .derive_zygosity_source(donor_snp_info)
 
         methods::validObject(.Object)
@@ -329,6 +344,7 @@ setMethod(
         }
         obj <- .propagate_zygosity_source(obj, x)
         obj <- .propagate_molecules(obj, x)
+        obj <- .propagate_gene_anno(obj, x)
         obj
     }
 )
@@ -347,7 +363,8 @@ setGeneric(
         donor_info = NULL,
         donor_snp_info = NULL,
         donor_map = NULL,
-        total_count = NULL
+        total_count = NULL,
+        gene_anno = NULL
     ) {
         standardGeneric("SNPData")
     }
@@ -371,7 +388,8 @@ setMethod(
         donor_info = NULL,
         donor_snp_info = NULL,
         donor_map = NULL,
-        total_count = NULL
+        total_count = NULL,
+        gene_anno = NULL
     ) {
         new(
             "SNPData",
@@ -383,7 +401,8 @@ setMethod(
             donor_info = donor_info,
             donor_snp_info = donor_snp_info,
             donor_map = donor_map,
-            total_count = total_count
+            total_count = total_count,
+            gene_anno = gene_anno
         )
     }
 )
@@ -488,6 +507,19 @@ setMethod("molecules", signature(x = "SNPData"), function(x) {
         return(MoleculeCalls())
     }
     x@molecules
+})
+
+#' @exportMethod gene_anno
+#' @rdname SNPData-class
+setGeneric("gene_anno", function(x) standardGeneric("gene_anno"))
+#' @exportMethod gene_anno
+#' @rdname SNPData-class
+setMethod("gene_anno", signature(x = "SNPData"), function(x) {
+    # Handle backwards compatibility with older SNPData objects
+    if (!methods::.hasSlot(x, "gene_anno")) {
+        return(.empty_gene_anno())
+    }
+    x@gene_anno
 })
 
 #' @exportMethod donor_snp_info
@@ -669,6 +701,15 @@ setMethod("updateObject", signature(object = "SNPData"), function(object, ..., v
         }
     }
 
+    # Objects from before the annotation was stored have none to recover, so
+    # the molecule functions cannot run on them until they are re-imported.
+    if (!methods::.hasSlot(object, "gene_anno")) {
+        object@gene_anno <- .empty_gene_anno()
+        if (verbose) {
+            log_info("updateObject(SNPData): no gene annotation stored; re-import to use molecule functions")
+        }
+    }
+
     methods::validObject(object)
     object
 })
@@ -705,6 +746,7 @@ setReplaceMethod("barcode_info", signature(x = "SNPData", value = "data.frame"),
             )
         }
     }
+    x <- .rekey_molecule_calls(x, value)
     x@barcode_info <- value
     x <- .resync_library_info(x, value)
     x
@@ -800,7 +842,8 @@ rename_donor <- function(x, donor_map) {
     result <- .propagate_zygosity_source(result, x)
     # Molecule calls are keyed on (library_id, barcode), not donor, so they
     # need no relabelling here.
-    .propagate_molecules(result, x)
+    result <- .propagate_molecules(result, x)
+    .propagate_gene_anno(result, x)
 }
 
 # Dimensions
@@ -863,6 +906,9 @@ setMethod(
         print(donor_snp_info(object))
         if (.has_molecule_calls(molecules(object))) {
             cat("Molecule calls (molecules()):", nrow(molecules(object)@calls), "\n")
+        }
+        if (nrow(gene_anno(object)) > 0) {
+            cat("Gene annotation (gene_anno()):", nrow(gene_anno(object)), "genes", "\n")
         }
     }
 )

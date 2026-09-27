@@ -20,7 +20,11 @@ import_cellsnp(
 cellSNP-lite output files.}
 
 \item{gene_annotation}{A data.frame, required, with columns \code{chrom},
-\code{start}, \code{end}, \code{gene_name}. Gene annotations.}
+\code{start}, \code{end}, \code{gene_name}, \code{strand} (every value
+\code{"+"} or \code{"-"}). Gene annotations, used to fill
+\code{snp_info$gene_name} and stored on the object (see \code{gene_anno()})
+for \code{\link{phase_from_molecules}} and
+\code{\link{molecule_haplotype_counts}}.}
 
 \item{library_id}{Character scalar, optional (default \code{NA}). Name of
 the sequencing library this cellSNP-lite run came from, stored on every

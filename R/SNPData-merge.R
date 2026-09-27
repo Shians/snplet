@@ -129,6 +129,7 @@ merge_snpdata <- function(
     # that happened to draw the same barcode.
     .check_library_ids(x, y)
     .check_no_molecule_calls(x, y)
+    gene_anno_merged <- .merge_gene_anno(x, y)
 
     # Barcodes are the real cell identity; cell_id is a positional label the
     # constructor generates, so it is only a fallback for objects built without
@@ -262,7 +263,8 @@ merge_snpdata <- function(
         snp_info = snp_info_merged,
         barcode_info = barcode_info_merged,
         donor_info = donor_info_merged,
-        donor_snp_info = donor_snp_info_merged
+        donor_snp_info = donor_snp_info_merged,
+        gene_anno = gene_anno_merged
     )
     merged_obj@zygosity_source <- zygosity_source_merged
 

@@ -20,8 +20,9 @@ non-\code{NA}), and may contain \code{vdj_file}, \code{vireo_folder},
 the same name for that row; see \sQuote{Sample sheet} below.}
 
 \item{gene_annotation}{A data.frame, required, with columns \code{chrom},
-\code{start}, \code{end}, \code{gene_name}. Gene annotations, shared by
-every run.}
+\code{start}, \code{end}, \code{gene_name}, \code{strand}. Gene
+annotations, shared by every run and stored on the result; see
+\code{\link{import_cellsnp}}.}
 
 \item{barcode_column}{Character scalar (default \code{"barcode"}). Name of
 the barcode column in every run's \code{vdj_file}.}

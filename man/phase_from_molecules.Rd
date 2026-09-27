@@ -7,7 +7,6 @@
 phase_from_molecules(
   x,
   bam_files,
-  gene_annotation,
   target_chrom = "chrX",
   min_mapq = 20L,
   min_baseq = 10L,
@@ -21,18 +20,13 @@ phase_from_molecules(
 \arguments{
 \item{x}{A SNPData object, required, already fit by `assign_xci()` or
 `assign_xci_by_clonotype()` (see `.has_xci_diagnostics()`), with a
-`donor` column in `barcode_info`. See Details for per-donor library
-constraints.}
+`donor` column in `barcode_info` and the gene annotation stored at
+import (`gene_anno(x)`), which the SNP-to-gene map is built from. See
+Details for per-donor library constraints.}
 
 \item{bam_files}{A named character vector or list, required,
 `library_id = path(s)`, giving the indexed BAM file or files holding that
 library's reads. See Details for naming and pooling rules.}
-
-\item{gene_annotation}{A data.frame, required, with columns `chrom`,
-`start`, `end`, `gene_name`, `strand` (`"+"`/`"-"`), one row per gene
-body. Used by `assign_snp_genes()` to build the SNP-to-gene map stored
-with the molecule calls, which `haplotype_expression_by_molecule()` counts
-by.}
 
 \item{target_chrom}{Character scalar (default `"chrX"`, matching
 `assign_xci()`'s own restriction). Canonical chromosome to restrict
@@ -59,15 +53,15 @@ A SNPData object with `donor_snp_info` gaining these columns:
       from molecules spanning the SNP itself;
       `startsWith(phase_source, "read_backed")` selects the two
       block-based cases together.
-    \item `allele_on_x1`, re-derived: the EM's value where present (so
-      nothing downstream that already reads `allele_on_x1` changes
-      behaviour), else the molecule value, else `NA` where
-      `phase_conflict` is `TRUE`.
+    \item `allele_on_x1`, re-derived: the EM's value where present, else
+      the molecule value, else `NA` where `phase_conflict` is `TRUE`.
+      SNPs the EM had phased keep their value; the others it newly phases
+      are counted by `haplotype_expression()` from here on.
   }
   The object's `molecules` slot is also set to a
   \code{\link[=MoleculeCalls-class]{MoleculeCalls}} object holding the
   per-molecule allele calls extracted here (keyed on `library_id` and
-  `barcode`), the SNP-to-gene map built from `gene_annotation`, the per-BAM
+  `barcode`), the SNP-to-gene map built from `gene_anno(x)`, the per-BAM
   strand calibration (`bam_calibration()`), and the BAM paths and settings
   used. `haplotype_expression_by_molecule()` and `test_escape()` count
   escape from it without re-reading the BAMs, and it survives subsetting,
@@ -84,8 +78,14 @@ to X1/X2 against `assign_xci()`'s already-stored EM phase (see
 }
 \details{
 The change is additive: `assign_xci()`'s own phase calls are never
-replaced, and `haplotype_expression()` is unaffected unless told to read
-the new columns.
+replaced. SNPs the EM left unphased do gain phase, though, so per-SNP
+counting (`haplotype_expression()`, `test_escape(count_source = "snp")`)
+uses more SNPs after this call than before it. To compare per-SNP with
+molecule counting, take the per-SNP result before running this.
+
+Run it once, after `assign_xci()`: it errors on an object it has already
+phased, and `assign_xci()` then errors too, since the read-backed phase is
+oriented against that fit. Re-import to start over.
 
 
 BAM files are looked up by library, not by donor, so each donor's cells

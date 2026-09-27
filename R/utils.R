@@ -123,7 +123,10 @@ utils::globalVariables(c(
     ".oriented_allele",
     "is_oriented_allele",
     "h1_count",
-    "h2_count"
+    "h2_count",
+    "new_library_id",
+    "new_barcode",
+    "phase_block_used"
 ))
 
 percentile_summary <- function(x, percentiles = c(0.1, 0.25, 0.75, 0.9, 0.95, 0.99)) {

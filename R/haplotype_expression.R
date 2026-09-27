@@ -754,8 +754,8 @@ setMethod(
 #'     \code{barcode_info(x)}. The calls survive subsetting unchanged, and only
 #'     those for cells and SNPs still in \code{x} are counted, so \code{x} can
 #'     be filtered after \code{phase_from_molecules()} as freely as before it.}
-#'   \item{The SNP-to-gene map}{Built from the \code{gene_annotation} given to
-#'     \code{phase_from_molecules()}. It is distinct from
+#'   \item{The SNP-to-gene map}{Built by \code{phase_from_molecules()} from
+#'     the annotation stored at import, \code{gene_anno(x)}. It is distinct from
 #'     \code{snp_info$gene_name}, which comma-joins overlapping genes into one
 #'     label: attributing a molecule at a SNP overlapping two genes needs each
 #'     candidate as its own row with its strand.}
@@ -803,7 +803,7 @@ setMethod(
 #' \dontrun{
 #' snp_data <- assign_xci(snp_data)
 #' # the molecule calls ride along on snp_data from here on
-#' snp_data <- phase_from_molecules(snp_data, bam_files = c(lib1 = "lib1.bam"), gene_annotation = gene_anno)
+#' snp_data <- phase_from_molecules(snp_data, bam_files = c(lib1 = "lib1.bam"))
 #'
 #' hap <- haplotype_expression_by_molecule(snp_data)
 #' }
@@ -837,7 +837,7 @@ setMethod(
         if (!.has_molecule_calls(molecules)) {
             stop(
                 "This object carries no molecule calls; they are stored by phase_from_molecules(x). ",
-                "Re-run it on this object."
+                "Re-import the data and run it once."
             )
         }
         # Calls are keyed on (library_id, barcode) so relabelling donors cannot
@@ -852,11 +852,11 @@ setMethod(
         # label with no strand and no per-candidate rows.
         snp_gene_map <- snp_gene_map(molecules)
         # Only reachable for an object migrated from before the map moved here,
-        # whose annotation had no strand column.
+        # whose annotation had no strand column, or saved with an empty one.
         if (nrow(snp_gene_map) == 0) {
             stop(
-                "This object's molecule calls carry no SNP-to-gene map. Re-run ",
-                "phase_from_molecules(x, bam_files, gene_annotation) with a stranded annotation."
+                "This object's molecule calls carry no SNP-to-gene map. Re-import the data with a stranded ",
+                "gene annotation and run phase_from_molecules(x, bam_files)."
             )
         }
 

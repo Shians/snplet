@@ -1529,6 +1529,32 @@ test_that("merge_snpdata() refuses an object carrying molecule calls", {
     expect_error(merge_snpdata(x, data$y), "cannot merge objects carrying molecule calls")
 })
 
+merge_test_gene_annotation <- tibble::tibble(
+    chrom = "chr1",
+    start = 1,
+    end = 1000,
+    gene_name = "GENE1",
+    strand = "+"
+)
+
+test_that("merge_snpdata() keeps the gene annotation its inputs share", {
+    data <- create_merge_test_data()
+    data$x@gene_anno <- merge_test_gene_annotation
+    data$y@gene_anno <- merge_test_gene_annotation
+
+    # Verify the shared annotation survives the merge
+    expect_identical(gene_anno(merge_snpdata(data$x, data$y)), merge_test_gene_annotation)
+})
+
+test_that("merge_snpdata() refuses inputs imported with different gene annotations", {
+    data <- create_merge_test_data()
+    data$x@gene_anno <- merge_test_gene_annotation
+    data$y@gene_anno <- dplyr::mutate(merge_test_gene_annotation, gene_name = "GENE2")
+
+    # Ensure the merge stops rather than keeping one annotation that disagrees with half the gene names
+    expect_error(merge_snpdata(data$x, data$y), "different gene annotations")
+})
+
 test_that("merge_snpdata union/union retains all SNPs and cells", {
     data <- create_merge_test_data()
     x <- data$x

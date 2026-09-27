@@ -172,6 +172,27 @@
     invisible(NULL)
 }
 
+# Runs imported together share one annotation, so the merged object keeps it.
+# Two different ones would have filled snp_info$gene_name differently for the
+# same SNP, which no choice between them can fix, so that is refused.
+.merge_gene_anno <- function(x, y) {
+    x_anno <- gene_anno(x)
+    y_anno <- gene_anno(y)
+    if (nrow(x_anno) == 0) {
+        return(y_anno)
+    }
+    if (nrow(y_anno) == 0) {
+        return(x_anno)
+    }
+    if (!identical(x_anno, y_anno)) {
+        stop(
+            "merge_snpdata() cannot merge objects imported with different gene annotations, since their ",
+            "snp_info$gene_name columns would disagree. Import every run with the same gene_annotation."
+        )
+    }
+    x_anno
+}
+
 .merge_donor_info <- function(x, y, donors_retained) {
     auto_cols <- c("n_cells")
     donor_info_x <- donor_info(x) %>% dplyr::select(-dplyr::any_of(auto_cols))

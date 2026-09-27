@@ -394,6 +394,28 @@ test_that("haplotype_expression_by_molecule() counts only the cells still in a s
     expect_equal(x1_row$coverage, 1)
 })
 
+test_that("haplotype_expression_by_molecule() still counts after library_id is relabelled", {
+    fixture <- make_molecule_hap_fixture()
+    molecule_calls <- tibble::tibble(
+        donor = "donor0",
+        barcode = "cell1",
+        umi = "u1",
+        snp_id = fixture$snp_ids[["snpA"]],
+        allele = "REF",
+        transcript_strand = "+"
+    )
+    obj <- with_molecule_calls(fixture$obj, molecule_calls)
+    updated <- barcode_info(obj)
+    updated$library_id <- "lib_A"
+
+    barcode_info(obj) <- updated
+    result <- haplotype_expression_by_molecule(obj, by_active_x = TRUE)
+    x1_row <- dplyr::filter(result, gene_name == "GENE1", active_x == "X1")
+
+    # Verify the re-keyed calls still reach their cell and are counted
+    expect_equal(x1_row$coverage, 1)
+})
+
 test_that("haplotype_expression_by_molecule() still counts after donors are renamed", {
     fixture <- make_molecule_hap_fixture()
     molecule_calls <- tibble::tibble(

@@ -6,7 +6,11 @@
 #' @param cellsnp_dir Character scalar, required. Directory containing
 #'   cellSNP-lite output files.
 #' @param gene_annotation A data.frame, required, with columns \code{chrom},
-#'   \code{start}, \code{end}, \code{gene_name}. Gene annotations.
+#'   \code{start}, \code{end}, \code{gene_name}, \code{strand} (every value
+#'   \code{"+"} or \code{"-"}). Gene annotations, used to fill
+#'   \code{snp_info$gene_name} and stored on the object (see \code{gene_anno()})
+#'   for \code{\link{phase_from_molecules}} and
+#'   \code{\link{molecule_haplotype_counts}}.
 #' @param library_id Character scalar, optional (default \code{NA}). Name of
 #'   the sequencing library this cellSNP-lite run came from, stored on every
 #'   cell. See \sQuote{Merging libraries} below.
@@ -90,7 +94,7 @@ import_cellsnp <- function(
     clonotype_column = "raw_clonotype_id"
 ) {
     # Validate gene_annotation columns
-    required_gene_cols <- c("chrom", "start", "end", "gene_name")
+    required_gene_cols <- c("chrom", "start", "end", "gene_name", "strand")
     missing_cols <- setdiff(required_gene_cols, colnames(gene_annotation))
     if (length(missing_cols) > 0) {
         stop(
@@ -100,6 +104,7 @@ import_cellsnp <- function(
             )
         )
     }
+    .check_gene_strand(gene_annotation$strand, arg_name = "gene_annotation")
 
     # Left NA rather than defaulted to a guessed label: nothing in the cellSNP
     # output records which library a run came from, and a guessed default
@@ -118,7 +123,7 @@ import_cellsnp <- function(
     base_file <- fs::path(cellsnp_dir, "cellSNP.base.vcf.gz")
     samples_file <- fs::path(cellsnp_dir, "cellSNP.samples.tsv")
 
-    for (file in c(dp_file, ad_file, oth_file, base_file)) {
+    for (file in c(dp_file, ad_file, oth_file, base_file, samples_file)) {
         check_file(file)
     }
     # Check optional files if provided
@@ -159,6 +164,7 @@ import_cellsnp <- function(
         col_names = "barcode",
         col_types = readr::cols(barcode = readr::col_character())
     )
+    .check_cell_barcodes(cells$barcode, ncol(coverage), samples_file)
 
     # Merge SNP info with gene annotation
     snp_info_full <- add_snp_gene_names(snp_vcf_data, gene_annotation) %>%
@@ -208,6 +214,7 @@ import_cellsnp <- function(
         barcode_column,
         clonotype_column
     )
+    barcode_info <- .align_barcode_info(barcode_info, cells$barcode, vireo_file)
 
     # One cellSNP-lite run covers one library, so the label is constant across cells.
     barcode_info$library_id <- as.character(library_id)
@@ -230,7 +237,8 @@ import_cellsnp <- function(
         barcode_info = barcode_info,
         donor_snp_info = donor_snp_info,
         donor_map = donor_map,
-        total_count = coverage
+        total_count = coverage,
+        gene_anno = gene_annotation
     )
 
     return(snp_data)
@@ -251,8 +259,9 @@ import_cellsnp <- function(
 #'   \code{bam_files} is passed to the \code{\link{import_cellsnp}} argument of
 #'   the same name for that row; see \sQuote{Sample sheet} below.
 #' @param gene_annotation A data.frame, required, with columns \code{chrom},
-#'   \code{start}, \code{end}, \code{gene_name}. Gene annotations, shared by
-#'   every run.
+#'   \code{start}, \code{end}, \code{gene_name}, \code{strand}. Gene
+#'   annotations, shared by every run and stored on the result; see
+#'   \code{\link{import_cellsnp}}.
 #' @param barcode_column Character scalar (default \code{"barcode"}). Name of
 #'   the barcode column in every run's \code{vdj_file}.
 #' @param clonotype_column Character scalar (default
@@ -986,6 +995,72 @@ read_vcf_base <- function(vcf_file) {
     vcf_data <- vcf_data[, c("snp_id", names(vcf_data)[names(vcf_data) != "snp_id"])]
 
     return(vcf_data)
+}
+
+# cellSNP.samples.tsv names the matrix columns in order, so it must hold exactly
+# one distinct barcode per column; anything else leaves the columns unlabelled.
+.check_cell_barcodes <- function(barcodes, n_columns, samples_file) {
+    if (length(barcodes) != n_columns) {
+        stop(
+            samples_file,
+            " lists ",
+            length(barcodes),
+            " barcodes but the count matrices have ",
+            n_columns,
+            " columns; the cellSNP-lite output may be incomplete or mixed from different runs."
+        )
+    }
+    if (anyNA(barcodes) || anyDuplicated(barcodes)) {
+        stop(samples_file, " contains missing or repeated barcodes, so matrix columns cannot be matched to cells.")
+    }
+    invisible(NULL)
+}
+
+# Puts barcode_info in matrix column order. donor_ids.tsv comes from a separate
+# Vireo run and a VDJ join can repeat rows, so neither is trusted to follow
+# cellSNP.samples.tsv: rows are matched by barcode, and any cell missing,
+# extra, or repeated is an error, since positional misalignment would silently
+# give every cell another cell's donor.
+.align_barcode_info <- function(barcode_info, barcodes, vireo_file = NULL) {
+    source_label <- "cell annotations"
+    if (!is.null(vireo_file)) {
+        source_label <- vireo_file
+    }
+    describe <- function(values) {
+        paste0(length(values), " (e.g. ", paste(utils::head(values, 3), collapse = ", "), ")")
+    }
+
+    repeated <- unique(barcode_info$barcode[duplicated(barcode_info$barcode)])
+    if (length(repeated) > 0) {
+        stop(
+            source_label,
+            " has more than one row for ",
+            describe(repeated),
+            " barcode(s); check for repeated cells or a VDJ barcode with several clonotypes."
+        )
+    }
+
+    missing <- setdiff(barcodes, barcode_info$barcode)
+    extra <- setdiff(barcode_info$barcode, barcodes)
+    if (length(missing) > 0 || length(extra) > 0) {
+        stop(
+            source_label,
+            " does not match the cellSNP-lite barcodes: ",
+            describe(missing),
+            " cellSNP barcode(s) have no row and ",
+            describe(extra),
+            " row(s) name barcodes cellSNP did not count. ",
+            "Was Vireo run on this cellSNP-lite output?"
+        )
+    }
+
+    row_order <- match(barcodes, barcode_info$barcode)
+    if (!identical(row_order, seq_along(barcodes))) {
+        logger::log_warn("Reordering {source_label} rows to match the cellSNP-lite barcode order")
+    }
+    barcode_info <- barcode_info[row_order, , drop = FALSE]
+    barcode_info$cell_id <- paste0("cell_", seq_len(nrow(barcode_info)))
+    barcode_info
 }
 
 #' Merge donor and clonotype information
