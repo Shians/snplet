@@ -191,6 +191,16 @@ test_that("detect_chr_style detects style with any matches", {
     expect_equal(detect_chr_style(chr_names), "ucsc")
 })
 
+test_that("detect_chr_style errors clearly on mixed naming styles", {
+    chr_names <- c("chr1", "chr2", "chrX", "X")
+
+    # Ensure mixed styles raise a user-facing error naming both styles and the offending names
+    expect_error(detect_chr_style(chr_names), "mix multiple naming styles: numeric \\(e\\.g\\. X\\); ucsc")
+
+    # Check that the error no longer asks the user to report a bug
+    expect_error(detect_chr_style(chr_names), "harmonise them")
+})
+
 # ==============================================================================
 # Test: normalise_chr_names
 # ==============================================================================

@@ -382,7 +382,8 @@ check_file <- function(path) {
 #' "genbank_human", or "unknown".
 #'
 #' @param chr_names Character vector of chromosome names
-#' @return Character string indicating the detected style
+#' @return Character string indicating the detected style. Errors if the names mix more than
+#'   one recognised style (e.g. both "chrX" and "X").
 #'
 #' @examples
 #' \dontrun{
@@ -412,39 +413,31 @@ detect_chr_style <- function(chr_names) {
     # Check each style column for matches
     style_cols <- c("numeric", "ucsc", "refseq_mouse", "genbank_mouse", "refseq_human", "genbank_human")
 
-    detected_styles <- character(0)
+    # Record which input chromosomes match each style
+    matches_by_style <- lapply(style_cols, function(style) {
+        intersect(unique_chrs, chr_table[[style]])
+    })
+    names(matches_by_style) <- style_cols
+    matches_by_style <- matches_by_style[lengths(matches_by_style) > 0]
+    detected_styles <- names(matches_by_style)
 
-    for (style in style_cols) {
-        table_values <- chr_table[[style]]
-        table_values <- table_values[!is.na(table_values)]
-
-        # Count how many unique input chromosomes match this style
-        matching_chrs <- unique_chrs[unique_chrs %in% table_values]
-        n_matches <- length(matching_chrs)
-
-        if (n_matches == 0) {
-            next
-        }
-
-        # Calculate fraction of input chromosomes that match
-        input_fraction <- n_matches / length(unique_chrs)
-
-        # A style is valid if it matches any of the input chromosomes
-        is_valid <- n_matches > 0
-
-        if (is_valid) {
-            detected_styles <- c(detected_styles, style)
-        }
-    }
-
-    # Since chromosome naming styles are mutually exclusive,
-    # we should never detect more than one style
+    # Naming styles are mutually exclusive, so more than one match means the input mixes conventions
+    # (e.g. "chrX" and "X"), typically from libraries aligned to different references
     if (length(detected_styles) > 1) {
+        style_summary <- vapply(
+            detected_styles,
+            function(style) {
+                examples <- utils::head(matches_by_style[[style]], 3)
+                paste0(style, " (e.g. ", paste(examples, collapse = ", "), ")")
+            },
+            character(1)
+        )
         stop(
-            "Multiple chromosome styles detected: ",
-            paste(detected_styles, collapse = ", "),
-            ". This should not happen as naming conventions are mutually exclusive. ",
-            "Please report this as a bug."
+            "Chromosome names mix multiple naming styles: ",
+            paste(style_summary, collapse = "; "),
+            ". All chromosome names must follow a single convention; ",
+            "harmonise them (e.g. align every library to the same reference) before importing.",
+            call. = FALSE
         )
     }
 
