@@ -59,7 +59,6 @@ utils::globalVariables(c(
     "same_allele_dominant",
     "phase_contradiction",
     "phase_likely_inverted",
-    "gene_overlap",
     "snp_coverage",
     "escapes",
     "donor_other",

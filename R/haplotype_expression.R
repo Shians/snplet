@@ -129,11 +129,12 @@
 #' dropped, with the number dropped reported via \code{logger}.
 #'
 #' A SNP inside overlapping gene bodies carries a comma-joined
-#' \code{gene_name} (see \code{\link{add_snp_gene_names}}) and is a candidate
-#' for each of those genes, so one SNP can represent several genes. Its
-#' counts are unstranded and cannot be split between them: such rows are
-#' marked \code{gene_overlap}, and their counts may include reads from the
-#' other genes. For a strand-resolved gene count, use
+#' \code{gene_name} (see \code{\link{add_snp_gene_names}}), such as
+#' \code{"TSIX, XIST"}. Its counts are unstranded and mix the reads of every
+#' gene it overlaps, so it is never a representative: it is excluded from the
+#' gene-level output, and a gene whose SNPs all overlap another gene is
+#' dropped. Such SNPs still appear with \code{by_snp = TRUE}. For a
+#' strand-resolved count at overlapping genes, use
 #' \code{\link{haplotype_expression_by_molecule}}.
 #'
 #' The representative is \emph{not} required to flip its dominant physical
@@ -193,20 +194,19 @@
 #'   \code{active_count}, \code{inactive_count}, \code{coverage},
 #'   \code{escape_fraction} (\code{inactive_count / coverage}), \code{escapes}
 #'   (\code{escape_fraction >= escape_threshold}), \code{phase_likely_inverted}
-#'   (\code{TRUE} when the representative SNP overlaps a gene in
-#'   \code{inverted_phase_genes}), \code{gene_overlap} (\code{TRUE} when it
-#'   overlaps more than one gene body, so its counts are shared; see
-#'   \sQuote{Gene-level representative selection}),
+#'   (\code{TRUE} when \code{gene_name} is in \code{inverted_phase_genes}),
 #'   \code{same_allele_dominant} (\code{TRUE} when both groups favour the same
 #'   physical allele), \code{other_donor_escape} and \code{donor_discordant}
 #'   (see \sQuote{Cross-donor consistency}). SNPs with no gene annotation
-#'   (\code{NA} \code{gene_name}) are excluded, as are genes with no SNP
-#'   covered in both active-X groups. This is the grain
+#'   (\code{NA} \code{gene_name}) or overlapping more than one gene are
+#'   excluded, as are genes with no remaining SNP covered in both active-X
+#'   groups. This is the grain
 #'   \code{\link{test_escape}} expects, so the result can be passed to it
 #'   directly.
 #'
 #'   With \code{by_snp = TRUE} each row instead represents one donor and phased
-#'   SNP, \code{gene_name} keeps the SNP's comma-joined label, and
+#'   SNP, including SNPs overlapping several genes, \code{gene_name} keeps
+#'   the SNP's comma-joined label, and
 #'   \code{other_donor_escape} and \code{donor_discordant} are
 #'   omitted, since they compare genes across donors.
 #'
@@ -219,8 +219,8 @@
 #'   "active" one, see Details). No group is dropped for contradicting the
 #'   phase; the flags are reported for you to act on.
 #'
-#'   When the object carries no gene annotation, \code{gene_name},
-#'   \code{phase_likely_inverted} and \code{gene_overlap} are omitted.
+#'   When the object carries no gene annotation, \code{gene_name} and
+#'   \code{phase_likely_inverted} are both omitted.
 #'
 #' @family X-chromosome inactivation functions
 #' @export
@@ -419,16 +419,16 @@ setMethod(
             # only available signal is the gene's identity -- hence a curated
             # list rather than a derived flag.
             #
-            # Matched per component gene: a SNP overlapping several gene bodies
-            # carries a comma-joined label (XIST's 3' end reads "TSIX, XIST"),
-            # and its unstranded counts include every listed gene's reads, so
-            # one inverted component is enough to invert the stored phase.
+            # Matched per component gene, for by_snp = TRUE output: a SNP
+            # overlapping several gene bodies carries a comma-joined label
+            # (XIST's 3' end reads "TSIX, XIST"), and its unstranded counts
+            # include every listed gene's reads, so one inverted component is
+            # enough to invert the stored phase.
             dplyr::mutate(
                 phase_likely_inverted = purrr::map_lgl(
                     .split_gene_label(gene_name),
                     function(genes) any(genes %in% inverted_phase_genes)
-                ),
-                gene_overlap = lengths(.split_gene_label(gene_name)) > 1L
+                )
             ) %>%
             # The flip must be assessed within a donor: X1/X2 labels are not
             # comparable across donors.
@@ -474,7 +474,7 @@ setMethod(
         # and would otherwise be a uniformly FALSE column asserting that no gene
         # is inverted when in truth none could be checked.
         if (!"gene_name" %in% colnames(snp_info)) {
-            result <- dplyr::select(result, -gene_name, -phase_likely_inverted, -gene_overlap)
+            result <- dplyr::select(result, -gene_name, -phase_likely_inverted)
         }
         result
     }
@@ -497,14 +497,19 @@ setMethod(
 #'
 #' @keywords internal
 .elect_gene_representative_snps <- function(result) {
-    # A SNP overlapping several gene bodies is a candidate for each of them, not
-    # for a pseudo-gene named by their joined label: otherwise "TSIX, XIST"
-    # would be elected apart from "XIST", and XIST reported twice or under the
-    # wrong name. The same SNP may then represent more than one gene;
-    # gene_overlap records that its counts are shared.
-    annotated <- result %>%
-        dplyr::filter(!is.na(gene_name)) %>%
-        tidyr::separate_longer_delim(gene_name, delim = ", ")
+    # A SNP overlapping several gene bodies carries a comma-joined label
+    # ("TSIX, XIST"). Its unstranded counts mix every listed gene's reads and
+    # cannot be attributed to any one of them, so it represents no gene: it is
+    # neither a pseudo-gene of its own nor a candidate for its components.
+    single_gene <- lengths(.split_gene_label(result$gene_name)) == 1L
+    n_shared <- dplyr::n_distinct(result$snp_id[!is.na(result$gene_name) & !single_gene])
+    if (n_shared > 0) {
+        logger::log_info(
+            "Excluded {n_shared} SNP(s) overlapping more than one gene from gene-level output; ",
+            "use by_snp = TRUE or haplotype_expression_by_molecule() to see them"
+        )
+    }
+    annotated <- dplyr::filter(result, !is.na(gene_name), single_gene)
 
     # Coverage alone decides, among SNPs covered in both groups. Total coverage
     # is summed over both groups, so the ranking is not decided by whichever
@@ -518,8 +523,8 @@ setMethod(
     # flip happened is still reported, as same_allele_dominant and
     # phase_contradiction, rather than used to select.
     candidates <- annotated %>%
-        dplyr::filter(sum(coverage > 0) == 2L, .by = c(donor, gene_name, snp_id)) %>%
-        dplyr::mutate(snp_coverage = sum(coverage), .by = c(donor, gene_name, snp_id))
+        dplyr::filter(sum(coverage > 0) == 2L, .by = c(donor, snp_id)) %>%
+        dplyr::mutate(snp_coverage = sum(coverage), .by = c(donor, snp_id))
 
     # Ties on coverage are broken by snp_id so repeat runs elect the same SNP;
     # slice_max(with_ties = FALSE) alone would depend on incoming row order.
@@ -662,7 +667,6 @@ setMethod(
             "snp_id",
             "gene_name",
             "phase_likely_inverted",
-            "gene_overlap",
             "same_allele_dominant",
             "other_donor_escape",
             "donor_discordant"
@@ -685,13 +689,7 @@ setMethod(
         # The flags are metadata rather than measurements, so they trail the
         # counts as they do in the per-group output.
         dplyr::relocate(
-            dplyr::any_of(c(
-                "phase_likely_inverted",
-                "gene_overlap",
-                "same_allele_dominant",
-                "other_donor_escape",
-                "donor_discordant"
-            )),
+            dplyr::any_of(c("phase_likely_inverted", "same_allele_dominant", "other_donor_escape", "donor_discordant")),
             .after = dplyr::last_col()
         )
 
