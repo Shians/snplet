@@ -443,6 +443,8 @@ setMethod(
         "{nrow(assignments)} {unit_label} (active X1={counts[['X1']]}, active X2={counts[['X2']]}, ",
         "unassigned={sum(is.na(active))})"
     )
+    n_assigned <- sum(counts)
+    minority_frac <- if (n_assigned > 0) min(counts) / n_assigned else NA_real_
 
     snp_info_filtered <- snp_info[xci_result$gene_keep, ]
     ref_mat_filtered <- ref_mat[xci_result$gene_keep, , drop = FALSE]
@@ -461,7 +463,11 @@ setMethod(
         alt_mat = alt_mat_filtered,
         rho = xci_result$rho,
         median_pi_g = median_pi_g,
-        skew = xci_result$prior
+        skew = xci_result$prior,
+        n_het_genes = nrow(ref_mat),
+        n_informative = sum(xci_result$gene_keep),
+        frac_assigned = n_assigned / nrow(assignments),
+        minority_frac = minority_frac
     )
 }
 

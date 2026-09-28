@@ -93,6 +93,12 @@ setMethod("xci_haplotypes", signature(x = "SNPData"), function(x) {
 #' model's own estimate of what fraction of this donor's cells have X1
 #' active, i.e. the quantified XCI skew, fit jointly with phase and escape
 #' rather than read off the confidence-thresholded hard calls afterwards).
+#' \code{donor_info} also gains fit-quality diagnostics: \code{xci_n_het_genes}
+#' (genes entering the EM), \code{xci_n_informative} (genes that drove active-X
+#' calling), \code{xci_frac_assigned} (fraction of modelling units, cells or
+#' clonotypes, meeting the confidence threshold) and \code{xci_minority_frac}
+#' (fraction of assigned units on the minority X). A donor failing any check in
+#' \code{\link{.warn_unreliable_xci_fits}} is logged as a warning.
 #' For a clonotype-level fit the per-cell projection is used for barcode
 #' annotation.
 #'
@@ -142,7 +148,15 @@ setMethod("xci_haplotypes", signature(x = "SNPData"), function(x) {
         dplyr::bind_rows()
 
     donor_diag <- purrr::map(donor_fits, function(f) {
-        tibble::tibble(donor = f$donor, xci_median_pi_g = f$median_pi_g, xci_skew = f$skew)
+        tibble::tibble(
+            donor = f$donor,
+            xci_median_pi_g = f$median_pi_g,
+            xci_skew = f$skew,
+            xci_n_het_genes = f$n_het_genes,
+            xci_n_informative = f$n_informative,
+            xci_frac_assigned = f$frac_assigned,
+            xci_minority_frac = f$minority_frac
+        )
     }) %>%
         dplyr::bind_rows()
 
@@ -163,9 +177,74 @@ setMethod("xci_haplotypes", signature(x = "SNPData"), function(x) {
     if (nrow(pooled_rho) > 0) {
         x <- add_donor_metadata(x, pooled_rho, join_by = "donor", overwrite = TRUE)
     }
+    if (nrow(donor_diag) > 0) {
+        donor_diag %>%
+            dplyr::left_join(pooled_rho, by = "donor") %>%
+            .warn_unreliable_xci_fits()
+    }
     logger::log_info("XCI diagnostics stored")
 
     x
+}
+
+#' Warn about donors whose XCI fit is unlikely to be valid
+#'
+#' A failed fit is otherwise stored as if it were valid. The typical cause is a
+#' heavily skewed donor whose het SNPs in X-inactivated genes were called hom
+#' (their minor-allele fraction falls below \code{minor_allele_prop} in
+#' \code{\link{infer_zygosity}}), leaving only escape genes, which express both
+#' alleles in every cell and so cannot separate cells. Logs one warning per
+#' flagged donor naming every check it failed.
+#'
+#' @param donor_diag A data frame with one row per donor and columns
+#'   \code{donor}, \code{xci_n_informative}, \code{xci_skew},
+#'   \code{xci_frac_assigned}, \code{xci_minority_frac},
+#'   \code{xci_median_pi_g} and \code{xci_rho}.
+#'
+#' @return \code{donor_diag}, invisibly.
+#'
+#' @keywords internal
+.warn_unreliable_xci_fits <- function(donor_diag) {
+    purrr::pwalk(donor_diag, function(donor, ...) {
+        reasons <- .xci_fit_failure_reasons(...)
+        if (length(reasons) == 0) {
+            return(invisible(NULL))
+        }
+        logger::log_warn(
+            "[{donor}] XCI fit is unreliable: {paste(reasons, collapse = '; ')}. ",
+            "Check its active_x calls; genotype-based zygosity (e.g. zygosity_source(x) <- \"vireo_gt\") ",
+            "or a lower minor_allele_prop in infer_zygosity() may recover the het SNPs a skewed donor needs."
+        )
+    })
+    invisible(donor_diag)
+}
+
+#' Names the fit-quality checks one donor's XCI fit fails
+#'
+#' @keywords internal
+.xci_fit_failure_reasons <- function(
+    xci_n_informative,
+    xci_skew,
+    xci_frac_assigned,
+    xci_minority_frac,
+    xci_median_pi_g,
+    xci_rho,
+    ...
+) {
+    majority_prior <- max(xci_skew, 1 - xci_skew)
+    checks <- c(
+        "only {xci_n_informative} informative genes (< 10)" = xci_n_informative < 10,
+        "no assigned cells on the minority X" = is.na(xci_minority_frac) || xci_minority_frac == 0,
+        "fitted skew {round(majority_prior, 2)} (> 0.9) with only {round(100 * xci_frac_assigned)}% of cells assigned" = majority_prior >
+            0.9 &&
+            xci_frac_assigned < 0.5,
+        "median escape fraction {round(xci_median_pi_g, 2)} (> 0.2), so the het SNPs are mostly escape genes" = !is.na(
+            xci_median_pi_g
+        ) &&
+            xci_median_pi_g > 0.2,
+        "pooled overdispersion (xci_rho) could not be fitted" = is.na(xci_rho)
+    )
+    purrr::map_chr(names(checks)[checks], ~ glue::glue(.x))
 }
 
 #' Fit donor-pooled beta-binomial overdispersion for escape testing
