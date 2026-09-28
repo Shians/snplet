@@ -8,7 +8,7 @@ infer_zygosity(
   x,
   min_total_count = 10,
   p_value_threshold = 0.05,
-  minor_allele_prop = 0.1
+  minor_allele_prop = 0.03
 )
 }
 \arguments{
@@ -21,9 +21,13 @@ infer_zygosity(
 P-value threshold for the binomial test; p-values are multiple-testing
 corrected, and SNPs with p < threshold reject monoallelic expression.}
 
-\item{minor_allele_prop}{Numeric, in \code{[0, 1]} (default 0.1). Minor
-allele proportion used as the null threshold for monoallelic expression
-testing.}
+\item{minor_allele_prop}{Numeric, in \code{(0, 0.5)} (default 0.03). Null minor-allele
+proportion for the monoallelic-expression test: a SNP is called het only when its pooled
+minor-allele fraction is significantly above this value. In a donor whose XCI is skewed
+beyond about \code{1 - minor_allele_prop}, het SNPs in X-inactivated genes look hom and
+only escape genes, which cannot separate cells, survive. Values below the background
+minor-allele rate (about 0.04 in 10x data) admit some noise sites; this is tolerable at
+0.02--0.03 but not at 0.01, where false het SNPs swamp the XCI fit.}
 }
 \value{
 A SNPData object with binomial-derived rows added to \code{donor_snp_info}.

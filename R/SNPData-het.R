@@ -37,7 +37,7 @@
 #' @param p_value_threshold Numeric, in \code{[0, 1]} (default 0.05).
 #'   P-value threshold for the binomial test; p-values are multiple-testing
 #'   corrected, and SNPs with p < threshold reject monoallelic expression.
-#' @param minor_allele_prop Numeric, in \code{[0, 1]} (default 0.1). Minor
+#' @param minor_allele_prop Numeric, in \code{[0, 1]} (default 0.03). Minor
 #'   allele proportion used as the null threshold for monoallelic expression
 #'   testing.
 #' @return A tibble with columns: snp_id, gene_name, chrom, pos, strand (if available in
@@ -60,7 +60,7 @@ setGeneric(
         x,
         min_total_count = 10,
         p_value_threshold = 0.05,
-        minor_allele_prop = 0.1
+        minor_allele_prop = 0.03
     ) {
         standardGeneric("donor_het_status_df")
     }
@@ -70,7 +70,7 @@ donor_het_status_df_impl <- function(
     x,
     min_total_count = 10,
     p_value_threshold = 0.05,
-    minor_allele_prop = 0.1
+    minor_allele_prop = 0.03
 ) {
     old_threshold <- logger::log_threshold()
     logger::log_threshold(logger::WARN)
@@ -150,7 +150,7 @@ setMethod(
 #' @param p_value_threshold Numeric, in \code{[0, 1]} (default 0.05).
 #'   P-value threshold for the binomial test; p-values are multiple-testing
 #'   corrected, and SNPs with p < threshold reject monoallelic expression.
-#' @param minor_allele_prop Numeric, in \code{[0, 1]} (default 0.1). Minor
+#' @param minor_allele_prop Numeric, in \code{[0, 1]} (default 0.03). Minor
 #'   allele proportion used as the null threshold for monoallelic expression
 #'   testing.
 #' @return A SNPData object with binomial-derived rows added to \code{donor_snp_info}.
@@ -177,7 +177,7 @@ setMethod(
 #'     suffix = c("_vireo", "_binomial")
 #' )
 #' }
-infer_zygosity <- function(x, min_total_count = 10, p_value_threshold = 0.05, minor_allele_prop = 0.1) {
+infer_zygosity <- function(x, min_total_count = 10, p_value_threshold = 0.05, minor_allele_prop = 0.03) {
     old_threshold <- logger::log_threshold()
     logger::log_threshold(logger::WARN)
     on.exit(logger::log_threshold(old_threshold), add = TRUE)

@@ -22,7 +22,8 @@ make_xci_snpdata <- function(
     depth = 20,
     seed = 1,
     n_donors = 1,
-    escapee = FALSE
+    escapee = FALSE,
+    n_escapees = as.integer(escapee)
 ) {
     withr::with_seed(seed, {
         n_cells <- 2 * n_cells_per_group
@@ -34,12 +35,10 @@ make_xci_snpdata <- function(
         # expressed allele in X1-active cells).
         # When escapee = TRUE the last gene is an escapee: it stays balanced
         # (p_ref = 0.5) in every cell regardless of inactivation state, so it
-        # carries no XCI signal and should be filtered out.
+        # carries no XCI signal and should be filtered out. n_escapees makes the
+        # last n_escapees genes escapees instead.
         allele_on_x1 <- sample(0:1, n_genes, replace = TRUE)
-        is_escapee <- rep(FALSE, n_genes)
-        if (escapee) {
-            is_escapee[n_genes] <- TRUE
-        }
+        is_escapee <- seq_len(n_genes) > n_genes - n_escapees
 
         ref_mat <- matrix(0L, nrow = n_genes, ncol = n_cells)
         alt_mat <- matrix(0L, nrow = n_genes, ncol = n_cells)
@@ -742,6 +741,86 @@ test_that("assign_xci drops an escapee gene from the informative set but still p
     expect_true(median_pi_g < 0.4)
 })
 
+# Runs assign_xci() with WARN-level logging captured to a file, returning the
+# fitted object and the logged lines.
+assign_xci_capturing_log <- function(snpdata) {
+    log_file <- withr::local_tempfile(fileext = ".log")
+    original_appender <- get(as.character(logger::log_appender()), asNamespace("logger"))
+    original_threshold <- logger::log_threshold()
+    logger::log_appender(logger::appender_file(log_file))
+    logger::log_threshold(logger::WARN)
+    withr::defer(logger::log_appender(original_appender))
+    withr::defer(logger::log_threshold(original_threshold))
+
+    stored <- assign_xci(snpdata, n_inits = 3)
+    log_lines <- if (file.exists(log_file)) readLines(log_file, warn = FALSE) else character(0)
+    list(stored = stored, log = log_lines)
+}
+
+test_that("assign_xci stores fit-quality diagnostics without warning on a well-phased donor", {
+    fixture <- make_xci_snpdata()
+    result <- assign_xci_capturing_log(fixture$snpdata)
+    donor_info <- donor_info(result$stored)
+
+    # Verify the fit-quality diagnostics were written to donor_info
+    expect_true(all(
+        c("xci_n_het_genes", "xci_n_informative", "xci_frac_assigned", "xci_minority_frac") %in%
+            colnames(donor_info)
+    ))
+    # Confirm every gene entered the EM and most drove active-X calling
+    expect_equal(donor_info$xci_n_het_genes, 20)
+    expect_gte(donor_info$xci_n_informative, 10)
+    # Confirm most cells were assigned, close to half of them on the minority X
+    expect_gt(donor_info$xci_frac_assigned, 0.9)
+    expect_equal(donor_info$xci_minority_frac, 0.5, tolerance = 0.1)
+    # Check that no fit-failure warning was logged
+    expect_false(any(grepl("XCI fit is unreliable", result$log)))
+})
+
+test_that("assign_xci warns when a donor's het SNPs are all escape genes", {
+    # Every gene is biallelic in every cell, as when a skewed donor keeps only
+    # escape genes after het calling
+    fixture <- make_xci_snpdata(n_escapees = 20)
+    result <- assign_xci_capturing_log(fixture$snpdata)
+    warning_lines <- grep("XCI fit is unreliable", result$log, value = TRUE)
+
+    # Confirm the fit-failure warning names the donor
+    expect_true(any(grepl("donor0", warning_lines)))
+    # Confirm it attributes the failure to escape genes (the uninformative-gene
+    # filter lets some pure-escape genes through by chance, so the
+    # informative-gene count alone cannot be relied on here)
+    expect_true(any(grepl("mostly escape genes", warning_lines)))
+    # Confirm it suggests a remedy
+    expect_true(any(grepl("minor_allele_prop", warning_lines)))
+})
+
+test_that(".xci_fit_failure_reasons flags each failure condition independently", {
+    healthy <- list(
+        xci_n_informative = 30,
+        xci_skew = 0.7,
+        xci_frac_assigned = 0.9,
+        xci_minority_frac = 0.3,
+        xci_median_pi_g = 0.03,
+        xci_rho = 0.05
+    )
+    reasons_with <- function(...) do.call(.xci_fit_failure_reasons, utils::modifyList(healthy, list(...)))
+
+    # Verify a healthy fit fails no check
+    expect_length(reasons_with(), 0)
+    # Check that too few informative genes is flagged
+    expect_match(reasons_with(xci_n_informative = 9), "only 9 informative genes")
+    # Check that a one-sided assignment is flagged, including no assigned cells at all
+    expect_match(reasons_with(xci_minority_frac = 0), "no assigned cells on the minority X")
+    expect_match(reasons_with(xci_minority_frac = NA_real_), "no assigned cells on the minority X")
+    # Check that extreme skew is flagged only together with low assignment
+    expect_match(reasons_with(xci_skew = 0.06, xci_frac_assigned = 0.38), "fitted skew 0.94")
+    expect_length(reasons_with(xci_skew = 0.94, xci_frac_assigned = 0.8), 0)
+    # Check that an escape-dominated fit is flagged
+    expect_match(reasons_with(xci_median_pi_g = 0.39), "median escape fraction 0.39")
+    # Check that an unfitted pooled rho is flagged
+    expect_match(reasons_with(xci_rho = NA_real_), "xci_rho")
+})
+
 test_that("test_escape recommended pipeline flags an injected escapee gene against non-escapees", {
     # Full pipeline as documented in test_escape()'s examples: collapse
     # haplotype_expression()'s SNP x active-X-group rows to one row per
@@ -890,4 +969,3 @@ test_that(".top_snp_per_gene() gives each gene one vote and skips SNPs shared be
     # Ensure unannotated SNPs still share a single slot
     expect_false("s_na2" %in% selected)
 })
-
