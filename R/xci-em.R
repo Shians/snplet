@@ -85,8 +85,10 @@
     confidence_threshold = 0.95,
     min_cells = 10,
     min_cov = 1,
-    donor = NULL
+    donor = NULL,
+    call_prior = c("fitted", "flat")
 ) {
+    call_prior <- match.arg(call_prior)
     # Top-level per-donor driver, taking genes x cells REF/ALT count matrices.
     # Filters genes, then runs the EM (.run_em) from n_inits random restarts
     # and keeps the best by log-likelihood. Each cell's active-X call is then
@@ -94,7 +96,9 @@
     # or not. Returns the best restart's list (post, h_g, pi_g, rho, prior,
     # ll; see .run_em), with post gaining an assignment column ("X1"/"X2"/
     # "unassigned") and a new gene_keep logical vector, length nrow(ref_mat),
-    # that is TRUE for genes surviving both gene filters.
+    # that is TRUE for genes surviving both gene filters. With call_prior =
+    # "flat", post is recomputed at a 0.5 prior after the fit; prior still
+    # reports the fitted skew.
     passes_outlier_filter <- .filter_outlier_genes(ref_mat, alt_mat, min_cells, min_cov)
     ref_mat <- ref_mat[passes_outlier_filter, , drop = FALSE]
     alt_mat <- alt_mat[passes_outlier_filter, , drop = FALSE]
@@ -122,6 +126,18 @@
     # way. Computed against the pre-relabel h_g/post (relabelling below is a symmetric
     # X1<->X2 swap and does not change which genes pass).
     passes_uninformative_filter <- .filter_uninformative_genes(dat, n_genes, best$h_g, best$pi_g, best$rho, best$post)
+
+    # At an extreme fitted prior, a minority cell with little coverage cannot
+    # outweigh the prior's log-odds and stays unassigned, undercalling the
+    # minority. A flat prior lets each cell's own reads decide its call. Only
+    # the posterior is recomputed: phase, escape and rho stay at the fitted
+    # values, prior still reports the fitted skew, and ll has already ranked the
+    # restarts. Placed after the gene filter so the informative gene set does
+    # not depend on call_prior.
+    if (call_prior == "flat") {
+        ll_best <- .betabinom_ll_both(.build_ll_dedup(dat), best$pi_g, best$rho)
+        best$post <- .e_step(dat, best$h_g, ll_best, prior = 0.5)
+    }
 
     # assignment names the *active* X, matching the stored active_x column.
     best$post <- best$post %>%

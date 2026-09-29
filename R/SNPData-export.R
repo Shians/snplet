@@ -327,6 +327,9 @@ as_singlecellexperiment <- function(snpdata) {
 #'
 #' @param snpdata A SNPData object, required, that had XCI diagnostics stored
 #'   by \code{\link{assign_xci}} or \code{\link{assign_xci_by_clonotype}}.
+#' @param include_unreliable Logical (default \code{FALSE}). If \code{FALSE}, donors whose
+#'   XCI fit is labelled unreliable (\code{donor_info(snpdata)$xci_reliable} is
+#'   \code{FALSE}) are left out of the result; see \code{\link{haplotype_expression}}.
 #'
 #' @return A \code{SummarizedExperiment} with genes as rows and donors as
 #'   columns, assays \code{"active"} and \code{"inactive"} (integer, \code{NA}
@@ -360,12 +363,12 @@ as_singlecellexperiment <- function(snpdata) {
 #' y <- edgeR::estimateDisp(y, design, trend = "none")
 #' fit <- edgeR::glmFit(y, design)
 #' }
-as_escape_experiment <- function(snpdata) {
+as_escape_experiment <- function(snpdata, include_unreliable = FALSE) {
     if (!.has_xci_diagnostics(snpdata)) {
         stop("No stored XCI diagnostics found. Run assign_xci(snpdata) first.")
     }
 
-    counts <- .escape_counts(snpdata)
+    counts <- .escape_counts(snpdata, include_unreliable = include_unreliable)
     if (!"donor" %in% colnames(counts)) {
         stop("as_escape_experiment() needs donor assignments to build a gene x donor matrix.")
     }

@@ -7,7 +7,6 @@
 .xci_fit_failure_reasons(
   xci_n_informative,
   xci_skew,
-  xci_frac_assigned,
   xci_minority_frac,
   xci_median_pi_g,
   xci_rho,

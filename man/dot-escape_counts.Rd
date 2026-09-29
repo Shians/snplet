@@ -4,13 +4,15 @@
 \alias{.escape_counts}
 \title{Take gene-level escape counts from the requested source}
 \usage{
-.escape_counts(x, count_source = "auto")
+.escape_counts(x, count_source = "auto", include_unreliable = FALSE)
 }
 \arguments{
 \item{x}{A SNPData object with stored XCI diagnostics, required.}
 
 \item{count_source}{Character scalar, one of \code{"auto"},
 \code{"molecule"}, or \code{"snp"}, required.}
+
+\item{include_unreliable}{Logical, whether to keep donors labelled unreliable.}
 }
 \value{
 The chosen count table with a \code{count_source} column of

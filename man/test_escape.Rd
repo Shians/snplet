@@ -11,7 +11,8 @@ test_escape(
   p = NULL,
   rho = NULL,
   by_donor = TRUE,
-  count_source = c("auto", "molecule", "snp")
+  count_source = c("auto", "molecule", "snp"),
+  include_unreliable = FALSE
 )
 
 \S4method{test_escape}{data.frame}(
@@ -19,7 +20,8 @@ test_escape(
   p = NULL,
   rho = NULL,
   by_donor = TRUE,
-  count_source = c("auto", "molecule", "snp")
+  count_source = c("auto", "molecule", "snp"),
+  include_unreliable = FALSE
 )
 
 \S4method{test_escape}{SNPData}(
@@ -27,7 +29,8 @@ test_escape(
   p = NULL,
   rho = NULL,
   by_donor = TRUE,
-  count_source = c("auto", "molecule", "snp")
+  count_source = c("auto", "molecule", "snp"),
+  include_unreliable = FALSE
 )
 }
 \arguments{
@@ -61,6 +64,11 @@ read-backed molecules \code{\link{phase_from_molecules}} stored
 per-SNP reads (\code{\link{haplotype_expression}}), and \code{"auto"}
 molecules when they are stored and per-SNP reads otherwise. Naming it
 makes a result reproducible from the call alone. Ignored for a
+data.frame.}
+
+\item{include_unreliable}{Logical (default \code{FALSE}). If \code{FALSE}, donors whose
+XCI fit is labelled unreliable (\code{donor_info(x)$xci_reliable} is \code{FALSE}) are
+excluded before testing; see \code{\link{haplotype_expression}}. Ignored for a
 data.frame.}
 }
 \value{

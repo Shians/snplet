@@ -112,6 +112,11 @@
 #'   the median of the gene's other donors for \code{donor_discordant} to be
 #'   set (see \sQuote{Cross-donor consistency}). Ignored when
 #'   \code{by_snp = TRUE}.
+#' @param include_unreliable Logical (default \code{FALSE}). If \code{FALSE}, donors whose
+#'   XCI fit is labelled unreliable (\code{donor_info(x)$xci_reliable} is \code{FALSE}; the
+#'   reasons are in \code{xci_flags}) are excluded, with a warning naming them. Such
+#'   donors include any with skew above 0.9, whose escape results are highly unreliable
+#'   without DNA genotypes. \code{TRUE} keeps every donor.
 #'
 #' @section Gene-level representative selection:
 #' The default selects a single representative SNP per (\code{donor},
@@ -260,7 +265,8 @@ setGeneric(
         by_snp = FALSE,
         by_active_x = FALSE,
         inverted_phase_genes = "XIST",
-        discordance_threshold = 0.2
+        discordance_threshold = 0.2,
+        include_unreliable = FALSE
     ) {
         standardGeneric("haplotype_expression")
     }
@@ -278,7 +284,8 @@ setMethod(
         by_snp = FALSE,
         by_active_x = FALSE,
         inverted_phase_genes = "XIST",
-        discordance_threshold = 0.2
+        discordance_threshold = 0.2,
+        include_unreliable = FALSE
     ) {
         barcode_info <- barcode_info(x)
         snp_info <- snp_info(x)
@@ -286,6 +293,8 @@ setMethod(
         if (!"active_x" %in% colnames(barcode_info) || !.has_xci_diagnostics(x)) {
             stop("No stored XCI diagnostics found. Run assign_xci(x) first.")
         }
+        x <- .drop_unreliable_xci_donors(x, include_unreliable)
+        barcode_info <- barcode_info(x)
         # Electing a representative per gene is meaningless without knowing which
         # gene each SNP belongs to. Erroring beats silently falling back to
         # per-SNP output, which would return a different grain than the caller
@@ -752,6 +761,11 @@ setMethod(
 #'   molecules from every one of a gene's phase blocks. If \code{FALSE}, count
 #'   only the gene's largest block, leaving the rest reported but uncounted in
 #'   \code{n_secondary_block_molecules}. See \sQuote{Pooling a gene's phase blocks}.
+#' @param include_unreliable Logical (default \code{FALSE}). If \code{FALSE}, donors whose
+#'   XCI fit is labelled unreliable (\code{donor_info(x)$xci_reliable} is \code{FALSE}; the
+#'   reasons are in \code{xci_flags}) are excluded, with a warning naming them. Such
+#'   donors include any with skew above 0.9, whose escape results are highly unreliable
+#'   without DNA genotypes. \code{TRUE} keeps every donor.
 #'
 #' @section Pooling a gene's phase blocks:
 #' \code{\link{phase_snps}} cannot link two SNPs no single molecule spans, so
@@ -845,7 +859,7 @@ setMethod(
 #' }
 setGeneric(
     "haplotype_expression_by_molecule",
-    function(x, escape_threshold = 0.1, by_active_x = FALSE, pool_blocks = TRUE) {
+    function(x, escape_threshold = 0.1, by_active_x = FALSE, pool_blocks = TRUE, include_unreliable = FALSE) {
         standardGeneric("haplotype_expression_by_molecule")
     }
 )
@@ -855,13 +869,13 @@ setGeneric(
 setMethod(
     "haplotype_expression_by_molecule",
     signature(x = "SNPData"),
-    function(x, escape_threshold = 0.1, by_active_x = FALSE, pool_blocks = TRUE) {
-        barcode_info <- barcode_info(x)
-        donor_snp_info <- donor_snp_info(x)
-
-        if (!"active_x" %in% colnames(barcode_info) || !.has_xci_diagnostics(x)) {
+    function(x, escape_threshold = 0.1, by_active_x = FALSE, pool_blocks = TRUE, include_unreliable = FALSE) {
+        if (!"active_x" %in% colnames(barcode_info(x)) || !.has_xci_diagnostics(x)) {
             stop("No stored XCI diagnostics found. Run assign_xci(x) first.")
         }
+        x <- .drop_unreliable_xci_donors(x, include_unreliable)
+        barcode_info <- barcode_info(x)
+        donor_snp_info <- donor_snp_info(x)
         if (!all(c("phase_block", "allele_on_x1") %in% colnames(donor_snp_info))) {
             stop("No stored molecule phase found. Run phase_from_molecules(x) first.")
         }

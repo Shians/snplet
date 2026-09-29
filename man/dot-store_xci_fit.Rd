@@ -22,8 +22,10 @@ rather than read off the confidence-thresholded hard calls afterwards).
 (genes entering the EM), \code{xci_n_informative} (genes that drove active-X
 calling), \code{xci_frac_assigned} (fraction of modelling units, cells or
 clonotypes, meeting the confidence threshold) and \code{xci_minority_frac}
-(fraction of assigned units on the minority X). A donor failing any check in
-\code{\link{.warn_unreliable_xci_fits}} is logged as a warning.
+(fraction of assigned units on the minority X). Last, \code{xci_reliable} and
+\code{xci_flags} label donors failing any check in
+\code{\link{.flag_unreliable_xci_fits}}, which are also logged as warnings
+and excluded from escape results by default.
 For a clonotype-level fit the per-cell projection is used for barcode
 annotation.
 }
