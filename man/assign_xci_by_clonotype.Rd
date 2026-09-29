@@ -5,9 +5,19 @@
 \alias{assign_xci_by_clonotype,SNPData-method}
 \title{Assign the active X chromosome to cells by clonotype}
 \usage{
-assign_xci_by_clonotype(x, n_inits = 10, confidence_threshold = 0.95)
+assign_xci_by_clonotype(
+  x,
+  n_inits = 10,
+  confidence_threshold = 0.95,
+  call_prior = c("fitted", "flat")
+)
 
-\S4method{assign_xci_by_clonotype}{SNPData}(x, n_inits = 10, confidence_threshold = 0.95)
+\S4method{assign_xci_by_clonotype}{SNPData}(
+  x,
+  n_inits = 10,
+  confidence_threshold = 0.95,
+  call_prior = c("fitted", "flat")
+)
 }
 \arguments{
 \item{x}{A SNPData object, required, with donor assignments, clonotype
@@ -21,6 +31,15 @@ Posterior probability threshold for hard assignment: clonotypes whose
 posterior probability that a given X is the active one reaches
 \code{confidence_threshold} are assigned that X; clonotypes where
 neither X reaches the threshold receive \code{NA}.}
+
+\item{call_prior}{Character scalar, one of \code{"fitted"} or \code{"flat"} (default
+\code{"fitted"}). Prior used for the final active-X calls. \code{"fitted"} uses the
+EM's fitted X1-active prior. \code{"flat"} recomputes each posterior at a 0.5 prior
+after fitting, so a cell's call rests on its own reads; phase, escape fractions and
+\code{xci_skew} are unchanged. In heavily skewed donors (beyond about 90:10) the
+fitted prior leaves low-coverage minority cells unassigned and undercalls the
+minority, and \code{"flat"} recovers more of them at the cost of more calls resting
+on few reads. Validated on one skewed donor only.}
 }
 \value{
 SNPData object with an additional \code{active_x} column in

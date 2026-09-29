@@ -79,6 +79,14 @@
 #'   posterior probability that a given X is the active one reaches
 #'   \code{confidence_threshold} are assigned that X; cells where neither X
 #'   reaches the threshold receive \code{NA}.
+#' @param call_prior Character scalar, one of \code{"fitted"} or \code{"flat"} (default
+#'   \code{"fitted"}). Prior used for the final active-X calls. \code{"fitted"} uses the
+#'   EM's fitted X1-active prior. \code{"flat"} recomputes each posterior at a 0.5 prior
+#'   after fitting, so a cell's call rests on its own reads; phase, escape fractions and
+#'   \code{xci_skew} are unchanged. In heavily skewed donors (beyond about 90:10) the
+#'   fitted prior leaves low-coverage minority cells unassigned and undercalls the
+#'   minority, and \code{"flat"} recovers more of them at the cost of more calls resting
+#'   on few reads. Validated on one skewed donor only.
 #'
 #' @return SNPData object with an additional \code{active_x} column in
 #'   barcode metadata, with values "X1" or "X2" indicating the inferred
@@ -124,7 +132,8 @@ setGeneric(
     function(
         x,
         n_inits = 10,
-        confidence_threshold = 0.95
+        confidence_threshold = 0.95,
+        call_prior = c("fitted", "flat")
     ) {
         standardGeneric("assign_xci")
     }
@@ -135,13 +144,14 @@ setGeneric(
 setMethod(
     "assign_xci",
     signature(x = "SNPData"),
-    function(x, n_inits = 10, confidence_threshold = 0.95) {
+    function(x, n_inits = 10, confidence_threshold = 0.95, call_prior = c("fitted", "flat")) {
         # Shared engine, fitting one model per cell.
         .fit_xci(
             x,
             n_inits = n_inits,
             confidence_threshold = confidence_threshold,
-            by = "cell"
+            by = "cell",
+            call_prior = match.arg(call_prior)
         )
     }
 )
@@ -216,7 +226,8 @@ setGeneric(
     function(
         x,
         n_inits = 10,
-        confidence_threshold = 0.95
+        confidence_threshold = 0.95,
+        call_prior = c("fitted", "flat")
     ) {
         standardGeneric("assign_xci_by_clonotype")
     }
@@ -227,13 +238,14 @@ setGeneric(
 setMethod(
     "assign_xci_by_clonotype",
     signature(x = "SNPData"),
-    function(x, n_inits = 10, confidence_threshold = 0.95) {
+    function(x, n_inits = 10, confidence_threshold = 0.95, call_prior = c("fitted", "flat")) {
         # Shared engine, fitting one model per clonotype.
         .fit_xci(
             x,
             n_inits = n_inits,
             confidence_threshold = confidence_threshold,
-            by = "clonotype"
+            by = "clonotype",
+            call_prior = match.arg(call_prior)
         )
     }
 )
@@ -245,9 +257,11 @@ setMethod(
     x,
     n_inits = 10,
     confidence_threshold = 0.95,
-    by = c("cell", "clonotype")
+    by = c("cell", "clonotype"),
+    call_prior = c("fitted", "flat")
 ) {
     by <- match.arg(by)
+    call_prior <- match.arg(call_prior)
     if (.is_molecule_phased(x)) {
         stop(
             "phase_from_molecules() has already run on this object, and its read-backed phase is oriented against ",
@@ -276,7 +290,8 @@ setMethod(
                     dd,
                     n_inits,
                     confidence_threshold,
-                    by = by
+                    by = by,
+                    call_prior = call_prior
                 ),
                 error = function(e) {
                     logger::log_warn("Failed to fit XCI for donor {d}: {conditionMessage(e)}")
@@ -315,9 +330,11 @@ setMethod(
     snp_data,
     n_inits = 10,
     confidence_threshold = 0.95,
-    by = c("cell", "clonotype")
+    by = c("cell", "clonotype"),
+    call_prior = c("fitted", "flat")
 ) {
     by <- match.arg(by)
+    call_prior <- match.arg(call_prior)
     donor <- unique(barcode_info(snp_data)$donor)
 
     if (by == "clonotype") {
@@ -347,7 +364,8 @@ setMethod(
         alt_mat,
         n_inits = n_inits,
         confidence_threshold = confidence_threshold,
-        donor = donor
+        donor = donor,
+        call_prior = call_prior
     )
 
     # Re-phases every gene, including ones the EM dropped as uninformative,

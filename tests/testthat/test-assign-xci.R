@@ -775,6 +775,50 @@ test_that("assign_xci stores fit-quality diagnostics without warning on a well-p
     expect_equal(donor_info$xci_minority_frac, 0.5, tolerance = 0.1)
     # Check that no fit-failure warning was logged
     expect_false(any(grepl("XCI fit is unreliable", result$log)))
+    # Verify the donor is labelled reliable with no flags
+    expect_true(donor_info$xci_reliable)
+    expect_true(is.na(donor_info$xci_flags))
+})
+
+# Two-donor fit with donor1 labelled unreliable after the fact.
+make_one_unreliable_donor <- function() {
+    stored <- assign_xci(make_xci_snpdata(n_donors = 2)$snpdata, n_inits = 3)
+    add_donor_metadata(
+        stored,
+        data.frame(donor = "donor1", xci_reliable = FALSE, xci_flags = "skew 0.95 (> 0.9)"),
+        join_by = "donor",
+        overwrite = TRUE
+    )
+}
+
+test_that("haplotype_expression excludes donors labelled unreliable unless asked not to", {
+    stored <- make_one_unreliable_donor()
+
+    # Confirm the unreliable donor is dropped by default
+    expect_equal(unique(haplotype_expression(stored)$donor), "donor0")
+    # Confirm include_unreliable = TRUE keeps both donors
+    expect_setequal(unique(haplotype_expression(stored, include_unreliable = TRUE)$donor), c("donor0", "donor1"))
+    # Verify test_escape() and as_escape_experiment() inherit the exclusion
+    expect_equal(unique(test_escape(stored)$donor), "donor0")
+    expect_equal(colnames(as_escape_experiment(stored)), "donor0")
+    expect_equal(ncol(as_escape_experiment(stored, include_unreliable = TRUE)), 2)
+    # Ensure the input object is left untouched
+    expect_equal(ncol(stored), 80)
+})
+
+test_that("haplotype_expression errors when every donor is labelled unreliable", {
+    stored <- assign_xci(make_xci_snpdata()$snpdata, n_inits = 3)
+    stored <- add_donor_metadata(
+        stored,
+        data.frame(donor = "donor0", xci_reliable = FALSE),
+        join_by = "donor",
+        overwrite = TRUE
+    )
+
+    # Check that excluding every donor is an explicit error rather than an empty result
+    expect_error(haplotype_expression(stored), "include_unreliable = TRUE")
+    # Confirm the opt-in still returns results
+    expect_gt(nrow(haplotype_expression(stored, include_unreliable = TRUE)), 0)
 })
 
 test_that("assign_xci warns when a donor's het SNPs are all escape genes", {
@@ -791,7 +835,11 @@ test_that("assign_xci warns when a donor's het SNPs are all escape genes", {
     # informative-gene count alone cannot be relied on here)
     expect_true(any(grepl("mostly escape genes", warning_lines)))
     # Confirm it suggests a remedy
-    expect_true(any(grepl("minor_allele_prop", warning_lines)))
+    expect_true(any(grepl("DNA genotypes", warning_lines)))
+    # Verify the donor is labelled unreliable in donor_info, with the reason stored
+    donor_info <- donor_info(result$stored)
+    expect_false(donor_info$xci_reliable)
+    expect_match(donor_info$xci_flags, "mostly escape genes")
 })
 
 test_that(".xci_fit_failure_reasons flags each failure condition independently", {
@@ -812,13 +860,87 @@ test_that(".xci_fit_failure_reasons flags each failure condition independently",
     # Check that a one-sided assignment is flagged, including no assigned cells at all
     expect_match(reasons_with(xci_minority_frac = 0), "no assigned cells on the minority X")
     expect_match(reasons_with(xci_minority_frac = NA_real_), "no assigned cells on the minority X")
-    # Check that extreme skew is flagged only together with low assignment
-    expect_match(reasons_with(xci_skew = 0.06, xci_frac_assigned = 0.38), "fitted skew 0.94")
-    expect_length(reasons_with(xci_skew = 0.94, xci_frac_assigned = 0.8), 0)
+    # Check that skew beyond 0.9 is flagged in either direction, whatever the assignment rate
+    expect_match(reasons_with(xci_skew = 0.06), "skew 0.94")
+    expect_match(reasons_with(xci_skew = 0.94, xci_frac_assigned = 0.95), "skew 0.94")
+    # Ensure skew at the threshold itself is not flagged
+    expect_length(reasons_with(xci_skew = 0.9), 0)
     # Check that an escape-dominated fit is flagged
     expect_match(reasons_with(xci_median_pi_g = 0.39), "median escape fraction 0.39")
     # Check that an unfitted pooled rho is flagged
     expect_match(reasons_with(xci_rho = NA_real_), "xci_rho")
+})
+
+# Genes x cells REF/ALT matrices for a 95:5 skewed donor at low depth: each
+# cell covers a gene with one read 20% of the time, so a minority cell carries
+# only a few reads and the fitted prior can outweigh them. The RNG kind is
+# pinned because earlier furrr fits (seed = TRUE) leave the session on
+# L'Ecuyer-CMRG, which would otherwise change the simulated counts.
+make_skewed_xci_counts <- function(n_genes = 20, n_majority = 570, n_minority = 30, cov_prob = 0.2, seed = 1) {
+    withr::with_seed(
+        seed,
+        .rng_kind = "Mersenne-Twister",
+        .rng_normal_kind = "Inversion",
+        .rng_sample_kind = "Rejection",
+        {
+            is_minority <- rep(c(FALSE, TRUE), c(n_majority, n_minority))
+            # REF sits on the majority's active X for every gene
+            p_ref <- rep(ifelse(is_minority, 0.05, 0.95), each = n_genes)
+            total_mat <- matrix(rbinom(n_genes * length(is_minority), 1, cov_prob), nrow = n_genes)
+            ref_mat <- matrix(rbinom(length(total_mat), total_mat, p_ref), nrow = n_genes)
+            list(
+                ref_mat = Matrix(ref_mat, sparse = TRUE),
+                alt_mat = Matrix(total_mat - ref_mat, sparse = TRUE),
+                is_minority = is_minority
+            )
+        }
+    )
+}
+
+test_that(".infer_xci call_prior = 'flat' recovers more minority cells without changing the fit", {
+    counts <- make_skewed_xci_counts()
+    fitted <- .infer_xci(counts$ref_mat, counts$alt_mat, n_inits = 3, call_prior = "fitted")
+    flat <- .infer_xci(counts$ref_mat, counts$alt_mat, n_inits = 3, call_prior = "flat")
+
+    # Ensure the fitted parameters, reported skew and informative genes are unchanged
+    expect_equal(flat$h_g, fitted$h_g)
+    expect_equal(flat$pi_g, fitted$pi_g)
+    expect_equal(flat$rho, fitted$rho)
+    expect_equal(flat$prior, fitted$prior)
+    expect_equal(flat$gene_keep, fitted$gene_keep)
+    # Check that the fitted prior reflects the strong skew
+    expect_gt(max(fitted$prior, 1 - fitted$prior), 0.8)
+
+    # Cells with no reads are absent from post, so compare through a full-length lookup
+    minority_call <- function(fit) {
+        fit$post$assignment[match(seq_along(counts$is_minority), fit$post$cell)] %in% "X2"
+    }
+    # Confirm the flat prior assigns more true minority cells to the minority X
+    expect_gt(sum(minority_call(flat) & counts$is_minority), sum(minority_call(fitted) & counts$is_minority))
+    # Verify the flat prior calls almost no majority cells minority
+    expect_lte(sum(minority_call(flat) & !counts$is_minority), 2)
+})
+
+test_that("assign_xci defaults to the fitted call prior and rejects unknown values", {
+    fixture <- make_xci_snpdata()
+    default_fit <- assign_xci(fixture$snpdata, n_inits = 3)
+    fitted_fit <- assign_xci(fixture$snpdata, n_inits = 3, call_prior = "fitted")
+    flat_fit <- assign_xci(fixture$snpdata, n_inits = 3, call_prior = "flat")
+
+    # Verify the default reproduces call_prior = "fitted" exactly
+    expect_equal(barcode_info(default_fit)$active_x, barcode_info(fitted_fit)$active_x)
+    # Confirm the flat prior leaves the reported skew unchanged
+    expect_equal(donor_info(flat_fit)$xci_skew, donor_info(fitted_fit)$xci_skew)
+    # Ensure an unknown call_prior is rejected
+    expect_error(assign_xci(fixture$snpdata, call_prior = "uniform"), "should be one of")
+})
+
+test_that("assign_xci_by_clonotype accepts call_prior = 'flat'", {
+    fixture <- make_xci_snpdata()
+    stored <- assign_xci_by_clonotype(fixture$snpdata, n_inits = 3, call_prior = "flat")
+
+    # Verify active-X calls were written under the flat prior
+    expect_true(any(!is.na(barcode_info(stored)$active_x)))
 })
 
 test_that("test_escape recommended pipeline flags an injected escapee gene against non-escapees", {

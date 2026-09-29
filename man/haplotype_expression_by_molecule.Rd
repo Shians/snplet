@@ -9,14 +9,16 @@ haplotype_expression_by_molecule(
   x,
   escape_threshold = 0.1,
   by_active_x = FALSE,
-  pool_blocks = TRUE
+  pool_blocks = TRUE,
+  include_unreliable = FALSE
 )
 
 \S4method{haplotype_expression_by_molecule}{SNPData}(
   x,
   escape_threshold = 0.1,
   by_active_x = FALSE,
-  pool_blocks = TRUE
+  pool_blocks = TRUE,
+  include_unreliable = FALSE
 )
 }
 \arguments{
@@ -40,6 +42,12 @@ groups on separate rows, adding \code{active_x}.}
 molecules from every one of a gene's phase blocks. If \code{FALSE}, count
 only the gene's largest block, leaving the rest reported but uncounted in
 \code{n_secondary_block_molecules}. See \sQuote{Pooling a gene's phase blocks}.}
+
+\item{include_unreliable}{Logical (default \code{FALSE}). If \code{FALSE}, donors whose
+XCI fit is labelled unreliable (\code{donor_info(x)$xci_reliable} is \code{FALSE}; the
+reasons are in \code{xci_flags}) are excluded, with a warning naming them. Such
+donors include any with skew above 0.9, whose escape results are highly unreliable
+without DNA genotypes. \code{TRUE} keeps every donor.}
 }
 \value{
 A tibble with one row per (\code{donor}, \code{gene_name}) pair,

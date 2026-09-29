@@ -4,11 +4,15 @@
 \alias{as_escape_experiment}
 \title{Export donor-level XCI escape counts as a SummarizedExperiment}
 \usage{
-as_escape_experiment(snpdata)
+as_escape_experiment(snpdata, include_unreliable = FALSE)
 }
 \arguments{
 \item{snpdata}{A SNPData object, required, that had XCI diagnostics stored
 by \code{\link{assign_xci}} or \code{\link{assign_xci_by_clonotype}}.}
+
+\item{include_unreliable}{Logical (default \code{FALSE}). If \code{FALSE}, donors whose
+XCI fit is labelled unreliable (\code{donor_info(snpdata)$xci_reliable} is
+\code{FALSE}) are left out of the result; see \code{\link{haplotype_expression}}.}
 }
 \value{
 A \code{SummarizedExperiment} with genes as rows and donors as

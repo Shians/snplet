@@ -12,7 +12,8 @@ haplotype_expression(
   by_snp = FALSE,
   by_active_x = FALSE,
   inverted_phase_genes = "XIST",
-  discordance_threshold = 0.2
+  discordance_threshold = 0.2,
+  include_unreliable = FALSE
 )
 
 \S4method{haplotype_expression}{SNPData}(
@@ -22,7 +23,8 @@ haplotype_expression(
   by_snp = FALSE,
   by_active_x = FALSE,
   inverted_phase_genes = "XIST",
-  discordance_threshold = 0.2
+  discordance_threshold = 0.2,
+  include_unreliable = FALSE
 )
 }
 \arguments{
@@ -68,6 +70,12 @@ Minimum absolute difference between a donor's \code{escape_fraction} and
 the median of the gene's other donors for \code{donor_discordant} to be
 set (see \sQuote{Cross-donor consistency}). Ignored when
 \code{by_snp = TRUE}.}
+
+\item{include_unreliable}{Logical (default \code{FALSE}). If \code{FALSE}, donors whose
+XCI fit is labelled unreliable (\code{donor_info(x)$xci_reliable} is \code{FALSE}; the
+reasons are in \code{xci_flags}) are excluded, with a warning naming them. Such
+donors include any with skew above 0.9, whose escape results are highly unreliable
+without DNA genotypes. \code{TRUE} keeps every donor.}
 }
 \value{
 A tibble with one row per donor and gene, with columns \code{donor}

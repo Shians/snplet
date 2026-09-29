@@ -72,6 +72,10 @@
 #'   molecules when they are stored and per-SNP reads otherwise. Naming it
 #'   makes a result reproducible from the call alone. Ignored for a
 #'   data.frame.
+#' @param include_unreliable Logical (default \code{FALSE}). If \code{FALSE}, donors whose
+#'   XCI fit is labelled unreliable (\code{donor_info(x)$xci_reliable} is \code{FALSE}) are
+#'   excluded before testing; see \code{\link{haplotype_expression}}. Ignored for a
+#'   data.frame.
 #'
 #' @return For a data.frame, the input with three columns appended; for a
 #'   SNPData, the gene-level count table those same columns are appended to
@@ -130,7 +134,14 @@
 #' }
 setGeneric(
     "test_escape",
-    function(x, p = NULL, rho = NULL, by_donor = TRUE, count_source = c("auto", "molecule", "snp")) {
+    function(
+        x,
+        p = NULL,
+        rho = NULL,
+        by_donor = TRUE,
+        count_source = c("auto", "molecule", "snp"),
+        include_unreliable = FALSE
+    ) {
         standardGeneric("test_escape")
     }
 )
@@ -144,7 +155,8 @@ setMethod(
         p = NULL,
         rho = NULL,
         by_donor = TRUE,
-        count_source = c("auto", "molecule", "snp")
+        count_source = c("auto", "molecule", "snp"),
+        include_unreliable = FALSE
     ) {
         # The data.frame method has no donor fit to read a null off, so it falls
         # back to fixed values rather than erroring: it is the method for counts
@@ -232,14 +244,15 @@ setMethod(
         p = NULL,
         rho = NULL,
         by_donor = TRUE,
-        count_source = c("auto", "molecule", "snp")
+        count_source = c("auto", "molecule", "snp"),
+        include_unreliable = FALSE
     ) {
         count_source <- match.arg(count_source)
         if (!.has_xci_diagnostics(x)) {
             stop("No stored XCI diagnostics found. Run assign_xci(x) first.")
         }
 
-        counts <- .escape_counts(x, count_source)
+        counts <- .escape_counts(x, count_source, include_unreliable)
 
         donor_fit <- donor_info(x)
         # Only a null the caller left to the fit needs a stored column to come
@@ -337,12 +350,13 @@ setMethod(
 #' @param x A SNPData object with stored XCI diagnostics, required.
 #' @param count_source Character scalar, one of \code{"auto"},
 #'   \code{"molecule"}, or \code{"snp"}, required.
+#' @param include_unreliable Logical, whether to keep donors labelled unreliable.
 #'
 #' @return The chosen count table with a \code{count_source} column of
 #'   \code{"molecule"} or \code{"snp"}.
 #'
 #' @keywords internal
-.escape_counts <- function(x, count_source = "auto") {
+.escape_counts <- function(x, count_source = "auto", include_unreliable = FALSE) {
     has_phase <- all(c("phase_block", "allele_on_x1") %in% colnames(donor_snp_info(x)))
     has_calls <- .has_molecule_calls(molecules(x))
 
@@ -360,9 +374,10 @@ setMethod(
 
     if (count_source == "molecule") {
         logger::log_info("Counting escape from read-backed molecules")
-        return(dplyr::mutate(haplotype_expression_by_molecule(x), count_source = "molecule"))
+        counts <- haplotype_expression_by_molecule(x, include_unreliable = include_unreliable)
+        return(dplyr::mutate(counts, count_source = "molecule"))
     }
 
     logger::log_info("Counting escape from per-SNP reads")
-    dplyr::mutate(haplotype_expression(x), count_source = "snp")
+    dplyr::mutate(haplotype_expression(x, include_unreliable = include_unreliable), count_source = "snp")
 }

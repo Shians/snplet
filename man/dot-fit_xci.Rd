@@ -8,7 +8,8 @@
   x,
   n_inits = 10,
   confidence_threshold = 0.95,
-  by = c("cell", "clonotype")
+  by = c("cell", "clonotype"),
+  call_prior = c("fitted", "flat")
 )
 }
 \description{
