@@ -820,3 +820,43 @@ test_that("haplotype_expression_by_molecule() reports no discordant molecules wh
     # Verify a block agreeing with its gene's orientation is not flagged
     expect_equal(result$discordant_block_molecules, 0L)
 })
+
+test_that("haplotype_expression_by_molecule() labels curated genes without altering their counts", {
+    fixture <- make_molecule_hap_fixture()
+    snpA <- fixture$snp_ids[["snpA"]]
+    molecule_calls <- tibble::tribble(
+        ~donor   , ~barcode , ~umi , ~snp_id , ~allele , ~transcript_strand ,
+        "donor0" , "cell1"  , "u1" , snpA    , "REF"   , "+"                ,
+        "donor0" , "cell3"  , "u2" , snpA    , "REF"   , "+"
+    )
+    obj <- with_molecule_calls(fixture$obj, molecule_calls)
+
+    res <- haplotype_expression_by_molecule(obj, inverted_phase_genes = "GENE1")
+    plain <- haplotype_expression_by_molecule(obj, inverted_phase_genes = character(0))
+
+    # Verify the curated gene is labelled
+    expect_true(res$phase_likely_inverted)
+    # Ensure the label is inert: the flag asserts prior biology rather than
+    # correcting anything measured, so counts are untouched
+    expect_equal(dplyr::select(res, -phase_likely_inverted), dplyr::select(plain, -phase_likely_inverted))
+    # Confirm the list is configurable rather than hard-coded
+    expect_false(plain$phase_likely_inverted)
+})
+
+test_that("haplotype_expression_by_molecule() flags XIST by default", {
+    fixture <- make_molecule_hap_fixture()
+    snpA <- fixture$snp_ids[["snpA"]]
+    obj <- fixture$obj
+    gene_map <- snp_gene_map(molecules(obj))
+    gene_map$gene_name <- "XIST"
+    obj@molecules <- MoleculeCalls(snp_gene_map = gene_map)
+    molecule_calls <- tibble::tribble(
+        ~donor   , ~barcode , ~umi , ~snp_id , ~allele , ~transcript_strand ,
+        "donor0" , "cell1"  , "u1" , snpA    , "REF"   , "+"
+    )
+
+    res <- haplotype_expression_by_molecule(with_molecule_calls(obj, molecule_calls), by_active_x = TRUE)
+
+    # Verify the default list catches XIST on every active-X row
+    expect_true(all(res$phase_likely_inverted))
+})

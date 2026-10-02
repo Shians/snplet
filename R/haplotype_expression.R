@@ -761,6 +761,13 @@ setMethod(
 #'   molecules from every one of a gene's phase blocks. If \code{FALSE}, count
 #'   only the gene's largest block, leaving the rest reported but uncounted in
 #'   \code{n_secondary_block_molecules}. See \sQuote{Pooling a gene's phase blocks}.
+#' @param inverted_phase_genes Character vector (default \code{"XIST"}).
+#'   Gene names known to be transcribed predominantly from the
+#'   \emph{inactive} X; matching rows are marked \code{phase_likely_inverted},
+#'   with nothing dropped or corrected. Pass \code{character(0)} to disable.
+#'   Read-backed phase does not remove the need for this label (see
+#'   \sQuote{Pooling a gene's phase blocks}); see \code{\link{haplotype_expression}}
+#'   for why the list is curated and deliberately minimal.
 #' @param include_unreliable Logical (default \code{FALSE}). If \code{FALSE}, donors whose
 #'   XCI fit is labelled unreliable (\code{donor_info(x)$xci_reliable} is \code{FALSE}; the
 #'   reasons are in \code{xci_flags}) are excluded, with a warning naming them. Such
@@ -791,6 +798,12 @@ setMethod(
 #' round. The molecules in such blocks are counted, but reported separately as
 #' \code{discordant_block_molecules} so the one failure mode pooling introduces
 #' is visible rather than silently averaged in.
+#'
+#' A gene whose \emph{every} block is inverted, as for a gene transcribed
+#' mainly from the inactive X, is not caught this way: its EM anchors all
+#' agree on the wrong orientation, so it reads as near-zero escape with no
+#' discordant molecules. Only prior knowledge of the gene can flag it, which
+#' \code{inverted_phase_genes} supplies as \code{phase_likely_inverted}.
 #'
 #' @section Where the inputs come from:
 #' Beyond \code{x}, there is nothing to supply. Both inputs this function needs
@@ -839,7 +852,10 @@ setMethod(
 #'   when \code{pool_blocks} is \code{FALSE}), and
 #'   \code{discordant_block_molecules} (counted molecules sitting in a block
 #'   whose own inactive fraction exceeds 0.5, i.e. one that looks oriented
-#'   backwards; see \sQuote{Pooling a gene's phase blocks}).
+#'   backwards; see \sQuote{Pooling a gene's phase blocks}), and
+#'   \code{phase_likely_inverted} (\code{TRUE} when \code{gene_name} is in
+#'   \code{inverted_phase_genes}; read such a row's \code{active_count} and
+#'   \code{inactive_count} as reversed).
 #'
 #'   With \code{by_active_x = TRUE} each row is split into two, one per active-X
 #'   group, with \code{active_x} (the expressed X, "X1" or "X2") added. A group
@@ -859,7 +875,14 @@ setMethod(
 #' }
 setGeneric(
     "haplotype_expression_by_molecule",
-    function(x, escape_threshold = 0.1, by_active_x = FALSE, pool_blocks = TRUE, include_unreliable = FALSE) {
+    function(
+        x,
+        escape_threshold = 0.1,
+        by_active_x = FALSE,
+        pool_blocks = TRUE,
+        inverted_phase_genes = "XIST",
+        include_unreliable = FALSE
+    ) {
         standardGeneric("haplotype_expression_by_molecule")
     }
 )
@@ -869,7 +892,14 @@ setGeneric(
 setMethod(
     "haplotype_expression_by_molecule",
     signature(x = "SNPData"),
-    function(x, escape_threshold = 0.1, by_active_x = FALSE, pool_blocks = TRUE, include_unreliable = FALSE) {
+    function(
+        x,
+        escape_threshold = 0.1,
+        by_active_x = FALSE,
+        pool_blocks = TRUE,
+        inverted_phase_genes = "XIST",
+        include_unreliable = FALSE
+    ) {
         if (!"active_x" %in% colnames(barcode_info(x)) || !.has_xci_diagnostics(x)) {
             stop("No stored XCI diagnostics found. Run assign_xci(x) first.")
         }
@@ -1027,6 +1057,13 @@ setMethod(
             # EM-anchor block (no read-backed phasing evidence); surfaced here as its own
             # flag rather than left for callers to infer from the sign.
             dplyr::mutate(is_em_singleton = phase_block < 0) %>%
+            # The same curated label as haplotype_expression(), and needed here
+            # just as much: a block takes its X1/X2 orientation from the EM
+            # anchors, so an inverted gene's block is oriented to match the
+            # inversion and never shows up in discordant_block_molecules. Each
+            # gene_name is a single snp_gene_map candidate, never a comma-joined
+            # label, so no splitting is needed.
+            dplyr::mutate(phase_likely_inverted = gene_name %in% inverted_phase_genes) %>%
             dplyr::rename(phase_block_used = phase_block) %>%
             dplyr::mutate(phase_block_used = abs(phase_block_used)) %>%
             dplyr::arrange(dplyr::pick(dplyr::any_of(c("donor", "gene_name", "active_x"))))
